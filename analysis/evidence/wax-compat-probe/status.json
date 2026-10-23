@@ -1,0 +1,8 @@
+{
+  "exit": 0,
+  "timed_out": false,
+  "seconds": 6.0,
+  "stdout": "",
+  "stderr": "ProtonFixes[670428] WARN: Skipping fix execution. We are probably running a unit test.\nProton: Upgrading prefix from None to GE-Proton11-7 (/home/suraj/Projects/Nier-Automata-Rendering/analysis/runtime/proton-wax-compat/)\nProtonFixes[670428] WARN: Skipping fix execution. We are probably running a unit test.\n",
+  "stop": 0
+}

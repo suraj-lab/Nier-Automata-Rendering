@@ -1,0 +1,184 @@
+﻿10/18/2026 21:48:03.927: [ Module ]  ( 00006FFFFBEF0000h + 26120192 )                                                         S:\steamapps\common\NieRAutomata\NieRAutomata.exe
+10/18/2026 21:48:03.927: [File Ver]    NieR:Automata  1.0.0.0
+
+10/18/2026 21:48:03.929: [ Module ]  ( 00006FFFFFEF0000h + 00757760 )                                                         C:\windows\system32\ntdll.dll
+10/18/2026 21:48:03.929: [File Ver]    Wine ntdll  6.1.7601.24059
+
+10/18/2026 21:48:03.930: [ Module ]  ( 00006FFFFFE70000h + 00417792 )                                                         C:\windows\system32\kernel32.dll
+10/18/2026 21:48:03.930: [File Ver]    Wine kernel DLL  10.0.19045.5796
+
+10/18/2026 21:48:03.931: [ Module ]  ( 00006FFFFFB90000h + 02940928 )                                                         C:\windows\system32\kernelbase.dll
+
+10/18/2026 21:48:03.932: [ Module ]  ( 00006FFFFF400000h + 01835008 )                                                         C:\windows\system32\USER32.dll
+10/18/2026 21:48:03.932: [File Ver]    Wine core dll  5.1.2600.2180
+
+10/18/2026 21:48:03.933: [ Module ]  ( 00006FFFFFB40000h + 00258048 )                                                         C:\windows\system32\advapi32.dll
+10/18/2026 21:48:03.933: [File Ver]    Wine advapi32 dll  10.0.10240.16384
+
+10/18/2026 21:48:03.939: [ Module ]  ( 00006FFFFFA80000h + 00667648 )                                                         C:\windows\system32\msvcrt.dll
+10/18/2026 21:48:03.939: [File Ver]    Wine CRT library  7.0.2600.2180
+
+10/18/2026 21:48:03.939: [ Module ]  ( 00006FFFFFA40000h + 00143360 )                                                         C:\windows\system32\sechost.dll
+
+10/18/2026 21:48:03.939: [ Module ]  ( 00006FFFFF9B0000h + 00491520 )                                                         C:\windows\system32\setupapi.dll
+
+10/18/2026 21:48:03.940: [ Module ]  ( 00006FFFFF970000h + 00151552 )                                                         C:\windows\system32\cfgmgr32.dll
+
+10/18/2026 21:48:03.940: [ Module ]  ( 00006FFFFF880000h + 00872448 )                                                         C:\windows\system32\ucrtbase.dll
+10/18/2026 21:48:03.941: [File Ver]    Wine runtime library  10.0.14393.2247
+
+10/18/2026 21:48:03.941: [ Module ]  ( 00006FFFFF7E0000h + 00561152 )                                                         C:\windows\system32\rpcrt4.dll
+10/18/2026 21:48:03.941: [File Ver]    Wine rpcrt4  5.1.2600.2180
+
+10/18/2026 21:48:03.941: [ Module ]  ( 00006FFFFF7C0000h + 00053248 )                                                         C:\windows\system32\cryptbase.dll
+
+10/18/2026 21:48:03.942: [ Module ]  ( 00006FFFFF360000h + 00528384 )                                                         C:\windows\system32\gdi32.dll
+10/18/2026 21:48:03.942: [File Ver]    Wine core dll  10.0.0.0
+
+10/18/2026 21:48:03.942: [ Module ]  ( 00006FFFFF310000h + 00237568 )                                                         C:\windows\system32\win32u.dll
+
+10/18/2026 21:48:03.943: [ Module ]  ( 00006FFFFE780000h + 09748480 )                                                         C:\windows\system32\SHELL32.dll
+10/18/2026 21:48:03.943: [File Ver]    Wine core dll  6.0.2900.6242
+
+10/18/2026 21:48:03.944: [ Module ]  ( 00006FFFFE710000h + 00331776 )                                                         C:\windows\system32\shlwapi.dll
+10/18/2026 21:48:03.944: [File Ver]    Wine core dll  6.0.2800.1692
+
+10/18/2026 21:48:03.945: [ Module ]  ( 00006FFFFE6E0000h + 00098304 )                                                         C:\windows\system32\shcore.dll
+
+10/18/2026 21:48:03.946: [ Module ]  ( 00006FFFFBE00000h + 00856064 )                                                         S:\steamapps\common\NieRAutomata\d3d11.dll
+
+10/18/2026 21:48:03.946: [ Module ]  ( 00006FFFFA520000h + 25964544 )                                                         S:\steamapps\common\NieRAutomata\dxgi.dll
+10/18/2026 21:48:03.946: [File Ver]    Special K Modding System  26.10.10
+
+10/18/2026 21:48:03.946: [ Module ]  ( 00006FFFFE610000h + 00761856 )                                                         C:\windows\system32\ole32.dll
+10/18/2026 21:48:03.947: [File Ver]    Wine core dll  10.0.0.0
+
+10/18/2026 21:48:03.947: [ Module ]  ( 00006FFFFE5A0000h + 00331776 )                                                         C:\windows\system32\combase.dll
+
+10/18/2026 21:48:03.948: [ Module ]  ( 00006FFFFE570000h + 00114688 )                                                         C:\windows\system32\coml2.dll
+
+10/18/2026 21:48:03.948: [ Module ]  ( 00006FFFFE230000h + 00897024 )                                                         C:\windows\system32\OLEAUT32.dll
+10/18/2026 21:48:03.948: [File Ver]    Wine OLE dll  10.0.19043.1466
+
+10/18/2026 21:48:03.949: [ Module ]  ( 00006FFFFE210000h + 00045056 )                                                         C:\windows\system32\PSAPI.DLL
+10/18/2026 21:48:03.949: [File Ver]    Wine Process Status Helper  5.1.2600.3264
+
+10/18/2026 21:48:03.949: [ Module ]  ( 00006FFFFF2E0000h + 00126976 )                                                         C:\windows\system32\IMM32.dll
+10/18/2026 21:48:03.949: [File Ver]    Wine imm32  5.1.2600.2180
+
+10/18/2026 21:48:03.950: [ Module ]  ( 00006FFFFDBA0000h + 00528384 )                                                         C:\windows\system32\WININET.dll
+10/18/2026 21:48:03.950: [File Ver]    Wine Internet Connectivity  8.00.7601.17601
+
+10/18/2026 21:48:03.950: [ Module ]  ( 00006FFFFDB70000h + 00122880 )                                                         C:\windows\system32\mpr.dll
+10/18/2026 21:48:03.950: [File Ver]    Wine Multiprotocol Router Library  5.0.2195.6611
+
+10/18/2026 21:48:03.951: [ Module ]  ( 00006FFFFF780000h + 00172032 )                                                         C:\windows\system32\ws2_32.dll
+10/18/2026 21:48:03.951: [File Ver]    Wine core dll  5.1.2600.5512
+
+10/18/2026 21:48:03.951: [ Module ]  ( 00006FFFFA500000h + 00053248 )                                                         C:\windows\system32\tdh.dll
+10/18/2026 21:48:03.951: [File Ver]    Wine Event Trace Helper Library  10.0.16299.15
+
+10/18/2026 21:48:03.952: [ Module ]  ( 00006FFFFF730000h + 00053248 )                                                         C:\windows\system32\USERENV.dll
+
+10/18/2026 21:48:03.952: [ Module ]  ( 00006FFFFA3A0000h + 01323008 )                                                         C:\windows\winsxs\amd64_microsoft.windows.common-controls_6595b64144ccf1df_6.0.2600.2982_none_deadbeef\COMCTL32.dll
+10/18/2026 21:48:03.952: [File Ver]    Wine Common Controls  6.0.2600.2982
+
+10/18/2026 21:48:03.953: [ Module ]  ( 00006FFFFA370000h + 00131072 )                                                         C:\windows\system32\Secur32.dll
+
+10/18/2026 21:48:03.954: [ Module ]  ( 00006FFFFA130000h + 00049152 )                                                         C:\windows\system32\POWRPROF.dll
+
+10/18/2026 21:48:03.954: [ Module ]  ( 00006FFFFA0E0000h + 00045056 )                                                         C:\windows\system32\bthprops.cpl
+
+10/18/2026 21:48:03.955: [ Module ]  ( 00006FFFFA0B0000h + 00073728 )                                                         C:\windows\system32\bluetoothapis.dll
+
+10/18/2026 21:48:03.956: [ Module ]  ( 00006FFFFA090000h + 00061440 )                                                         C:\windows\system32\dwmapi.dll
+10/18/2026 21:48:03.956: [File Ver]    Desktop Window Manager API  6.0.6000.16386
+
+10/18/2026 21:48:03.956: [ Module ]  ( 00006FFFFA060000h + 00081920 )                                                         C:\windows\system32\pdh.dll
+
+10/18/2026 21:48:03.957: [ Module ]  ( 00006FFFFDB50000h + 00053248 )                                                         C:\windows\system32\VERSION.dll
+10/18/2026 21:48:03.957: [File Ver]    Wine version dll  5.1.2600.2180
+
+10/18/2026 21:48:03.957: [ Module ]  ( 00006FFFFDB10000h + 00172032 )                                                         C:\windows\system32\WINTRUST.dll
+10/18/2026 21:48:03.957: [File Ver]    Wine core dll  6.1.7601.23769
+
+10/18/2026 21:48:03.958: [ Module ]  ( 00006FFFFDD50000h + 00868352 )                                                         C:\windows\system32\crypt32.dll
+10/18/2026 21:48:03.958: [File Ver]    Wine CryptoAPI Library  5.131.2600.1243
+
+10/18/2026 21:48:03.959: [ Module ]  ( 00006FFFFDD20000h + 00110592 )                                                         C:\windows\system32\bcrypt.dll
+10/18/2026 21:48:03.959: [File Ver]    Wine Crypto Library  6.0.6000.16386
+
+10/18/2026 21:48:03.960: [ Module ]  ( 000000007BF90000h + 00262144 )                                                         S:\steamapps\common\NieRAutomata\steam_api64.dll
+10/18/2026 21:48:03.960: [File Ver]    Steam Client API  1, 0, 0, 1
+
+10/18/2026 21:48:03.960: [ Module ]  ( 00006FFFF9AE0000h + 00794624 )                                                         C:\windows\system32\WINMM.dll
+
+10/18/2026 21:48:03.961: [ Module ]  ( 00006FFFF9AB0000h + 00131072 )                                                         C:\windows\system32\msacm32.dll
+
+10/18/2026 21:48:03.961: [ Module ]  ( 00006FFFF9A10000h + 00589824 )                                                         S:\steamapps\common\NieRAutomata\DINPUT8.dll
+10/18/2026 21:48:03.962: [File Ver]    Automata-LodMod - https://github.com/emoose  0.77.5.0
+
+10/18/2026 21:48:03.962: [ Module ]  ( 00006FFFF99A0000h + 00385024 )                                                         C:\windows\system32\MFPlat.DLL
+
+10/18/2026 21:48:03.963: [ Module ]  ( 00006FFFF9960000h + 00184320 )                                                         C:\windows\system32\propsys.dll
+
+10/18/2026 21:48:03.963: [ Module ]  ( 00006FFFFA100000h + 00069632 )                                                         C:\windows\system32\rtworkq.dll
+
+10/18/2026 21:48:03.964: [ Module ]  ( 00006FFFF98C0000h + 00561152 )                                                         C:\windows\system32\MSVCP140.dll
+10/18/2026 21:48:03.964: [File Ver]    Microsoft® C Runtime Library  14.44.35211.0
+
+10/18/2026 21:48:03.964: [ Module ]  ( 00006FFFF9890000h + 00122880 )                                                         C:\windows\system32\VCRUNTIME140.dll
+10/18/2026 21:48:03.964: [File Ver]    Microsoft® C Runtime Library  14.44.35211.0
+
+10/18/2026 21:48:03.965: [ Module ]  ( 00006FFFF9870000h + 00049152 )                                                         C:\windows\system32\VCRUNTIME140_1.dll
+10/18/2026 21:48:03.965: [File Ver]    Microsoft® C Runtime Library  14.44.35211.0
+
+10/18/2026 21:48:03.965: [ Module ]  ( 00006FFFF9840000h + 00069632 )                                                         C:\windows\system32\XINPUT1_3.dll
+10/18/2026 21:48:03.965: [File Ver]    Wine Common Controller API  9.15.779.0000
+
+10/18/2026 21:48:03.966: [ Module ]  ( 00006FFFF9820000h + 00065536 )                                                         C:\windows\system32\hid.dll
+10/18/2026 21:48:03.966: [File Ver]    Wine core dll  10.0.0.0
+
+10/18/2026 21:48:03.966: [ Module ]  ( 00006FFFF8930000h + 06696960 )                                                         C:\windows\system32\d3d11.dll
+10/18/2026 21:48:03.966: [File Ver]    Direct3D 11 Runtime  10.0.17763.1 (WinBuild.160101.0800)
+
+10/18/2026 21:48:03.967: [ Module ]  ( 00006FFFF8910000h + 00057344 )                                                         C:\windows\system32\Kerberos.dll
+
+10/18/2026 21:48:03.968: [ Module ]  ( 00006FFFF88E0000h + 00073728 )                                                         C:\windows\system32\MSV1_0.dll
+
+10/18/2026 21:48:03.968: [ Module ]  ( 00006FFFF88A0000h + 00155648 )                                                         C:\windows\system32\netapi32.dll
+
+10/18/2026 21:48:03.969: [ Module ]  ( 00006FFFFF1E0000h + 00090112 )                                                         C:\windows\system32\dnsapi.dll
+10/18/2026 21:48:03.969: [File Ver]    Wine dnsapi  5.2.3790.4318
+
+10/18/2026 21:48:03.969: [ Module ]  ( 00006FFFFF210000h + 00188416 )                                                         C:\windows\system32\iphlpapi.dll
+10/18/2026 21:48:03.969: [File Ver]    Wine iphlpapi  5.1.2600.2180
+
+10/18/2026 21:48:03.970: [ Module ]  ( 00006FFFFF1C0000h + 00053248 )                                                         C:\windows\system32\nsi.dll
+
+10/18/2026 21:48:03.971: [ Module ]  ( 00006FFFF8880000h + 00049152 )                                                         C:\windows\system32\netutils.dll
+
+10/18/2026 21:48:03.971: [ Module ]  ( 00006FFFFD7F0000h + 00548864 )                                                         C:\users\*********\Documents\My Mods\SpecialK\Drivers\Dbghelp\dbghelp_sk64.dll
+10/18/2026 21:48:03.971: [File Ver]    Wine Image Helper  6.1.7601.17514
+
+10/18/2026 21:48:03.972: [ Module ]  ( 00006FFFFDAB0000h + 00040960 )                                                         c:\windows\system32\winex11.drv
+10/18/2026 21:48:03.972: [File Ver]    Wine X11 driver  10.0.0.0
+
+10/18/2026 21:48:03.973: [ Module ]  ( 00006FFFFDA60000h + 00225280 )                                                         C:\windows\system32\uxtheme.dll
+10/18/2026 21:48:03.973: [File Ver]    Wine core dll  10.0.0.0
+
+10/18/2026 21:48:03.973: [ Module ]  ( 00006FFFFE370000h + 00073728 )                                                         C:\windows\system32\imagehlp.dll
+
+10/18/2026 21:48:03.974: [ Module ]  ( 00006FFFF8820000h + 00299008 )                                                         C:\windows\system32\rsaenh.dll
+10/18/2026 21:48:03.974: [File Ver]    Wine rsaenh  5.1.2600.2180
+
+10/18/2026 21:48:03.975: [ Module ]  ( 00006FFFF9050000h + 04861952 )                                                         C:\windows\system32\dxgi.dll
+10/18/2026 21:48:03.975: [File Ver]    DirectX Graphics Infrastructure  10.0.17763.1 (WinBuild.160101.0800)
+
+10/18/2026 21:48:03.976: [ Module ]  ( 00006FFFF8640000h + 01892352 )                                                         C:\windows\system32\nvapi64.dll
+
+10/18/2026 21:48:03.976: [ Module ]  ( 00006FFFF8610000h + 00122880 )                                                         C:\windows\system32\d3d12.dll
+
+================================================================== (End Preloads) ==================================================================
+
+================================================================== (List Unloads) ==================================================================

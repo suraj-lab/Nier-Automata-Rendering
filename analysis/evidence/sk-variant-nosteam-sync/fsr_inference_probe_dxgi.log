@@ -1,0 +1,4 @@
+warn:  CreateDXGIFactory2: Ignoring flags
+info:  Game: fsr_inference_probe.exe
+info:  DXVK: v3.1-19-g601930949d111ed0
+info:  Build: x86_64 gcc 14.0.0

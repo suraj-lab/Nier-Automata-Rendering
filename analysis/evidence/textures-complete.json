@@ -1,0 +1,30 @@
+{
+  "captured_utc": "2026-10-18T22:39:06.141505+00:00",
+  "game_exe_sha1": "420cbab7daa1d94a79473c0a6271ef9c30e516e5",
+  "game_exe_variant": "Windows 10 (WAX-supported)",
+  "mods_active": {
+    "fsr4_native_aa": {
+      "dll": "d3d11.dll",
+      "provider": "4.1.1",
+      "res": "3440x1440"
+    },
+    "lodmod": {
+      "dll": "dinput8.dll"
+    },
+    "wax_textures": {
+      "dll": "dxgi.dll",
+      "textures_found": 289,
+      "texture_dir": "wax/mods/!base/textures"
+    }
+  },
+  "wax_config": "texture-only (all gameplay patches off, auto_purge_inventory=false, uncap_fps=false)",
+  "known_gaps": [
+    "4 non-canonical author filenames skipped by WAX hash matching (2 have trailing spaces/suffixes, 1 is 9-hex, 1 has \" 2k\")"
+  ],
+  "next_steps": [
+    "frame generation (afmf-linux installed, untested in-game)",
+    "engine-resolution upscaling (hard; needs closed d3d11 proxy modification)",
+    "DLSS5 NR (separate experiment)",
+    "optional: remove redundant ~1GB SK_Res/inject copy"
+  ]
+}

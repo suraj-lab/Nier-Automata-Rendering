@@ -1,0 +1,18 @@
+{
+  "tool": "afmf-linux",
+  "version": "v1.3.1",
+  "source": "https://github.com/serialexperimentslainnnn/afmf-linux/releases/tag/v1.3.1",
+  "tarball_sha256": "7fafa09021ee94dc5ec8da694cb02fe298b54c114b486611bb24b1e1500edb18",
+  "lib_sha256": "7e16de98040859988119c2836f7f777be35c575568187ba41ef38dfd871a0394",
+  "gpg": "Good signature, EDDSA 6C19F60038E56680CD6F9538D503406B586D311E (release key, untrusted in WOT)",
+  "installed_files": {
+    "library": "/home/suraj/.local/lib/afmf-linux/libafmf-linux.so",
+    "manifest": "/home/suraj/.local/share/vulkan/implicit_layer.d/afmf-linux.json"
+  },
+  "layer_name": "VK_LAYER_AFMF",
+  "enable": "AFMF_ENABLE=1",
+  "disable": "DISABLE_AFMF=1",
+  "dormant_by_default": true,
+  "uninstall": "install.sh --uninstall",
+  "launch_options_for_test": "WINEDLLOVERRIDES=\"d3d11=n,b;dinput8=n,b\" AFMF_ENABLE=1 AFMF_LOG=2 AFMF_PROFILE=1 mangohud gamemoderun %command% 2>>/home/suraj/Projects/Nier-Automata-Rendering/analysis/evidence/afmf-nier.log"
+}

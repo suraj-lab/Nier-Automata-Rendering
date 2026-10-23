@@ -1,0 +1,20 @@
+======================
+Proton: 1789520217 GE-Proton11-7
+SteamGameId: 0
+Command: ['/home/suraj/Projects/Nier-Automata-Rendering/analysis/visual-stack/sk-control-no-aa-proxy/fsr_inference_probe.exe']
+Options: {'gamedrive', 'forcelgadd'}
+Kernel: Linux 7.2.10-1-cachyos #1 SMP PREEMPT_DYNAMIC Wed, 14 Oct 2026 07:02:02 +0000 x86_64
+Language: LC_ALL None, LC_MESSAGES None, LC_CTYPE C.UTF-8
+PATH: /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/bin/:/home/suraj/.npm-global/bin:/home/suraj/.local/share/zinit/polaris/bin:/home/suraj/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/bin:/var/lib/flatpak/exports/bin:/usr/bin/site_perl:/usr/bin/vendor_perl:/usr/bin/core_perl:/opt/rocm/bin:/usr/lib/rustup/bin:/home/suraj/.lmstudio/bin:/home/suraj/.lmstudio/bin
+System WINEDLLOVERRIDES: dxgi=n,b;mscoree,mshtml=
+Effective WINEDLLOVERRIDES: dxgi=n,b;mscoree,mshtml=
+System WINEDEBUG: -all
+Effective WINEDEBUG: -all
+======================
+Inherited environment
+DISPLAY: :1
+======================
+ntsync: up and running.
+WARNING: radv is not a conformant Vulkan implementation, testing use only.
+21119.595:016c:0170:info:nvapi64:nvapi_QueryInterface (NvAPI_Disp_ColorControl): Not implemented method
+21119.865:01b0:01b4:info:nvapi64:nvapi_QueryInterface (NvAPI_Disp_ColorControl): Not implemented method

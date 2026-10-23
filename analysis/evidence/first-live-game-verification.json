@@ -1,0 +1,20 @@
+{
+  "checked_utc": "2026-10-18T20:25:25.144912+00:00",
+  "pid_observed": 624815,
+  "game_native_aa_contexts": [
+    "21:21:07.946 FSR: context created, render 3440x1440 -> 3440x1440, flags 0x21 (DLSS flags 0x43), provider 4.1.1"
+  ],
+  "latest_evaluation": "21:25:06.517 evaluate: frame 14400, render 3440x1440 -> 3440x1440, jitter -0.219 -0.426, mv scale 1.00 1.00, reset 0, near 0.1000 far 10000.0 fov 50.0 deg, dt 16.81 ms",
+  "latest_character_motion": "21:25:19.698  object motion: last 600 presents: 33345 character draws repeated, 600 motion blur draws skipped",
+  "system_dlls_match_dxvk": {
+    "d3d11.dll": true,
+    "dxgi.dll": true
+  },
+  "local_proxy_matches_pinned_mod": true,
+  "special_k_module_observed": false,
+  "special_k_log_last_session": "2026-09-06",
+  "hotkey_next_launch": "F8",
+  "windows_virtual_key": "0x77",
+  "config_change_only": true,
+  "visual_quality_verified": false
+}

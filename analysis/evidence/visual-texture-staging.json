@@ -1,0 +1,1483 @@
+{
+  "archive": "/home/suraj/Downloads/NieR Automata - Texture Pack V1.03 - Lite-5-1-03-1627339619.zip",
+  "archive_sha256": "c60215833fc295b3d7f3a93d4709f5f6c25e87d4f8b3cc39338664221e8d7c83",
+  "dds_count": 292,
+  "total_dds_bytes": 1017687464,
+  "categories": {
+    "2B": 4,
+    "A2": 3,
+    "Environment": 266,
+    "Fonts & UI (by Triforceguard)": 13,
+    "Machines": 6
+  },
+  "duplicate_basenames": 0,
+  "author_filename_variants_preserved": [
+    "38BFD9BA 2k.dds",
+    "937E19F2old.dds",
+    "2E4CB26E .dds",
+    "722D71642.dds"
+  ],
+  "full_pack_installed": false,
+  "files": [
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/2B/87F0B90C.dds",
+      "bytes": 22369776,
+      "sha256": "362f004148021e5d2c518290551c998eccd1829cb831cc9aa79b7f2c1a48bbbd"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/2B/A006408A.dds",
+      "bytes": 11184972,
+      "sha256": "b935160d2f859b6b3f9f43a305ccd43535b6078c95c0634b575a9fae07614eaa"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/2B/A1062016.dds",
+      "bytes": 2796364,
+      "sha256": "dac99d0a2e3391fe74f011866defe8590868cca6ffe15503528b9c0366d72c9a"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/2B/DB4E3F5B.dds",
+      "bytes": 2796344,
+      "sha256": "04fbef54acae932200e64b77a3eda724ab1c2d766b8e8e8fffe79749f6a6339e"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/A2/4AC695AA.dds",
+      "bytes": 2796364,
+      "sha256": "b3b596970948fec81a4c1693610bdbd7f1627604d3e000cc0fe974afdb8741ab"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/A2/669C85FD.dds",
+      "bytes": 11184972,
+      "sha256": "040ea001289b6acfbd8561d7d9ba246fe6abc9127b371cf822eb014f560db794"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/A2/B08FE0A4.dds",
+      "bytes": 2796344,
+      "sha256": "713a7770b82a92822ac623c47fc51c13353a27febe9afa4de90dd4df0de11972"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Amusement Park/017F1B49.dds",
+      "bytes": 2796344,
+      "sha256": "8a8c4e1d37d7e9c1a8fed63fe9c104bd53e6495e09bf19257416d041ad98aad2"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Amusement Park/47B4374A.dds",
+      "bytes": 2796364,
+      "sha256": "7dc2fd3b3bb10d883c1b5364413715bbc13b656a5459b3c38fac7ccff341f0f5"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Amusement Park/4949D0C9.dds",
+      "bytes": 2796364,
+      "sha256": "5646f2f88d3e86b32b3de385a1c8deea502094db0e8331539b1b42d73e885b56"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Amusement Park/4967453B.dds",
+      "bytes": 2796344,
+      "sha256": "f80608f20cda6b13cb21bcfba28d990445fcc1594594e6a939fc355452f672ca"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Amusement Park/54DD3F87.dds",
+      "bytes": 2796364,
+      "sha256": "76fd5b9169251abeceab6243af0c5b24b6fc8fb277e669427b3d8d4875bc1f53"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Amusement Park/6DA4C6D2.dds",
+      "bytes": 2796364,
+      "sha256": "82f94a7bd5aca5f5908f860343c9eaedc4d76af60dd2d14f31248e4aeab484a3"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Amusement Park/6DEAE944.dds",
+      "bytes": 2796364,
+      "sha256": "fe796d84ea85344c62c9edcb1e955468b6ebe283725100db2ee74d63388bbfba"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Amusement Park/6EBBC4E0.dds",
+      "bytes": 2796364,
+      "sha256": "c1feb144569baa0792e44a6f7a5e49702112f4eeec16f0e09f853aa25660ba54"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Amusement Park/706835FC.dds",
+      "bytes": 2796344,
+      "sha256": "ab31a048b75edfdcf3282eb7d5fa75814a3ad5950c8622616b92f14f6a6f6885"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Amusement Park/823A1BE5.dds",
+      "bytes": 2796344,
+      "sha256": "467b2649795a49ce8cea1f4d2267ed2476d02e9ed9739512050a3997e3c71f21"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Amusement Park/8684D87D.dds",
+      "bytes": 699192,
+      "sha256": "c13d7a877462dfa542c46f42511309053db8f90577b047c00c691b108cfdf7b3"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Amusement Park/8C1D0169.dds",
+      "bytes": 699192,
+      "sha256": "01327efcc66783fafb87bcd46d592442d7108b3ee4b5b5e66ec7a0b5ad9fd52b"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Amusement Park/99A7B9C0.dds",
+      "bytes": 2796344,
+      "sha256": "decbdf0745c9df9212040986eefc0f29ce1307c1188a53009e87d0237a01dcaf"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Amusement Park/B13135D9.dds",
+      "bytes": 2796364,
+      "sha256": "b2372ad53414b1e069ef096b065307be81a2777a78a7c33b5ad7318db71f8e9b"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Amusement Park/BF9A343D.dds",
+      "bytes": 2796364,
+      "sha256": "902efa96f8cc77d94257a250ecb8126d985b934c896eef772a6cbc13d9657240"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Amusement Park/C5E9FFE2.dds",
+      "bytes": 2796344,
+      "sha256": "87200bfe711a9170011b6de47cc1ce93bb417c47e1caa92afff22a480385129c"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Amusement Park/CC8A6479.dds",
+      "bytes": 2796344,
+      "sha256": "e6b710ef300d5738dd173fb7342f3f3359a0362770ed7172f6ce496ea2b46f78"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Amusement Park/F88C9BF0.dds",
+      "bytes": 2796364,
+      "sha256": "5cffe46663c02d78651e6f3ab87b098ead32615c3a4ae99b4969e6b165da1c9c"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Amusement Park/FD54DE63.dds",
+      "bytes": 5592580,
+      "sha256": "ad4ea14874a91af1cb3175a89b8563dd40a3d9c77e331ee60ffd97ee18c47474"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/03752F1F.dds",
+      "bytes": 2796364,
+      "sha256": "5cd299ac7f6ef2e518eb018ed783643da2036f8d851864b84bd3e9db23d4ab53"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/0B39B92C.dds",
+      "bytes": 5592580,
+      "sha256": "b1396a1f2d3f77572924de7ecaff0a36da9b51086058c039691909d795e0bf71"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/0F33220E.dds",
+      "bytes": 699192,
+      "sha256": "d4ac12444457abff732a04a4d507701582f614a9a9a5592023d3406289dd7fa6"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/10085F6C.dds",
+      "bytes": 2796344,
+      "sha256": "067c62104e1cd052ab0f506b48e0e26f53c3205718b49b2d627322d0df829bd1"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/14E98F04.dds",
+      "bytes": 2796364,
+      "sha256": "f2bcf1417a34f995005ecd2beae618bc65e5ca985a0929693e6d3d6309cdc656"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/17E3F220.dds",
+      "bytes": 2796344,
+      "sha256": "218286873c0612fceaac43f416800a9bd81bef9a028abb7a2209979803a8580b"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/188B549A.dds",
+      "bytes": 174904,
+      "sha256": "96efc3ee2322d7b3a1edc5928aa9e7787172ad3cd4bbe8121266cbc4d2783cce"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/19E5738C.dds",
+      "bytes": 699212,
+      "sha256": "5496f3a3830a65fca9a22896c9e34fb10c23af69511c4e31f689956d710cc22d"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/1F14C226.dds",
+      "bytes": 2796364,
+      "sha256": "7487b0f80ff5c7bfe2dc03ff46dea846c578f03e1bbb3f2a2c7fbc9062d25cec"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/2F78222D.dds",
+      "bytes": 6291628,
+      "sha256": "6aa0a655a192498a0b0a4a562fb5b8e93ee3f04b801ed6ffd14b91c17436b811"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/35705DEE.dds",
+      "bytes": 699212,
+      "sha256": "3b8f8ef6e359e146ac0fceece099febb74fda9457a32d31b35613901438a1e74"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/3D79E5E7.dds",
+      "bytes": 699192,
+      "sha256": "aa180018e9e08d7dcb63c91c891679ed6d34f483195f1ccd5ff7976a1ce0c548"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/3F9B9EE0.dds",
+      "bytes": 2796344,
+      "sha256": "d331ea6751c9a70a640535b5b391c0690e6b929a504bf0cba1e12f196415cc4c"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/406B8865.dds",
+      "bytes": 2796344,
+      "sha256": "86f5e2c83fb64df6e758cfbce4c5d0efe5a766d740c072d707e070777ea0613f"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/4592904F.dds",
+      "bytes": 2796344,
+      "sha256": "f029da58c65595b17319c09d623f905e8160b1365ad7b78cbac558bf46569819"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/46E8F316.dds",
+      "bytes": 2796344,
+      "sha256": "e050bfbf89c87e3cda3c2b1d54912543750d7e0e5e2b3ecc221dcf402d7401a5"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/489A9DBE.dds",
+      "bytes": 2796364,
+      "sha256": "a96ebe7af6b34130db92b0ac7dafbefc3ea7d1e7139e18726e507a5d26ae074f"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/4C66C91B.dds",
+      "bytes": 2796344,
+      "sha256": "218286873c0612fceaac43f416800a9bd81bef9a028abb7a2209979803a8580b"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/5078ECEE.dds",
+      "bytes": 699192,
+      "sha256": "9a32ceef0c5687a7434e7b884f316678e3107d9661d540a40512fefd054e8c85"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/52D981D9.dds",
+      "bytes": 2796364,
+      "sha256": "7104fc2d07e9fb73812459ed2db9bf6a09f185ed6077416cb882d4dbb57bf826"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/5516B594.dds",
+      "bytes": 2796344,
+      "sha256": "bba8aa1945de216871798a8f0bfc995d84a9f494363eb8989e9a49bee2cf39b0"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/6556C3CD.dds",
+      "bytes": 2796344,
+      "sha256": "679aea24e6cceab08842d7927f4d5a7d4ca3a08b218a9e8bf484e8a46cdcf542"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/68326CA4.dds",
+      "bytes": 699212,
+      "sha256": "6f69d2f64a24787272a6f455e7ecb9c95d3b3a5fe5e0b3b8e66c75c86a92755b"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/6D6F5205.dds",
+      "bytes": 2796344,
+      "sha256": "3b97af77b371da736899190beb8efad3351ed0e6046f580f7cf9a30729d72840"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/6DDF6AEE.dds",
+      "bytes": 2796364,
+      "sha256": "3070151e15b463c79b502820f967c64759fc045050a5d5a43f43d22eecadc09c"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/742CAA8F.dds",
+      "bytes": 2796344,
+      "sha256": "838cd3b4bc51754b8c2ed3e4a3bdbc1b107d7c2b88b2b47f107f075b4e463483"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/7BEC942D.dds",
+      "bytes": 2796364,
+      "sha256": "1bac901dbaabe235d3b0ca18f643f0642f222466f6582c0334841a04b76a1376"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/85264D2B.dds",
+      "bytes": 699212,
+      "sha256": "c2a9c31eaddc19031919a8279e5294cce684be8a5d13ac0c6a25189d89c54a50"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/85436C30.dds",
+      "bytes": 2796344,
+      "sha256": "d69811b4ccd2b7299e100475d24868335936e3041849db4b8ec05656d231e7f5"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/85AA2F4A.dds",
+      "bytes": 2796344,
+      "sha256": "7d826dcf1f66e724f097e58818c1a131672be2b55f4a950b08e738e946425569"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/865A45DF.dds",
+      "bytes": 2796344,
+      "sha256": "38a6f4671a31f15da27b36d6eab18a04b24c330a185c3e589ce9c8fe186e6a29"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/86BA1874.dds",
+      "bytes": 699212,
+      "sha256": "16ec179a61d59a6d6008680953ca13ef5387c58d85814c15c4ea3b18ab923f29"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/937FF93D.dds",
+      "bytes": 699192,
+      "sha256": "deabc7ebaf3ed9a90fdd6008900e1b3b59347ff89cc93a8001291477e7e6f26b"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/9895FF4F.dds",
+      "bytes": 2796344,
+      "sha256": "a45f1ea180f3c7f8faa8342999a433e6d4a39b25c4c41b3a74a58997bea9a546"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/99A6F1B5.dds",
+      "bytes": 699192,
+      "sha256": "0d8c9ac59e0645197c429ca4c8b8e21c4f68e14e358c159a935fc84fb04901b6"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/A448F745.dds",
+      "bytes": 699192,
+      "sha256": "c013c90d672a56eb8bfae587206d1a65b9fd476df9be5c47286c8bce544b084d"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/B0AC1EEE.dds",
+      "bytes": 699192,
+      "sha256": "be41c0a6433bd0021b14e906663298b3998922885fba1912386bd77d9613388e"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/B4BE8683.dds",
+      "bytes": 2796344,
+      "sha256": "bd407772de0bd1ac58fed37369f4815d7c8dd5d82215e580653eda9ca0d12ab3"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/B50FC310.dds",
+      "bytes": 2796344,
+      "sha256": "6e83b49f429634acdd437b21c775e1c1bacab3aa5c04f8618d9877cd6164504f"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/D673E5CA.dds",
+      "bytes": 2796364,
+      "sha256": "3cb6fa919a149bb3878cf46d8e28d278b25439759a3572fbd2ee7dbe6349e8ce"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/E1182C45.dds",
+      "bytes": 11184952,
+      "sha256": "ca14adedc5dec8020898bd111ebe8bdbd09927224c8e4f99c7253be7e86fcb9c"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/E1B8B993.dds",
+      "bytes": 2796364,
+      "sha256": "82d874979921872c66d186d2a198257d6cdb8c5478c8a7b97923b626c7de8e3e"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/E57D440C.dds",
+      "bytes": 6291628,
+      "sha256": "61e0821c30c0a5a9ef01aee7c6332f55597cd7b6d0dca778701cb95e80bf5225"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/F8F69016.dds",
+      "bytes": 2796364,
+      "sha256": "f086313265183a2e2bd9e0e99c14231fe4f892cb13dc5323c2544020aa5cdd53"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/City Ruins/FF92CB24.dds",
+      "bytes": 699212,
+      "sha256": "40c384e921e6157d8efd5f2467893ea02776488e585109702613f568e7a1d33c"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/01787B50.dds",
+      "bytes": 699192,
+      "sha256": "869ed1dba42d5da2694059cc5b9ea33e9dbfef72a0151a42fc54e2cd12e4bfc8"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/05D39612.dds",
+      "bytes": 2796364,
+      "sha256": "1eb59ff8fb94ff59801f30955ebea68c63ff5e826ae2bd195835bd50d2638648"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/0E5B620F.dds",
+      "bytes": 2796364,
+      "sha256": "27a40b0a598fd2b1e9c560531e9318a946df7aa4981db17da91212066c93ded8"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/0FE4F086.dds",
+      "bytes": 2796364,
+      "sha256": "cc7ae502ea2fee0bf68376429f51e54af1446a33a54851ac6a126c2eff547b18"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/129F0371.dds",
+      "bytes": 5592580,
+      "sha256": "a38a8308bdc7db176ad392a47544017b88910325ec973fc825eda1be5bfc7d23"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/14EC8E40.dds",
+      "bytes": 2796364,
+      "sha256": "a4111a5df519fb292c7fff8a5261cf142b3d4f42aa0a7ade68966e826c842367"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/1831B003.dds",
+      "bytes": 2796364,
+      "sha256": "fb10401074ea9c3b435767d40315279c76f8a535a16d8145f153e17441bbaf7b"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/1A0BA394.dds",
+      "bytes": 2796364,
+      "sha256": "e03e5eabcf312c0ee44298ac4076c9cfcdedaa68d157d59724df7caa619395b7"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/1ED4F3CC.dds",
+      "bytes": 2796364,
+      "sha256": "2ae44287ee683e74420fa947ea3daaa1676f2c88750d901ce79d444b077d1ea3"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/1F2CA4EF.dds",
+      "bytes": 2796364,
+      "sha256": "19178f0143d63aebfc5e9d38f99d140d256a95f729285ef61d2cd319dc2be570"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/2B88ACBE.dds",
+      "bytes": 2796364,
+      "sha256": "bd60cefb81bb707992723454037a00762ce6c2fc9bff9d1c78eaeda110dcb590"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/329E274A.dds",
+      "bytes": 1398276,
+      "sha256": "e118cc8abba81ef06675147b92b5a042c2fc683da5931fe234179bd8c173ece5"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/38BFD9BA 2k.dds",
+      "bytes": 5592580,
+      "sha256": "c39960643855f2b3c903c67f6246dae3c44464e0196b4f7142c11fd417bc4a50"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/38BFD9BA.dds",
+      "bytes": 5592580,
+      "sha256": "f7a47d19efc399add7db1220b0c1120a1271bdb5df71e9dfb380ff9b7d0cf1c7"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/3D0AB5E9.dds",
+      "bytes": 2796364,
+      "sha256": "1e440db935f9893e14ef6f6f02d9b155cc4104531246cbe7c88a898ad76c9dbd"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/3EC42841.dds",
+      "bytes": 2796344,
+      "sha256": "aeb3fbe6a750a2e38cb88f5ef5c975fdf85a1efe1abc530dd1753433587a1313"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/4489ABC0.dds",
+      "bytes": 2796364,
+      "sha256": "c9bbbe1253a177049010be8f7c2a4dc3378495991513dc6496ec4d7a10ead619"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/4B26E97B.dds",
+      "bytes": 2796344,
+      "sha256": "3f3997efb883ca1ac3b2d803ce03845e1eb2eeb147f0f0f909c428a94e5e86ca"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/4DCF38B2.dds",
+      "bytes": 2796344,
+      "sha256": "21f93f90163ba27952f0cfacef2d512eb2cbeb345a68b9a8398d5e3f47c968c7"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/5079B635.dds",
+      "bytes": 2796344,
+      "sha256": "fd11c12258c04760c1e55529dfe5873fb2b2a8fe352e0ead913ad738f78e2ed1"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/57228F74.dds",
+      "bytes": 2796344,
+      "sha256": "40a1101968752c4fd5101beb3fca3905f1670d2e11e67a530fe9f20fde96d28f"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/59380F20.dds",
+      "bytes": 2796344,
+      "sha256": "5edf6e5e3283e3f9caa929918f72c8ede266dd5bc5b26686c878dff8e3751599"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/5D72F83E.dds",
+      "bytes": 2796344,
+      "sha256": "c2087190e7ea22e07fc4b03607fc41cac9c6a5630722fa5d3dc7f1c430574ba2"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/5F3AD3D1.dds",
+      "bytes": 11184972,
+      "sha256": "8c8334b56a2e1b3391cd627b1b24eb81def0362c79d2bfb00cd7431be49c35ee"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/6769A114.dds",
+      "bytes": 2796344,
+      "sha256": "29047c0c9776c5b97ea7b21f9985237ec080bcf2092f4b0ab336f7fd68a92720"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/687C6162.dds",
+      "bytes": 2796344,
+      "sha256": "6483b02c1e7867bec4caae001b4988aed2939af585991272bf1be8e7851413f7"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/7AE35A18.dds",
+      "bytes": 2796364,
+      "sha256": "944babc7a62e9824fd66e6479ddbcb28ac153a232b7d50f56d94c011fdfa1df9"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/7B05E642.dds",
+      "bytes": 699212,
+      "sha256": "8ac11cb0fd2ed6e44425c0641efc091579a15e60ef9a5fd4b7abadad1a91b555"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/8DFD6E7E.dds",
+      "bytes": 5592580,
+      "sha256": "8ddec04b408543ed72a2775c0bbb6be132422f8fefb0cb17123af5c6c5297b21"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/9CCBECCD.dds",
+      "bytes": 2796344,
+      "sha256": "c614944f70ce5de673b2a1781652e812c4a1b9cbd12d8fb9f140e4b1754844d2"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/A0099BFD.dds",
+      "bytes": 2796344,
+      "sha256": "ce187992905b8793979994d72acdd59afe48dcb72fc8862fcb24379b2a4aec4e"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/A2C2B0E3.dds",
+      "bytes": 699212,
+      "sha256": "cbd710cbb5ef85c47c3fb3751c5bacc29ec0595cefcc89f37fd987ab2c1b83e4"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/B0B41BC8.dds",
+      "bytes": 5592580,
+      "sha256": "6fc8a45c0678dcf1059bd1edf99a48ecff4fdad423176ed5fdd35a999bdbf4d5"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/B5908AC4.dds",
+      "bytes": 2796364,
+      "sha256": "75926d571323f0ca20a09ded9929120fbdc7e670346612b3628a7cf67130c4b3"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/B7A83509.dds",
+      "bytes": 2796364,
+      "sha256": "7bdf6e75fb47182f0085fe43f2d2910658960168ca8680e3d663648b86b7938d"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/C773B4D8.dds",
+      "bytes": 699212,
+      "sha256": "e971cd16d47ec6d532633dfee01db1fea8f74160b925ac4271fef8770220d72c"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/C849952A.dds",
+      "bytes": 2796364,
+      "sha256": "b1688956d0f7bea20a7578d384717eab000f5bd5499c8f2d157be5ae54231f3a"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/CAAAB911.dds",
+      "bytes": 2796344,
+      "sha256": "29047c0c9776c5b97ea7b21f9985237ec080bcf2092f4b0ab336f7fd68a92720"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/CE86D24F.dds",
+      "bytes": 2796344,
+      "sha256": "78978c1b2fb3c39acbfe0a8894b16b68f21b637ad34a4a01cb062435a2139a7b"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/D5F46C68.dds",
+      "bytes": 2796364,
+      "sha256": "f4c26b88a684a849979d722e2b07a54d39ad1e8be898bc24495e8312b42f33f9"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/DA752E25.dds",
+      "bytes": 2796364,
+      "sha256": "e1a5a1cf5cbf5a461b54208804816e5f78c9b1bce567995d6a6a8e7d613118dd"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/DBAEBEC9.dds",
+      "bytes": 2796364,
+      "sha256": "8a2d6a97bfd28fa196e1c628133853c2a54ab5c701751a5e2ab6095a89913df8"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/E2AACF5A.dds",
+      "bytes": 699212,
+      "sha256": "4494b5fccef5ebdd70c31d2c530f83b8554687963f6b9a71241a7ca38df251e2"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/F71D2810.dds",
+      "bytes": 2796364,
+      "sha256": "134acb3c86d34cbeea8728d46b7e071f0f44356bad6115693ab1b07a09ffc423"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/F8921E10.dds",
+      "bytes": 2796344,
+      "sha256": "db95ce18ef8a1e09bd66e7cd4477574b303b48e29b45faa3176901ba6a9bfe4d"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Common/F9608A84.dds",
+      "bytes": 2796344,
+      "sha256": "8a8c4e1d37d7e9c1a8fed63fe9c104bd53e6495e09bf19257416d041ad98aad2"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Copied City/977F5B04.dds",
+      "bytes": 699192,
+      "sha256": "989ab28189b7495c4980d63755a4c4740f5cf363ffee11b011985384c32d9c09"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Desert/01B7A472.dds",
+      "bytes": 2796344,
+      "sha256": "0eaf074fae9f07780228bc217db3fe10544141420c814d109b43c4e419c0b360"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Desert/02987999.dds",
+      "bytes": 699212,
+      "sha256": "d4d98ce937933b337a0bdd9c92e7ceb3034546fe5bb22c06e3864baf3cb8813a"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Desert/065B88D5.dds",
+      "bytes": 5592580,
+      "sha256": "ac0ed9158d0417599e592dd75369314cb76ef728788386a784c726e0f7d85295"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Desert/0836BF29.dds",
+      "bytes": 2796344,
+      "sha256": "f4a04beea5053dd17df60609820a9cf9682d979458904cc4bcf1970f97b1e660"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Desert/08A8DEB1.dds",
+      "bytes": 1398276,
+      "sha256": "47cdf53b6f393b8e1394ea2fac5cc14568f0ded75e3a422f91eefeb31f2ff494"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Desert/11339B96.dds",
+      "bytes": 5592580,
+      "sha256": "8e89bb50129df066290e2abcd025cc50eb0462d4ca836ca020b44f6c53777e12"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Desert/169BA68A.dds",
+      "bytes": 5592580,
+      "sha256": "5087b5f6f0c131eace48fa828e6e0ce566f8e19b242dae417fc388cbdd8dcb8b"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Desert/1B5CEE24.dds",
+      "bytes": 2796364,
+      "sha256": "55a8d989bd186a46cf658ecb71d073266122280e35441b5af0ea5e965ce87c69"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Desert/1BA17742.dds",
+      "bytes": 699212,
+      "sha256": "ca96a9982e43da89791c7617495fb2964f6113828d3eee5c6983a610e4f245e4"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Desert/1FF1C3DF.dds",
+      "bytes": 5592580,
+      "sha256": "5087b5f6f0c131eace48fa828e6e0ce566f8e19b242dae417fc388cbdd8dcb8b"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Desert/2089F003.dds",
+      "bytes": 2796364,
+      "sha256": "bef4ae3242ca03487decd5200a1ff4ab18b866fe24846688d59b74a14625e7e5"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Desert/43C2C38F.dds",
+      "bytes": 2796344,
+      "sha256": "59c2f0b50aecfd8639649102f850b0a40085e451614407e329b71236a8bcb505"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Desert/50BDCC37.dds",
+      "bytes": 5592580,
+      "sha256": "80c1fb3fd8280c56640c0fc9bf0a81bb8c65f02448e5ccae07fbca7bfefab3e0"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Desert/59FFC2E4.dds",
+      "bytes": 2796364,
+      "sha256": "ccb593ea982eabc7cbe3e379d3f4a51617600b7608ec00528f4e814db9a39b44"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Desert/5CACBF99.dds",
+      "bytes": 2796364,
+      "sha256": "5c4ce3acc4ecffa24ee8229f4507bd67e151143a3f5acdfb862f1d51bb5cebcf"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Desert/5D55B5C1.dds",
+      "bytes": 2796344,
+      "sha256": "80de9163d3979a711d8e3e889d5a9075250e96eda77e831c8892533e12ceacf6"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Desert/6149F4CA.dds",
+      "bytes": 2796344,
+      "sha256": "5a3e0c89ab47e088614bc93710758e878f1c47a1eaeea52793a648ead393c75e"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Desert/6C4AC0C5.dds",
+      "bytes": 2796344,
+      "sha256": "7a8984298842966643c79088f6913ddb9b43df18382e5f878de6bcaeeaa5cb79"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Desert/6F7218AC.dds",
+      "bytes": 2796344,
+      "sha256": "8472a6d8d862fe2aafe0fcd462d1adf4269a5bc3381860c83f16d4465ba672c4"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Desert/7011DEE4.dds",
+      "bytes": 2796364,
+      "sha256": "b01ed8e6b1103e28108edd3a611fac590e448ec7c926ed40b6089d1e8b7da953"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Desert/71573037.dds",
+      "bytes": 5592580,
+      "sha256": "39376fe36d049069c910f1ad4a6c31f2272887db2e1fe9c7dab624b80195ef80"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Desert/77609CE9.dds",
+      "bytes": 5592580,
+      "sha256": "5087b5f6f0c131eace48fa828e6e0ce566f8e19b242dae417fc388cbdd8dcb8b"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Desert/7871DCB1.dds",
+      "bytes": 2796344,
+      "sha256": "1d4ef0e9d40abcd1657403a6d92373d255d82cfbd3238f258e075bcf2e4bda45"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Desert/7A31F6DC.dds",
+      "bytes": 2796344,
+      "sha256": "91617b079e06d1155c08490fb27206c6a0f16d9b3eefff252000e2765c68e354"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Desert/94D18C0C.dds",
+      "bytes": 2796364,
+      "sha256": "3ee14d16fedf4fad83c33348646dd03343f552488edc5aa9dfe36c784131d1dc"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Desert/9A2ACD7B.dds",
+      "bytes": 174904,
+      "sha256": "3957c43533c6e1ae0214911eba178f5fbeb705f03140bc38173b1cd4e251508b"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Desert/A12FED4F.dds",
+      "bytes": 5592580,
+      "sha256": "7ab7cc7f6cca881097fd4ec231aad005efb885a36caaf450ffd22ee9c0078289"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Desert/A300970C.dds",
+      "bytes": 699192,
+      "sha256": "8eca2ee0982a11b578a5d3e095c70452e4e6e2d6cdca6fd21d60f7537bbd514d"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Desert/A6BCD40D.dds",
+      "bytes": 2796364,
+      "sha256": "5a17ac512b659ac9787f88ea44c9a2f110d4314d107e7144af1743ba3133c756"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Desert/A8D55E0C.dds",
+      "bytes": 699192,
+      "sha256": "a50e2aeb8b9864224dd01b0e9d4b5e63c4899384d3e9d06b8f2cdf3626953ba0"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Desert/AA0E46E2.dds",
+      "bytes": 2796364,
+      "sha256": "9552e33dc03b15053fed5cb2fc44777e18cf2cfb9acaa7eadceb8f5465bd1ad7"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Desert/ADB12FFA.dds",
+      "bytes": 2796344,
+      "sha256": "f4a04beea5053dd17df60609820a9cf9682d979458904cc4bcf1970f97b1e660"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Desert/B12CB51D.dds",
+      "bytes": 2796344,
+      "sha256": "2382670acefbb7c6574a3961f2a7fd7d21cdd17eeda3eae92aa815b0a046b2f2"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Desert/C393B4CA.dds",
+      "bytes": 2796344,
+      "sha256": "a5967bd37db83afd5ecf7e400cd47f258b8ae278803dda39ccb9da26dc437e5a"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Desert/C97B5BF4.dds",
+      "bytes": 2796344,
+      "sha256": "5f531bba8f1bd79ff59e37b9ad4b9cccb941dbc92a652d114974145895389e19"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Desert/CB26B358.dds",
+      "bytes": 699192,
+      "sha256": "14e53c0e507b2987c2e83f48ccc0521ee1554bfd143f021163b515af7f2a1564"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Desert/CF40F18E.dds",
+      "bytes": 2796364,
+      "sha256": "c3644f2fc391cb32b4f56e4ed0aaf6dd4dee6e61f1487f9548f596c1ef6b4335"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Desert/D0188A42.dds",
+      "bytes": 2796364,
+      "sha256": "7ac47d938abd1c97ff7de0ef31c7de020167b1703bc267634347c6629b4fe7a9"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Desert/D3316307.dds",
+      "bytes": 2796364,
+      "sha256": "ccb593ea982eabc7cbe3e379d3f4a51617600b7608ec00528f4e814db9a39b44"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Desert/E060C495.dds",
+      "bytes": 5592580,
+      "sha256": "5087b5f6f0c131eace48fa828e6e0ce566f8e19b242dae417fc388cbdd8dcb8b"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Desert/F0FB12A7.dds",
+      "bytes": 5592580,
+      "sha256": "f0ddac0a49fdeacce9a86971f8861671edf3c086fda70a880d2e3ffee6e82393"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Desert/F9C3907D.dds",
+      "bytes": 2796344,
+      "sha256": "59c2f0b50aecfd8639649102f850b0a40085e451614407e329b71236a8bcb505"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Factory/0C957609.dds",
+      "bytes": 2796364,
+      "sha256": "114285ef20336a691906a171cc165d4e231daed8c71225e6aa3da59d0eda079d"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Factory/0F094239.dds",
+      "bytes": 2796344,
+      "sha256": "f39e866b603cf576ef91be1ed90e35fa5b6b6b0611178795e67f062f7928609b"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Factory/10F191DD.dds",
+      "bytes": 2796344,
+      "sha256": "75e7dbf1a5bd79e853c644433e23388ae7072db3e4f2b7a4d196e82a8f2e63e7"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Factory/1C0AB490.dds",
+      "bytes": 11184972,
+      "sha256": "ba98e3242ebc03039da4873cd75f59c28b7aa2149a26ad015249bb520ee0d0d2"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Factory/1E97521B.dds",
+      "bytes": 11184972,
+      "sha256": "58d0fea47a65680388b5a49c131c283102fa292390df21b57c4b3aed89e45f97"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Factory/4A783401.dds",
+      "bytes": 2796344,
+      "sha256": "8472a6d8d862fe2aafe0fcd462d1adf4269a5bc3381860c83f16d4465ba672c4"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Factory/85F3DCAF.dds",
+      "bytes": 2796344,
+      "sha256": "de275aa5e4f772d2727567508cb0726fc611fc651a5828c55d5132e1aaf7b64e"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Factory/9071D355.dds",
+      "bytes": 11184972,
+      "sha256": "71e03bde826647b44b46a88c914375bda1879900abbdea9ae534455ca4a70dfc"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Factory/937E19F2old.dds",
+      "bytes": 11184972,
+      "sha256": "5383be9b306ae151698e7508700416217470d2141862d59b57884e5a9a26c956"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Factory/99C3D6D2.dds",
+      "bytes": 22369796,
+      "sha256": "e548d33dad93707c7e2f2e2043fbba19e744e01264fb4b3b0bf3ad82aa5a9f0d"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Factory/B3558527.dds",
+      "bytes": 2796344,
+      "sha256": "72cf51eeb8d0990c79a62d7260dae3de803f6c93997068a6e524af820635cc13"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Factory/BDA80ADF.dds",
+      "bytes": 2796344,
+      "sha256": "75e7dbf1a5bd79e853c644433e23388ae7072db3e4f2b7a4d196e82a8f2e63e7"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Factory/BF24E15A.dds",
+      "bytes": 11184972,
+      "sha256": "dffa1bb4ccdff5684318bbf57c7204f201c52e745daa4b5fd7814fc680da0744"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Factory/C0C415D0.dds",
+      "bytes": 2796344,
+      "sha256": "d84539d81a06d37105c7a13fc238708ae1652a835b227d061a9e2f3417b2e8b4"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Factory/CD622D03.dds",
+      "bytes": 2796344,
+      "sha256": "d84539d81a06d37105c7a13fc238708ae1652a835b227d061a9e2f3417b2e8b4"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Forest Kingdom/00A38D53.dds",
+      "bytes": 5592580,
+      "sha256": "cad3a7085aaf25f7434a2ebb1860fed64f5b3cfdcffec587bc3e53b8958def16"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Forest Kingdom/12CE7FE5.dds",
+      "bytes": 5592580,
+      "sha256": "c42e4508b1ac093cfe8437a4d1fa44a3d4d519683bca943af2a56376bcbd8ecf"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Forest Kingdom/1C805C2D.dds",
+      "bytes": 5592580,
+      "sha256": "cf410296678b5e113272cd92e44cc914ad9412910e3894558049d88caf57394c"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Forest Kingdom/41E6D563.dds",
+      "bytes": 5592580,
+      "sha256": "e6b03577aa6533e74f996416c4fbf3a65bc5e7377d7ddc5cc92b9532f818b52a"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Forest Kingdom/46AAA66B.dds",
+      "bytes": 699212,
+      "sha256": "73b1f8593060aadfda63fce277736210a53010b6bcbae00c710a39400ffb4fd6"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Forest Kingdom/77352BAF.dds",
+      "bytes": 2796344,
+      "sha256": "4de0333dda4f6ebea345347ebce65bc260b900d480b7288b01f186603af7508a"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Forest Kingdom/C93F8DEB.dds",
+      "bytes": 1398276,
+      "sha256": "7bbc4fd499f02751acc7df4c675fcd3655914fabebcaa7f2469a7dde5feb8fce"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Forest Kingdom/D32E6CB5.dds",
+      "bytes": 699192,
+      "sha256": "c343a93076bfefe39e0cd275c95a9536d2d7271c3db630f6b9b4f2575d9b97ff"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Forest Kingdom/E018225A.dds",
+      "bytes": 5592580,
+      "sha256": "cf410296678b5e113272cd92e44cc914ad9412910e3894558049d88caf57394c"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Forest Kingdom/FA3FC2BF.dds",
+      "bytes": 2796344,
+      "sha256": "85608ae4fcd82f2b497e571fb110a0b14ac83e33cb1b2e33467c5bdc6b4d9535"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Pascal's Village/08565B4A.dds",
+      "bytes": 2796344,
+      "sha256": "06fab9839762d6526acf4a436e911cf9966b0517f5b8b78ce808a8426d12c47a"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Pascal's Village/150956DC.dds",
+      "bytes": 5592580,
+      "sha256": "c44e4074e2427e031fd8929180a35a35335c67391d5edd2d3a45c2aadc175ebb"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Pascal's Village/2E4CB26E .dds",
+      "bytes": 11184972,
+      "sha256": "842b4bb4372e9492b8ba6e573c71f2cf65cc67eba7b286b80829b7feeddb471a"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Pascal's Village/722D7164.dds",
+      "bytes": 2796344,
+      "sha256": "f207be6b53cf72228fe91d99c72a43c81da2e379ac7351c1034f246b6756903a"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Pascal's Village/722D71642.dds",
+      "bytes": 11184952,
+      "sha256": "6ee48cb958217b54bf01cacf1f6d7ba5273b1b3124ce3d5d4f33516acc91b2c5"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Pascal's Village/A0011F2A.dds",
+      "bytes": 2796344,
+      "sha256": "bbb04dc74da82070fbaf7c332503bdb7bb0c2bb8c46475c472bebad88c02373e"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Pascal's Village/A16691D6.dds",
+      "bytes": 2796344,
+      "sha256": "584b61fab4b149fc65ab27a9ab33873ee74643ca8ac0dd7846dced21ee2ddeac"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Pascal's Village/D0F6E88F.dds",
+      "bytes": 11184972,
+      "sha256": "82caf4a4cf590aa9aad9f772514a17fe1c13555bcfe006cffee85565d8a3e2d1"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/08B3146D.dds",
+      "bytes": 699212,
+      "sha256": "aa533681ccc6d70398452d52b79f100868f87f58081b5bd9b04c7e70f1b76690"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/0EA60D2F.dds",
+      "bytes": 2796364,
+      "sha256": "b8ce13266a168edf35410bc259d584cc255390bfe3754e68b3673b277ee98263"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/112270D8.dds",
+      "bytes": 2796344,
+      "sha256": "8a8c4e1d37d7e9c1a8fed63fe9c104bd53e6495e09bf19257416d041ad98aad2"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/11EA0C7D.dds",
+      "bytes": 699192,
+      "sha256": "e0fa0fdb6278fa5fbc724d0302655c68349b1b79c9a4a94a6c6b80b8171dc2e6"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/12B72558.dds",
+      "bytes": 699212,
+      "sha256": "46e9ba245b653b1ed2dd8970a0fab7efd89beefc2c6f504e5c5d3a0875c8bb9d"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/17AAD497.dds",
+      "bytes": 174904,
+      "sha256": "02869291518c248fe0b8abbe0d8f9bf4c3d96ce2a7135353fc0231a5fa440d58"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/1CA98BDC.dds",
+      "bytes": 2796364,
+      "sha256": "7fc2b617918be6efe93f29d556a712470baa39ad128cad0933eb3b6591e283ec"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/1E6E6BC9.dds",
+      "bytes": 2796344,
+      "sha256": "41a19c04859ce38fc3eb1d9371276f89abe5fc15c9776363203c98705ad59fd9"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/212EFE02.dds",
+      "bytes": 174904,
+      "sha256": "fee5f6b5c27a46debd197884450f9b3737fc54fa4dbdd7e7dfee917c0157b38d"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/298E73E9.dds",
+      "bytes": 699212,
+      "sha256": "834884044150fd8fee5a40bd1f9a2979511a268cd5ccb9d46bc40076c695a0f5"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/30B2179B.dds",
+      "bytes": 699212,
+      "sha256": "7fd7141919f94a66bb0502c2b08183a447d623d6cbea159be7cffd9fdce49a53"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/38119290.dds",
+      "bytes": 699192,
+      "sha256": "7a1b7a10ac67129a3dca3a80a602d379c06face538694886c54e311bde2cfd8f"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/381527F4.dds",
+      "bytes": 2796344,
+      "sha256": "f5523f61210eea589ab3119ed77231714037b9442e54e84c55936dfca9edd78e"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/39DA7CC2.dds",
+      "bytes": 699212,
+      "sha256": "86cb0c5c5aad815dd1012a81bbb9e45e7f7e27d50f5ade2d0f7fbb3a6c44bcff"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/3B282B90.dds",
+      "bytes": 174904,
+      "sha256": "3b1f2ed6662ce943e837534b3f09f1345b5ac59200c1a276ee9c0dd71422f7fd"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/3B414EE4.dds",
+      "bytes": 699212,
+      "sha256": "cd94b4f5ce50dce35daf1a3ebe54e01442245c5c61effd2b1555f115b0e5aa6f"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/3EAE10EF.dds",
+      "bytes": 699192,
+      "sha256": "32c295fae41e3bebd94c02ca416653f6b1b5a35019ad43e65c91f920e7ffce29"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/3F218E09.dds",
+      "bytes": 699192,
+      "sha256": "9acc747b69ebae32c4dcdc1300ac66fdfe9c5e13f3c0425f73ef78f53b9f380b"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/4008D2D6.dds",
+      "bytes": 349700,
+      "sha256": "7f909763e0ea74889f0c1592cfa02e0de8f12d772ccdabf9edb7581d95fe1486"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/463EE86A.dds",
+      "bytes": 699212,
+      "sha256": "3a9618f6400817ac68435dab302c80d39e29b341aaeb75b50f29f01ae52e6796"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/47D1DD97.dds",
+      "bytes": 699192,
+      "sha256": "14d923e870a84e08de4df297d556c7998a17e429fa38b325530a59eb267040ab"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/4F7275A0.dds",
+      "bytes": 699192,
+      "sha256": "41257883d1b63dffd790a95b7de6e22e96ca17e1630cbcbee6dbc160ee5090aa"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/508CC17D.dds",
+      "bytes": 699192,
+      "sha256": "adaaeeac6704e9927a781402adeb8dc7f1fa50f5ae9dbacd01eed9b3d1de6f49"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/53FD0DFF.dds",
+      "bytes": 699212,
+      "sha256": "b3d817c8568e9ce85efc8ffdbe1206f50656cc2e9257c36b2ab330ad4a0a37b7"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/5F612DC1.dds",
+      "bytes": 2796364,
+      "sha256": "7fc2b617918be6efe93f29d556a712470baa39ad128cad0933eb3b6591e283ec"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/6974C8ED.dds",
+      "bytes": 2796344,
+      "sha256": "4a1e1151b1901c75f37741f6c037ef17be2464eb1be6928e710ec7c855b4f196"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/6AD0F02C.dds",
+      "bytes": 2796364,
+      "sha256": "41d0ae01c13b0b88829d434df26f63738bc50b9e1751e036397f05247c0ec7a1"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/7B622FB3.dds",
+      "bytes": 174904,
+      "sha256": "d641d7558b11b57a3cb8ad4696382bea1dd0c0f680617988926d35eaaa2a3f13"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/7D547B24.dds",
+      "bytes": 2796364,
+      "sha256": "e1a5a1cf5cbf5a461b54208804816e5f78c9b1bce567995d6a6a8e7d613118dd"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/83FBC96B.dds",
+      "bytes": 699192,
+      "sha256": "23d87ccc0155714aa44411b0f9aca611da20a0bc01011ddae0cc79a9d6bd4ddc"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/857CD791.dds",
+      "bytes": 2796364,
+      "sha256": "7a9f6fc7f789176e6dd7565c56b4b99d9881708c224b5036ea9c784392baca2c"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/893C4065.dds",
+      "bytes": 174924,
+      "sha256": "d168ef057e81244115e23ec0830648620436b8d08c5addbc8d00e15414ca6409"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/8BC8C3E6.dds",
+      "bytes": 699212,
+      "sha256": "8b4bfd84e237578faf18471b361f6086df8547e98af441b4ef5bda73ba0bb552"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/8EAAAD2F.dds",
+      "bytes": 699192,
+      "sha256": "530803b29cb3ac82049441bf30354f2bc0c33eddb39095cab35cc977af2961e1"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/988D54BA.dds",
+      "bytes": 2796344,
+      "sha256": "a59db01d91d127445e0ea40f1d7fead2775bb7bf35df7d98ba193e6ab64feb0d"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/98F6BD46.dds",
+      "bytes": 699192,
+      "sha256": "1d1763c7606fb96be5d5f4f44ad6304e08d47a6ec208fa48bdc65eac97eef407"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/9BD236DF.dds",
+      "bytes": 699192,
+      "sha256": "6b142dfb98252f053ec8ecbbb5e02f63f17ccdfcc0f4b6ccf67ab2530fc4e977"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/A3A6E1E5.dds",
+      "bytes": 5592580,
+      "sha256": "c80c4c61fc9dddcd5e3843b8f00137428be0542f0278ed8f5b8472de22be2aef"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/A7074D5F.dds",
+      "bytes": 174904,
+      "sha256": "db032402bb6390e65c2a106265fc7458b5adef66d831e1eab1ae4b163755617b"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/A987CABD.dds",
+      "bytes": 2796344,
+      "sha256": "a6b2decea02494b543848e5bf9ea03ca37b73ee32f08b59e51e0a096f44e3f2b"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/B0375126.dds",
+      "bytes": 699192,
+      "sha256": "e35daf58dcbae0606135559dddea82e57afeb77c2bd464efab50a27e70a7a3eb"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/BC7DF923.dds",
+      "bytes": 699212,
+      "sha256": "86cb0c5c5aad815dd1012a81bbb9e45e7f7e27d50f5ade2d0f7fbb3a6c44bcff"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/C3E2D0E9.dds",
+      "bytes": 699212,
+      "sha256": "71cd1292e50bd7f9391149e81437a4d4aef8824b2e1c0371fda573586fc0bd24"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/C7044548.dds",
+      "bytes": 2796364,
+      "sha256": "c539c37aa65329bea042a46b56d894bd77c12cfc315c72914693c7821767d2fc"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/CF244488.dds",
+      "bytes": 2796344,
+      "sha256": "702a8a04ddcce48393146b08cd11b93e28b09ea30c37347187ff2b720bd9e337"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/D22BED9D.dds",
+      "bytes": 2796344,
+      "sha256": "a54deae0bcddb48f3a4558d6ad0a4b997d2ffe0654d63ad61cc86f625d37e1e0"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/D605BEB9.dds",
+      "bytes": 699212,
+      "sha256": "8b4bfd84e237578faf18471b361f6086df8547e98af441b4ef5bda73ba0bb552"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/D6EECA81.dds",
+      "bytes": 5592580,
+      "sha256": "c80c4c61fc9dddcd5e3843b8f00137428be0542f0278ed8f5b8472de22be2aef"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/D7F767CC.dds",
+      "bytes": 699192,
+      "sha256": "fc17d79f6b1e9f205618daed6b81f37c46f3ea95b527b26289964fd3c5981853"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/D887B973.dds",
+      "bytes": 699212,
+      "sha256": "278459eca5e0cbb8edd8c9e49285e263fb4dff4d0152faa5bd95f747b98fc926"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/E6771CA1.dds",
+      "bytes": 2796344,
+      "sha256": "c4c78b36d4fc06ef16724292adeaef1aef91bd94c353d9b706cb4b7a6ee03ea2"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/E839BBB2.dds",
+      "bytes": 174904,
+      "sha256": "e97103724f3af19ca4bff7d5ca22e55d50512ae9e6b6e5bf24ddd9bc4e4f3ee6"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/E92B8F05.dds",
+      "bytes": 2796364,
+      "sha256": "a881426ce17f4e96f4a7680b0590e53cb427a6fe61e02df060b628a03d23b1b6"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/EB0DA8B9.dds",
+      "bytes": 699192,
+      "sha256": "1d1763c7606fb96be5d5f4f44ad6304e08d47a6ec208fa48bdc65eac97eef407"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/EC781C52.dds",
+      "bytes": 699212,
+      "sha256": "7fd7141919f94a66bb0502c2b08183a447d623d6cbea159be7cffd9fdce49a53"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/F5B14D53.dds",
+      "bytes": 1398276,
+      "sha256": "6dc4d7d98d6547d4dd484e6cc07051046162c953d40b3b483c686bbba9a44833"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/FBC4870E.dds",
+      "bytes": 699212,
+      "sha256": "4d8eff0d254966cdc31b10560bef6fa775ddf889c3c51d055639b40020cdce38"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Prologue/FED6F9FB.dds",
+      "bytes": 699192,
+      "sha256": "9acc747b69ebae32c4dcdc1300ac66fdfe9c5e13f3c0425f73ef78f53b9f380b"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Resistance Camp/08E90E3C.dds",
+      "bytes": 2796364,
+      "sha256": "916cb36361929472959683067c1a1921b862eab6ab235c285a33a599d97121dd"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Resistance Camp/1E6497F7.dds",
+      "bytes": 2796344,
+      "sha256": "1d4ef0e9d40abcd1657403a6d92373d255d82cfbd3238f258e075bcf2e4bda45"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Resistance Camp/35401DC3.dds",
+      "bytes": 2796364,
+      "sha256": "7dc52875d364a7dba1b51aa63f15694e55c552a89e325f2a8251d5d4da625268"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Resistance Camp/3EF15040.dds",
+      "bytes": 2796344,
+      "sha256": "05ed7ee856724bfd29d173250c1c54116363fa70a21e3a76de8035f74ac02d19"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Resistance Camp/45FFBBF8.dds",
+      "bytes": 699192,
+      "sha256": "a2e952418c9884646dcb96d2d408987c5b1060e49dce65c3976912ce7bef4a58"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Resistance Camp/57BA1CEC.dds",
+      "bytes": 5592580,
+      "sha256": "33997e10077f3797c831fea4c4e3d0f47d371af69443d5c2775326fed7ac9cd2"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Resistance Camp/57E82875.dds",
+      "bytes": 699192,
+      "sha256": "f0ea2f229ad9691a39f739dcfa7c7a5636b2db439d8c7f40dd3396949c00c2fe"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Resistance Camp/71831E61.dds",
+      "bytes": 2796364,
+      "sha256": "bb2a22e14f02899484d57b02e4a44e508eb46f3e0f43b367df9153f59d05c54b"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Resistance Camp/810AEE53.dds",
+      "bytes": 11184952,
+      "sha256": "9a8c53e9300c07183953643a876fbe08d667ca038b7240b0e06fec37be35374f"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Resistance Camp/8D1953E1.dds",
+      "bytes": 2796344,
+      "sha256": "1d4ef0e9d40abcd1657403a6d92373d255d82cfbd3238f258e075bcf2e4bda45"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Resistance Camp/96EF6248.dds",
+      "bytes": 5592580,
+      "sha256": "c3a7eb317e67de77832e3dfb2207511f6ea7065aa39f616edc9e8f0076afc5e5"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Resistance Camp/99BACF5E.dds",
+      "bytes": 699212,
+      "sha256": "1980d2f6f4d36147d0fc36b40db755712737355e8389bc67744461bfc73c11ae"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Resistance Camp/AA809B3E.dds",
+      "bytes": 699212,
+      "sha256": "35dac36bac1f191ddcc9edc3c26c12cb88d15ff3a94783ed8274a89faa8d9c87"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Resistance Camp/C43CE4CF.dds",
+      "bytes": 2796364,
+      "sha256": "3c2e89c6dc66612d395354d771a9306594cd942468059ba8851fa8eb0d5c0542"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Resistance Camp/DD950912.dds",
+      "bytes": 699192,
+      "sha256": "be320ae53f0db7d3ca422943cbdeac7f10330823da80ebcb4f4ed076d4e38b3f"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Resistance Camp/EADF0C77.dds",
+      "bytes": 2796344,
+      "sha256": "a379730d2b287ef223b5c833668b7deb29cfac171e8da8b67041f84c4e21e952"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Resistance Camp/ED3A7007.dds",
+      "bytes": 2796364,
+      "sha256": "118c61747408366ca400d25ddf3726d253bb0d72df6ff6bacd557aab3375eef9"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/The Tower/DA05ABD5.dds",
+      "bytes": 699192,
+      "sha256": "42b7ae285ec303b2e84109dd092993701de6939b9fcf7ff88612a362c04b0f29"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/The Tower/DCB594F2.dds",
+      "bytes": 699192,
+      "sha256": "95d38b66aa15fedadcee65a13aa285e3bf23acda708a28ab05435f3ad9de83c8"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/The Tower/E7B4C072.dds",
+      "bytes": 699192,
+      "sha256": "532b523102076a3b03e92a478f78ab08ab6ea1375c6666f5796c5745a2e01803"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/The Tower/EE59FC5D.dds",
+      "bytes": 699192,
+      "sha256": "3184d1e8d2e53afcce486dc732ea7f7379e04033ee0cc1a62216c66c2f13e1ea"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Environment/Yorha/013F2718.dds",
+      "bytes": 5592552,
+      "sha256": "90e4de6490388b59fec4a51db1c3c54f6975ea6ea819bdb773a70fe86ffee884"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Fonts & UI (by Triforceguard)/09981414.dds",
+      "bytes": 8388736,
+      "sha256": "726ba28f1e38384439ed90cecbbdf8eb779644f686b311f9094ba4bbb260de7a"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Fonts & UI (by Triforceguard)/1BF5923C.dds",
+      "bytes": 4194432,
+      "sha256": "9f20ff7a7283eb47d60685213fcdeac65e92b01b383a95467a78641e482a78d8"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Fonts & UI (by Triforceguard)/34E522A1.dds",
+      "bytes": 16777344,
+      "sha256": "0e78b67e363898ec063de35f4b337f54797aaa2c5efe330940c63303b4702008"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Fonts & UI (by Triforceguard)/65543F8E.dds",
+      "bytes": 8388736,
+      "sha256": "f122d4bdc4ea9c3fe1bcc6130e6eb192c67bed7129b0331eba2304cfa922b067"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Fonts & UI (by Triforceguard)/8A5B3A34.dds",
+      "bytes": 4194432,
+      "sha256": "bf840b1c8639351f2b8b40af0a2b8aa412d8dc7b1a3d6cd7ac8eb48b6415459e"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Fonts & UI (by Triforceguard)/8F9E18BC.dds",
+      "bytes": 16777344,
+      "sha256": "48df33e69b61cc5763a228fe3199700c3efaab173ce307b89aa1f50490c96e47"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Fonts & UI (by Triforceguard)/9F75E994.dds",
+      "bytes": 4194432,
+      "sha256": "436487ad5acee30f342bbdd6f9d57c4863a54e2c46221706b048aed19f6f68b9"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Fonts & UI (by Triforceguard)/AD2C13F8.dds",
+      "bytes": 16777344,
+      "sha256": "a746001dccd6a59580a0ddbb090d64ee7d66df740310aaf625e3823259edd4d0"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Fonts & UI (by Triforceguard)/B519C57C.dds",
+      "bytes": 16777344,
+      "sha256": "b0ca2a5ebbb61bc2af5067911460484bf37f0e72746a1348285fb4d133650b67"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Fonts & UI (by Triforceguard)/BE2AEA0B.dds",
+      "bytes": 16777344,
+      "sha256": "50d4fbd3a825eb36c21a4ec64efb3ba2d93c4a19f23a15b2f857b83b43824eab"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Fonts & UI (by Triforceguard)/C622DFD7.dds",
+      "bytes": 8388736,
+      "sha256": "19fa080f179790c53573fc403846c25c9d1d92e1f3657fd8afe63081b9b53447"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Fonts & UI (by Triforceguard)/E554E6E9.dds",
+      "bytes": 33554560,
+      "sha256": "a74b0bdfc7e33f649428e291fcd8f6751c09cd38226e60d4cad103353859298a"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Fonts & UI (by Triforceguard)/F06C848F.dds",
+      "bytes": 16777344,
+      "sha256": "9e515b9bb1ebbb0d243d5523365981b34ede3c7e0490177295f9f83ae9485694"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Machines/04B54A16.dds",
+      "bytes": 699212,
+      "sha256": "29bdf8033868a46616b59f7e0642d5d3892a3592c378f2a70ed514819637eeec"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Machines/057276EB.dds",
+      "bytes": 2796344,
+      "sha256": "c57676b5e5ee3093d56805c2329660613ef070c5445a83408ee6f38f0e33e78d"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Machines/64D9FAFA.dds",
+      "bytes": 11184972,
+      "sha256": "dd25b6f5349db9e155f4db310765a051bed8599642b935da7dcf8cf53f090933"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Machines/6CF144F7.dds",
+      "bytes": 2796344,
+      "sha256": "c57676b5e5ee3093d56805c2329660613ef070c5445a83408ee6f38f0e33e78d"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Machines/6E627A63.dds",
+      "bytes": 2796344,
+      "sha256": "47c555f46db37bb4d4592f3be90f0cdbc378ec926fd33a75bb4098f7f3ac2cdb"
+    },
+    {
+      "relative_path": "SK_Res/inject/textures/NieRAutomata.exe/GPUnity's Texture Pack V1.03 - Lite/Machines/C2DC556C.dds",
+      "bytes": 699212,
+      "sha256": "9fd367544ccff5aaad74b7a81b907f3187d4a0faa3ff1cedaf350b57d9689557"
+    }
+  ]
+}

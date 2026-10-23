@@ -1,0 +1,30 @@
+NIER_FSR4 log, 2026-10-19
+22:42:13.643 NIER_FSR4 32667ad-local-check loaded from S:\steamapps\common\NieRAutomata\NIER_FSR4.dll (FSR SDK 2.3.0 / FSR 4.1.1 API)
+22:42:13.643 process S:\steamapps\common\NieRAutomata\NieRAutomata.exe, Windows 10.0 build 19045
+22:42:13.645 config: Version=4.1.1 Sharpening=0 Sharpness=0.00 JitterSign=+1/+1 MVScale=1.000/1.000 DepthInverted=-1 DepthInfinite=0 AutoExposure=-1 HDR=-1 DebugView=0 ReadFromMod=1 Near=0.0000 Far=0.0 Fov=0.0
+22:42:13.645 NVSDK_NGX_D3D11_Init_ProjectID: project b3f1c9e4-5a7d-4e62-8c0b-2d9f4a6e1b73, sdk 0x15
+22:42:13.645 NVSDK_NGX_D3D11_Init_ProjectID: device 0000000002244bd8
+22:42:13.645 env: NGX caller module S:\steamapps\common\NieRAutomata\d3d11.dll (timestamp 0x6AC681C3, size of image 0xD1000)
+22:42:13.645 env: NIER_DLAA 1.1 recognised, NGX loader stub present (patched)
+22:42:13.645 env: loaded: C:\Program Files (x86)\Steam\gameoverlayrenderer64.dll
+22:42:13.645 env: dxgi.dll is not the system copy: S:\steamapps\common\NieRAutomata\dxgi.dll
+22:42:13.645 env: running under Wine/Proton 11.0
+22:42:13.645 mod camera data: found (NIER_DLAA 1.1)
+22:42:13.645 bridge: game adapter AMD Radeon RX 9070 XT (RADV GFX1201) (vendor 0x1002 device 0x7550), driver 35.0.65535.65535, 16304 MB dedicated VRAM
+22:42:13.847 bridge: D3D12 device ready
+22:42:13.848 CreateFeature: 3440x1440 -> 3440x1440, quality 5, DLSS flags 0x43
+22:42:13.853 FSR: provider available: 4.1.1 (id 0xF5A5CA1E01001001)
+22:42:13.853 FSR: provider available: 4.1.1 (id 0xF5A5CA1E01001001)
+22:42:13.853 FSR: provider available: 3.1.5 (id 0xF5A5CA1E00C01005)
+22:42:13.853 FSR: provider available: 2.3.4 (id 0xF5A5CA1E00803004)
+22:42:13.856 FSR: context created, render 3440x1440 -> 3440x1440, flags 0x21 (DLSS flags 0x43), provider 4.1.1
+22:42:13.857 bridge: the shared colour texture needed the fallback flags 0x21 on this driver
+22:42:13.857 bridge: shared colour texture 3440x1440, game format 26, shared format 26, flags 0x21
+22:42:13.857 bridge: the shared depth texture needed the fallback flags 0x21 on this driver
+22:42:13.857 bridge: shared depth texture 3440x1440, game format 41, shared format 41, flags 0x21
+22:42:13.857 bridge: the shared motion vector texture needed the fallback flags 0x21 on this driver
+22:42:13.857 bridge: shared motion vector texture 3440x1440, game format 34, shared format 34, flags 0x21
+22:42:13.858 bridge: the shared output texture needed the fallback flags 0x25 on this driver
+22:42:13.858 bridge: shared output texture 3440x1440, game format 26, shared format 26, flags 0x25
+22:42:13.860 evaluate: frame 0, render 3440x1440 -> 3440x1440, jitter 0.250 -0.389, mv scale 1.00 1.00, reset 1, near 0.1000 far 10000.0 fov 48.5 deg, dt 16.60 ms
+22:43:13.836 evaluate: frame 3600, render 3440x1440 -> 3440x1440, jitter 0.375 0.056, mv scale 1.00 1.00, reset 0, near 0.1000 far 10000.0 fov 50.0 deg, dt 17.18 ms

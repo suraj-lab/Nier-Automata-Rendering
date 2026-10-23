@@ -1,0 +1,52 @@
+20:16:06.794  NIER_DLAA proxy attached
+20:16:06.795  config: ObjectMotion=1 HideMotionBlur=1
+20:16:06.795  config: Enabled=1 Debug=0 DumpFrameKey=0x79 DumpFrameAt=0 DumpShaders=0 Jitter=0 JitterDebugScale=1.00
+20:16:06.795  config: DLSS=1 Preset=0 JitterSign=+1 ToggleKey=0x24 MipBias=-0.50 MipBiasKey=0x23 DebugView=0
+20:16:06.801  warning: real d3d11 has no export D3D11CreateDeviceForD3D12
+20:16:06.801  warning: real d3d11 has no export D3DKMTCloseAdapter
+20:16:06.801  warning: real d3d11 has no export D3DKMTDestroyAllocation
+20:16:06.801  warning: real d3d11 has no export D3DKMTDestroyContext
+20:16:06.801  warning: real d3d11 has no export D3DKMTDestroyDevice
+20:16:06.801  warning: real d3d11 has no export D3DKMTDestroySynchronizationObject
+20:16:06.801  warning: real d3d11 has no export D3DKMTPresent
+20:16:06.801  warning: real d3d11 has no export D3DKMTQueryAdapterInfo
+20:16:06.801  warning: real d3d11 has no export D3DKMTSetDisplayPrivateDriverFormat
+20:16:06.801  warning: real d3d11 has no export D3DKMTSignalSynchronizationObject
+20:16:06.801  warning: real d3d11 has no export D3DKMTUnlock
+20:16:06.801  warning: real d3d11 has no export D3DKMTWaitForSynchronizationObject
+20:16:06.801  warning: real d3d11 has no export EnableFeatureLevelUpgrade
+20:16:06.801  warning: real d3d11 has no export OpenAdapter10
+20:16:06.801  warning: real d3d11 has no export OpenAdapter10_2
+20:16:06.801  warning: real d3d11 has no export CreateDirect3D11DeviceFromDXGIDevice
+20:16:06.801  warning: real d3d11 has no export CreateDirect3D11SurfaceFromDXGISurface
+20:16:06.801  warning: real d3d11 has no export D3D11CoreCreateLayeredDevice
+20:16:06.801  warning: real d3d11 has no export D3D11CoreGetLayeredDeviceSize
+20:16:06.801  warning: real d3d11 has no export D3D11CoreRegisterLayers
+20:16:06.801  warning: real d3d11 has no export D3DKMTCreateAllocation
+20:16:06.801  warning: real d3d11 has no export D3DKMTCreateContext
+20:16:06.801  warning: real d3d11 has no export D3DKMTCreateDevice
+20:16:06.801  warning: real d3d11 has no export D3DKMTCreateSynchronizationObject
+20:16:06.801  warning: real d3d11 has no export D3DKMTEscape
+20:16:06.801  warning: real d3d11 has no export D3DKMTGetContextSchedulingPriority
+20:16:06.801  warning: real d3d11 has no export D3DKMTGetDeviceState
+20:16:06.801  warning: real d3d11 has no export D3DKMTGetDisplayModeList
+20:16:06.801  warning: real d3d11 has no export D3DKMTGetMultisampleMethodList
+20:16:06.801  warning: real d3d11 has no export D3DKMTGetRuntimeData
+20:16:06.801  warning: real d3d11 has no export D3DKMTGetSharedPrimaryHandle
+20:16:06.801  warning: real d3d11 has no export D3DKMTLock
+20:16:06.801  warning: real d3d11 has no export D3DKMTOpenAdapterFromHdc
+20:16:06.801  warning: real d3d11 has no export D3DKMTOpenResource
+20:16:06.801  warning: real d3d11 has no export D3DKMTQueryAllocationResidency
+20:16:06.801  warning: real d3d11 has no export D3DKMTQueryResourceInfo
+20:16:06.801  warning: real d3d11 has no export D3DKMTRender
+20:16:06.801  warning: real d3d11 has no export D3DKMTSetAllocationPriority
+20:16:06.801  warning: real d3d11 has no export D3DKMTSetContextSchedulingPriority
+20:16:06.801  warning: real d3d11 has no export D3DKMTSetDisplayMode
+20:16:06.801  warning: real d3d11 has no export D3DKMTSetGammaRamp
+20:16:06.801  warning: real d3d11 has no export D3DKMTSetVidPnSourceOwner
+20:16:06.801  warning: real d3d11 has no export D3DKMTWaitForVerticalBlankEvent
+20:16:06.801  warning: real d3d11 has no export D3DPerformance_BeginEvent
+20:16:06.801  warning: real d3d11 has no export D3DPerformance_EndEvent
+20:16:06.801  warning: real d3d11 has no export D3DPerformance_GetStatus
+20:16:06.801  warning: real d3d11 has no export D3DPerformance_SetMarker
+20:16:06.801  loaded real d3d11: C:\windows\system32\d3d11.dll

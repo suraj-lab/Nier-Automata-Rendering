@@ -1,0 +1,112 @@
+﻿10/18/2026 21:48:02.801: dxgi.log created		(Special K  26.10.10,  Oct 10 2026)
+-------------------------------------------------------------------------------------------
+10/18/2026 21:48:02.801: >> (NieRAutomata.exe) [dxgi.dll] <<
+10/18/2026 21:48:02.801: Loading user preferences from dxgi.ini... done! ( 81.96 ms)
+-------------------------------------------------------------------------------------------
+10/18/2026 21:48:02.883:  Working Directory:          S:\steamapps\common\NieRAutomata
+10/18/2026 21:48:02.883:  System Directory:           C:\windows\system32
+10/18/2026 21:48:02.883:  Loading default dxgi.dll:  (C:\windows\system32\dxgi.dll)
+-------------------------------------------------------------------------------------------
+10/18/2026 21:48:02.969: [  Input   ] Game uses WinMM, installing input hooks...
+10/18/2026 21:48:02.969: [  Input   ] Game uses HID, installing input hooks...
+10/18/2026 21:48:02.969: [  Input   ] Game uses DirectInput 8, installing input hooks...
+10/18/2026 21:48:02.971: [ Min Hook ] Failed to Install Hook for 'NvAPI_Disp_ColorControl' [Address: 0000000000000000h]!  (Status: "MH_ERROR_NOT_EXECUTABLE")
+10/18/2026 21:48:02.972: [   DXGI   ]  # DXGI QuickHook disabled because a local dxgi.dll or d3d11.dll is present...
+10/18/2026 21:48:03.267: [ Min Hook ] Failed to Install Hook for 'sub_84D070' [Address: 00006FFFFC73D070h]!  (Status: "MH_ERROR_UNSUPPORTED_FUNCTION")
+10/18/2026 21:48:03.270: [ SpecialK ] Critical Assertion Failure: 'L"File Has No Version Info?!" && bRet != FALSE' (src\utility.cpp:2090) -- bool __cdecl SK_Assert_SameDLLVersion(const wchar_t *,const wchar_t *)
+10/18/2026 21:48:03.272: [Key Layout]  -( Keyboard Class:  QWERTY  *  [ W=11, Q=10, Y=15 ] )-
+10/18/2026 21:48:03.272: [API Detect]  <!> [    Bootstrapping DXGI (dxgi.dll)    ] <!>	(Initialization tid=16c)
+10/18/2026 21:48:03.272: [   DXGI   ] Importing CreateDXGIFactory{1|2}
+10/18/2026 21:48:03.272: [   DXGI   ] ================================
+10/18/2026 21:48:03.272: [ DXGI 1.0 ]   CreateDXGIFactory:      ( C:\windows\system32\dxgi.dll ) +  19180h
+10/18/2026 21:48:03.272: [ DXGI 1.1 ]   CreateDXGIFactory1:     ( C:\windows\system32\dxgi.dll ) +  19190h
+10/18/2026 21:48:03.272: [ DXGI 1.3 ]   CreateDXGIFactory2:     ( C:\windows\system32\dxgi.dll ) +  191a0h
+10/18/2026 21:48:03.272: [ DXGI 1.3 ]   DXGIGetDebugInterface1: ( C:\windows\system32\dxgi.dll ) +  192c0h
+10/18/2026 21:48:03.772: [DX11TexMgr] Enumerating injectable <S:\steamapps\common\NieRAutomata\SK_Res\inject\textures>... 292 files (970.5 MiB)
+10/18/2026 21:48:03.798: [  D3D 11  ] Importing D3D11CreateDevice[AndSwapChain]
+10/18/2026 21:48:03.798: [  D3D 11  ] =========================================
+10/18/2026 21:48:03.798: [  D3D 11  ]   D3D11CreateDevice:              ( S:\steamapps\common\NieRAutomata\d3d11.dll ) +   22e0h  { Hooked }
+10/18/2026 21:48:03.798: [  D3D 11  ]   D3D11CreateDeviceAndSwapChain:  ( S:\steamapps\common\NieRAutomata\d3d11.dll ) +   23a0h  { Hooked }
+10/18/2026 21:48:03.802: [ThreadUtil] [!] > First Call:      SetThreadPriorityBoost_Detour
+10/18/2026 21:48:03.802: [DebugUtils] [!] > First Call:      ZwSetInformationThread_Detour
+10/18/2026 21:48:03.802: [ThreadUtil] [!] > First Call:       SetThreadAffinityMask_Detour
+10/18/2026 21:48:03.802: [ThreadUtil] [!] > First Call:           SetThreadPriority_Detour
+10/18/2026 21:48:03.802: [DebugUtils] [!] > First Call:            ZwCreateThreadEx_Detour
+10/18/2026 21:48:03.833: [  Timing  ] Nominal Clock Frequency (P0): 5883 MHz; RDTSC ticks per-QPC tick: 588
+10/18/2026 21:48:03.833: [ FPU Mode ]   x87 FPU Control Word: Double Extended Precision (64-bit)
+10/18/2026 21:48:03.833: [ FPU Mode ]  SSE2 FPU Control Word: Double Extended Precision (64-bit)
+10/18/2026 21:48:03.833: [  Timing  ] Kernel resolution.: 1.000000 ms
+10/18/2026 21:48:03.833: [  Timing  ] New resolution....: 1.000000 ms
+-------------------------------------------------------------------------------------------
+10/18/2026 21:48:03.835: [ SpecialK ] === Initialization Finished! ===          (1034.37 ms)
+-------------------------------------------------------------------------------------------
+10/18/2026 21:48:03.848: [Input Mgr.] [!] > First Call:                   WriteFile_Detour
+10/18/2026 21:48:03.851: [Input Mgr.] [!] > First Call:                 CreateFileW_Detour
+10/18/2026 21:48:03.851: [Input Mgr.] [!] > First Call:                    ReadFile_Detour
+10/18/2026 21:48:03.905: [DLL Loader]   ( DINPUT8.dll                  ) loaded '                                                                                     C:\windows\system32\DINPUT8.dll' <  LoadLibraryW> { '                     ' }
+10/18/2026 21:48:03.907: [ThreadUtil] [!] > First Call:        SetThreadDescription_Detour
+===========================================================================================
+10/18/2026 21:48:03.908: [  NvAPI   ] Initializing NVIDIA API           (NvAPI)...
+10/18/2026 21:48:03.908: [   DXGI   ]   Installing Deferred DXGI / D3D11 / D3D12 Hooks
+10/18/2026 21:48:03.908: [ COM Util ] [!] > First Call:            CoCreateInstance_Detour
+10/18/2026 21:48:03.916: [Window Mgr] [!] > First Call:            GetSystemMetrics_Detour
+10/18/2026 21:48:03.919: [Input Mgr.] [!] > First Call:      RoGetActivationFactory_Detour
+10/18/2026 21:48:03.919: [  Input   ] Game uses XInput, installing input hooks...
+10/18/2026 21:48:03.919: [  Input   ]   >> Hooking XInput 1.3
+10/18/2026 21:48:03.921: [Window Mgr] [!] > First Call:              DefWindowProcW_Detour
+10/18/2026 21:48:03.924: [DieAntiDbg] tid=16c () tried to hide itself from debuggers; please attach one and investigate!
+10/18/2026 21:48:03.928: [DLL Loader]   ( dxgi.dll                     ) loaded '                                                                                                      winevulkan.dll' <  LoadLibraryA> { '                     ' }
+10/18/2026 21:48:03.928: [  Input   ]   >> Hooking XInput 1.4
+10/18/2026 21:48:03.929: [DLL Loader]   ( combase.dll                  ) loaded '                                                                               C:\windows\system32\wbem\wbemprox.dll' <LoadLibraryExW> { '                     ' }
+10/18/2026 21:48:03.929: [DLL Loader]   ( dxgi.dll                     ) loaded '                                                                                                          msasn1.dll' <LoadLibraryExW> { '                     ' }
+10/18/2026 21:48:03.929: [DLL Loader]   ( combase.dll                  ) loaded '                                                                   C:\windows\system32\windows.gaming.ui.gamebar.dll' <  LoadLibraryW> { '                     ' }
+10/18/2026 21:48:03.930: [DLL Loader]   ( dxgi.dll                     ) loaded '                                                                                                       XInput1_4.dll' <  LoadLibraryW> { '                     ' }
+10/18/2026 21:48:03.930: [HookEngine] Module: XInput1_4.dll was not loaded before calling SK_CreateDLLHook2 (...); deadlock may occur...
+10/18/2026 21:48:03.930: [HookEngine] Source of Hook Request: 
+10/18/2026 21:48:03.931: [DLL Loader]   ( dxgi.dll                     ) loaded '                                                                                                        cryptnet.dll' <LoadLibraryExW> { '                     ' }
+10/18/2026 21:48:03.931: [DLL Loader]   ( dxgi.dll                     ) loaded '                                                                                                       XInput1_4.dll' <  LoadLibraryW> { '                     ' }
+10/18/2026 21:48:03.931: [DLL Loader]   ( dxgi.dll                     ) loaded '                                                                                                      wineopenxr.dll' <  LoadLibraryA> { '                     ' }
+10/18/2026 21:48:03.931: [ Min Hook ] Failed to Install Hook for 'XInputGetState' in 'XInput1_4.dll'! (Status: "MH_ERROR_NOT_EXECUTABLE")
+10/18/2026 21:48:03.932: [HookEngine] Module: XInput1_4.dll was not loaded before calling SK_CreateDLLHook2 (...); deadlock may occur...
+10/18/2026 21:48:03.932: [HookEngine] Source of Hook Request: 
+10/18/2026 21:48:03.933: [DLL Loader]   ( dxgi.dll                     ) loaded '                                                                                                            wldp.dll' <LoadLibraryExW> { '                     ' }
+10/18/2026 21:48:03.933: [DLL Loader]   ( dxgi.dll                     ) loaded '                                                                                                       XInput1_4.dll' <  LoadLibraryW> { '                     ' }
+10/18/2026 21:48:03.933: [ Min Hook ] Failed to Install Hook for 'XInputGetCapabilities' in 'XInput1_4.dll'! (Status: "MH_ERROR_NOT_EXECUTABLE")
+10/18/2026 21:48:03.933: [HookEngine] Module: XInput1_4.dll was not loaded before calling SK_CreateDLLHook2 (...); deadlock may occur...
+10/18/2026 21:48:03.933: [HookEngine] Source of Hook Request: 
+10/18/2026 21:48:03.957: [   DXGI   ] [!]                     CreateDXGIFactory1        (     IDXGIFactory1, 09bff9a8h)                          -- [ nvapi64.dll                                               , tid=0x01d0 ]
+10/18/2026 21:48:03.957: [DLL Loader]   ( dxgi.dll                     ) loaded '                                                                                                       XInput1_4.dll' <  LoadLibraryW> { '                     ' }
+10/18/2026 21:48:03.957: [ Min Hook ] Failed to Install Hook for 'XInputSetState' in 'XInput1_4.dll'! (Status: "MH_ERROR_NOT_EXECUTABLE")
+10/18/2026 21:48:03.965: [Input Mgr.] [!] > First Call:                 CreateFileA_Detour
+10/18/2026 21:48:03.984: [DLL Loader]   ( NieRAutomata.exe             ) loaded '                                                                      C:\Program Files (x86)\Steam\steamclient64.dll' <LoadLibraryExW> { '                     ' }
+10/18/2026 21:48:04.131: [DLL Loader]   ( steam_api64.dll              ) loaded '                                                              C:\Program Files (x86)\Steam\gameoverlayrenderer64.dll' <LoadLibraryExW> { '                     ' }
+10/18/2026 21:48:04.149: [Window Mgr] [!] > First Call:              DefWindowProcA_Detour
+10/18/2026 21:48:04.150: [Window Mgr] [!] > First Call:           SetWindowLongPtrA_Detour
+10/18/2026 21:48:04.151: [DLL Loader]   ( combase.dll                  ) loaded '                                                                                       C:\windows\system32\msctf.dll' <LoadLibraryExW> { '                     ' }
+10/18/2026 21:48:04.156: [Window Mgr] [!] > First Call:                SetWindowPos_Detour
+10/18/2026 21:48:04.156: [Window Mgr] [!] > First Call:                    GetFocus_Detour
+10/18/2026 21:48:04.156: [Window Mgr] [!] > First Call:           SetWindowLongPtrW_Detour
+10/18/2026 21:48:04.158: [ DInput 8 ] [!] DirectInput8Create (6ffffbef0000h, 2048, {...}, ppvOut=6ffffd662b18h, 00000000h)                             -- [ NieRAutomata.exe                                          , tid=0x016c ]
+10/18/2026 21:48:04.163: [ DInput 8 ] [!] > First Call:  IDirectInput8A_EnumDevices_Detour
+10/18/2026 21:48:04.168: [Input Mgr.] [!] > First Call:          HidD_GetAttributes_Detour
+10/18/2026 21:48:04.194: [   Input  ] [!] IDirectInput8A::CreateDevice         [  Default System Keyboard ]
+10/18/2026 21:48:04.194: [   Input  ]  Calling original function: (ret=S_OK)
+10/18/2026 21:48:04.199: [ DInput 8 ] [!] > First Call: IDirectInputDevice8A_SetCooperativeLevel_Detour
+10/18/2026 21:48:04.199: [   Input  ] [!] IDirectInput8A::CreateDevice         [     Default System Mouse ]
+10/18/2026 21:48:04.199: [   Input  ]  Calling original function: (ret=S_OK)
+10/18/2026 21:48:04.208: [DLL Loader]   ( Secur32.dll                  ) loaded '                                                                                                        schannel.dll' <  LoadLibraryW> { '                     ' }
+10/18/2026 21:48:04.210: [RenderBase] [!] > First Call:  DisplayConfigGetDeviceInfo_Detour
+10/18/2026 21:48:04.210: [   DXGI   ] [!]                     CreateDXGIFactory1        (      IDXGIFactory, 099ff848h)                          -- [ d3d11.dll                                                 , tid=0x01c8 ]
+10/18/2026 21:48:04.219: [  NvAPI   ]              NvAPI Init         { Failed  }
+10/18/2026 21:48:04.219: [DisplayLib] Initializing AMD Display Library (ADL)...
+10/18/2026 21:48:04.220: [DisplayLib]              ADL   Init         { Failed  }
+10/18/2026 21:48:04.220: [Hybrid GPU]  NvOptimusEnablement..................: 0x01 (Max Perf.)
+10/18/2026 21:48:04.220: [Hybrid GPU]  AmdPowerXpressRequestHighPerformance.: 0x01 (High Perf.)
+===========================================================================================
+10/18/2026 21:48:04.231: [   DXGI   ] [!]      IDXGIFactory7::CreateSwapChain          (01f2ac68h, 099ffc70h, 099ffba0h)                         -- [ d3d11.dll                                                 , tid=0x01c8 ]
+10/18/2026 21:48:04.231: [DXGI Util.] Ignoring SwapChain associated with Window Class: Special K Dummy Window Class
+10/18/2026 21:48:04.231: [   DXGI   ] [@]  Return: S_OK  -  < DXGIFactory_CreateSwapChain_Override >
+10/18/2026 21:48:04.231: [DXGI Util.] Ignoring SwapChain associated with Window Class: Special K Dummy Window Class
+10/18/2026 21:48:04.238: [  D3D 11  ]   Hooking D3D11
+10/18/2026 21:48:04.238: [Input Mgr.] [!] > First Call:        SetupDiGetClassDevsW_Detour
+10/18/2026 21:48:04.259: [   DXGI   ] [!]                     CreateDXGIFactory         (      IDXGIFactory, 0b9204a0h)                          -- [ NieRAutomata.exe                                          , tid=0x016c ]

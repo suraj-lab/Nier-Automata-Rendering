@@ -1,0 +1,36 @@
+{
+  "installed": [
+    {
+      "path": "/mnt/second/SteamLibrary/steamapps/common/NieRAutomata/LodMod.ini",
+      "sha256": "c1d8a48924e6d84cf22be2de20921510d4b972bcdc29f785655e7c0c3a6dc62f",
+      "bytes": 52687
+    },
+    {
+      "path": "/mnt/second/SteamLibrary/steamapps/common/NieRAutomata/dinput8.dll",
+      "sha256": "06c5e5f1b3f4675f6d09fcaa81a6b5326b74e15a3d12312678527df68922c919",
+      "bytes": 261632
+    }
+  ],
+  "backup_directory": "/home/suraj/Projects/Nier-Automata-Rendering/backups/visual-stack-20261018T210248Z",
+  "lod_settings": {
+    "LODMultiplier": 10,
+    "ShadowResolution": 4096,
+    "ShadowDistanceMinimum": 35,
+    "DisableManualCulling": true
+  },
+  "fsr4_and_f8_unchanged": true,
+  "specialk_installed": false,
+  "specialk_test_blocked": true,
+  "textures_staged_not_active": true,
+  "texture_count": 292,
+  "font_ui_count": 13,
+  "game_runtime_lod_verified": false,
+  "required_launch_options": "WINEDLLOVERRIDES=\"d3d11=n,b;dinput8=n,b\" mangohud gamemoderun %command%",
+  "next_order": [
+    "Validate LodMod in game",
+    "Resolve Special K texture injection",
+    "Implement engine-resolution upscaling",
+    "Profile baseline and assess FPS-cap safety separately",
+    "Frame generation"
+  ]
+}

@@ -1,0 +1,1 @@
+$ x86_64-w64-mingw32-g++ -std=c++17 -O2 -Wall -static -o /home/suraj/Projects/Nier-Automata-Rendering/analysis/visual-stack/compat-test/visual_stack_probe.exe /home/suraj/Projects/Nier-Automata-Rendering/analysis/checks/visual_stack_probe.cpp -ld3d11 -ldxguid -luuid

@@ -1,0 +1,10 @@
+{
+  "release": "GE-Proton11-7",
+  "architecture": "x86_64",
+  "source": "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton11-7/GE-Proton11-7-x86_64.tar.gz",
+  "bytes": 563784602,
+  "sha256": "c5448b76a230384e2d7bc6beb5ccb97bafb7e2c3b6c527cb03a1a546bbcb00a0",
+  "sha512": "7db87e9787e20c35cbdac26018431d5794626b626e4067b050684e45a88cc2ca229d7d263519eafb2e168cde5bef57611065d159d3685aaec152ccb9abe3073f",
+  "sha256_matches_release_api": true,
+  "sha512_matches_release_sidecar": true
+}

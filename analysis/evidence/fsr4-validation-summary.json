@@ -1,0 +1,24 @@
+{
+  "provider": "4.1.1",
+  "evaluations": 32,
+  "images": {
+    "native": {
+      "width": 640,
+      "height": 360,
+      "rgb_min": 0.1248779296875,
+      "rgb_max": 2.998046875
+    },
+    "upscale": {
+      "width": 640,
+      "height": 360,
+      "rgb_min": 0.12481689453125,
+      "rgb_max": 2.994140625
+    }
+  },
+  "passed": true,
+  "runner": "GE-Proton11-7",
+  "game_runtime_tested": false,
+  "nr_tested": false,
+  "frame_generation_tested": false,
+  "fsr3_fallback_negative_control_passed": true
+}

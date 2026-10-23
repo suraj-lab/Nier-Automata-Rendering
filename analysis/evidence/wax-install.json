@@ -1,0 +1,37 @@
+{
+  "backup": "/home/suraj/Projects/Nier-Automata-Rendering/backups/wax-20261018T222240Z",
+  "dxgi_dll_sha256": "f17c392569cbb3d1ab2dbdcc19f8f1d5b779c70ce25b3a6a6aa98f1299f7517d",
+  "config": {
+    "steam_stub_timeout_ms": 10000,
+    "allow_unknown_build": false,
+    "heap_overflow_allocator": false,
+    "patch_messages": false,
+    "patch_physics": false,
+    "patch_items": false,
+    "patch_object_behavior_info": false,
+    "patch_mail_table": false,
+    "patch_overrides": false,
+    "patch_inventory": false,
+    "patch_textures": true,
+    "max_injected_textures_vram_mb": 6144,
+    "patch_misc": false,
+    "auto_purge_inventory": false,
+    "force_best_entity_lod": false,
+    "uncap_fps": false,
+    "uncap_levels": false,
+    "disable_perfect_evade": false,
+    "freeze_game_speed_hotkey": null
+  },
+  "texture_dir": "/mnt/second/SteamLibrary/steamapps/common/NieRAutomata/wax/mods/!base/textures",
+  "textures_copied": 292,
+  "noncanonical_filenames": [
+    "38BFD9BA 2k.dds",
+    "937E19F2old.dds",
+    "2E4CB26E .dds",
+    "722D71642.dds"
+  ],
+  "launch_options": "WINEDLLOVERRIDES=\"d3d11=n,b;dinput8=n,b;dxgi=n,b\" mangohud gamemoderun %command%",
+  "runtime_verified": false,
+  "texture_dir_corrected": true,
+  "note": "WAX scans wax/mods/!base/textures/ (mod-based layout), not wax/textures/"
+}

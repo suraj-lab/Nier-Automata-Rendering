@@ -1,0 +1,429 @@
+======================
+Proton: 1789520217 GE-Proton11-7
+SteamGameId: 0
+Command: ['/home/suraj/Projects/Nier-Automata-Rendering/analysis/visual-stack/lod-fsr-only/visual_stack_probe.exe']
+Options: {'forcelgadd', 'gamedrive'}
+Kernel: Linux 7.2.10-1-cachyos #1 SMP PREEMPT_DYNAMIC Wed, 14 Oct 2026 07:02:02 +0000 x86_64
+Language: LC_ALL None, LC_MESSAGES None, LC_CTYPE C.UTF-8
+PATH: /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/bin/:/home/suraj/.npm-global/bin:/home/suraj/.local/share/zinit/polaris/bin:/home/suraj/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/bin:/var/lib/flatpak/exports/bin:/usr/bin/site_perl:/usr/bin/vendor_perl:/usr/bin/core_perl:/opt/rocm/bin:/usr/lib/rustup/bin:/home/suraj/.lmstudio/bin:/home/suraj/.lmstudio/bin
+System WINEDLLOVERRIDES: d3d11=n,b;dinput8=n,b;mscoree,mshtml=
+Effective WINEDLLOVERRIDES: d3d11=n,b;dinput8=n,b;mscoree,mshtml=
+System WINEDEBUG: -all
+Effective WINEDEBUG: -all
+======================
+Inherited environment
+DISPLAY: :1
+======================
+ntsync: up and running.
+WARNING: radv is not a conformant Vulkan implementation, testing use only.
+info:  Game: visual_stack_probe.exe
+info:  DXVK: v3.1-19-g601930949d111ed0
+info:  Build: x86_64 gcc 14.0.0
+info:  Vulkan: Found vkGetInstanceProcAddr in winevulkan.dll @ 0x6ffffc548a80
+info:  Extension providers:
+info:    Platform WSI
+info:    OpenVR
+info:    OpenXR
+warn:  OpenXR: Unable to get required Vulkan instance extensions size
+info:  Enabled instance extensions:
+info:    VK_KHR_get_surface_capabilities2
+info:    VK_KHR_surface
+info:    VK_KHR_surface_maintenance1
+info:    VK_KHR_win32_surface
+WARNING: radv is not a conformant Vulkan implementation, testing use only.
+WARNING: radv is not a conformant Vulkan implementation, testing use only.
+info:  Found device: AMD Radeon RX 9070 XT (RADV GFX1201) (radv 26.2.4)
+info:  Found device: Radeon RX 6800/6800 XT / 6900 XT (radv 26.2.4)
+info:  Found device: AMD Radeon(TM) Graphics (radv 26.2.4)
+warn:  OpenXR: Unable to get required Vulkan Device extensions size
+info:  Creating device:
+info:  AMD Radeon RX 9070 XT (RADV GFX1201):
+info:    Driver   : radv 26.2.4
+info:  Queues:
+info:    Graphics : (0, 0)
+info:    Transfer : (1, 0)
+info:    Sparse   : (0, 0)
+info:  Memory:
+info:    Heap 0: 30.93 GiB
+info:    Budget: 30.74 GiB
+info:      Type  2: HOST_VISIBLE | HOST_COHERENT
+info:      Type  5: HOST_VISIBLE | HOST_COHERENT | HOST_CACHED
+info:      Type  6: HOST_VISIBLE | HOST_COHERENT | HOST_CACHED
+info:    Heap 1: 15.92 GiB (DEVICE_LOCAL)
+info:    Budget: 14.0 GiB
+info:      Type  0: DEVICE_LOCAL
+info:      Type  1: DEVICE_LOCAL
+info:      Type  3: DEVICE_LOCAL | HOST_VISIBLE | HOST_COHERENT
+info:      Type  4: DEVICE_LOCAL | HOST_VISIBLE | HOST_COHERENT
+info:  Enabled extensions:
+info:    VK_EXT_attachment_feedback_loop_layout
+info:    VK_EXT_border_color_swizzle
+info:    VK_EXT_conservative_rasterization
+info:    VK_EXT_custom_border_color
+info:    VK_EXT_depth_clip_enable
+info:    VK_EXT_depth_bias_control
+info:    VK_EXT_descriptor_heap
+info:    VK_EXT_dynamic_rendering_unused_attachments
+info:    VK_EXT_extended_dynamic_state3
+info:    VK_EXT_fragment_shader_interlock
+info:    VK_EXT_graphics_pipeline_library
+info:    VK_EXT_hdr_metadata
+info:    VK_EXT_line_rasterization
+info:    VK_EXT_memory_priority
+info:    VK_EXT_multi_draw
+info:    VK_EXT_non_seamless_cube_map
+info:    VK_EXT_robustness2
+info:    VK_EXT_sample_locations
+info:    VK_EXT_shader_module_identifier
+info:    VK_EXT_shader_stencil_export
+info:    VK_EXT_transform_feedback
+info:    VK_EXT_vertex_attribute_divisor
+info:    VK_KHR_dynamic_rendering_local_read
+info:    VK_KHR_external_memory_win32
+info:    VK_KHR_external_semaphore_win32
+info:    VK_KHR_incremental_present
+info:    VK_KHR_load_store_op_none
+info:    VK_KHR_maintenance5
+info:    VK_KHR_maintenance6
+info:    VK_KHR_maintenance8
+info:    VK_KHR_maintenance9
+info:    VK_KHR_maintenance10
+info:    VK_KHR_maintenance11
+info:    VK_KHR_pipeline_library
+info:    VK_KHR_present_id
+info:    VK_KHR_present_wait
+info:    VK_KHR_shader_float_controls2
+info:    VK_KHR_shader_subgroup_uniform_control_flow
+info:    VK_KHR_shader_untyped_pointers
+info:    VK_KHR_swapchain
+info:    VK_KHR_swapchain_maintenance1
+info:    VK_KHR_swapchain_mutable_format
+info:    VK_KHR_unified_image_layouts
+info:    VK_KHR_win32_keyed_mutex
+info:  Enabled features:
+info:    depthBiasClamp                 : 1
+info:    depthBounds                    : 1
+info:    depthClamp                     : 1
+info:    drawIndirectFirstInstance      : 1
+info:    dualSrcBlend                   : 1
+info:    fillModeNonSolid               : 1
+info:    fragmentStoresAndAtomics       : 1
+info:    fullDrawIndexUint32            : 1
+info:    geometryShader                 : 1
+info:    imageCubeArray                 : 1
+info:    independentBlend               : 1
+info:    largePoints                    : 1
+info:    logicOp                        : 1
+info:    multiDrawIndirect              : 1
+info:    multiViewport                  : 1
+info:    occlusionQueryPrecise          : 1
+info:    pipelineStatisticsQuery        : 1
+info:    robustBufferAccess             : 1
+info:    sampleRateShading              : 1
+info:    samplerAnisotropy              : 1
+info:    shaderClipDistance             : 1
+info:    shaderCullDistance             : 1
+info:    shaderFloat64                  : 1
+info:    shaderImageGatherExtended      : 1
+info:    shaderInt16                    : 1
+info:    shaderInt64                    : 1
+info:    shaderUniformBufferArrayDynamicIndexing : 1
+info:    shaderSampledImageArrayDynamicIndexing : 1
+info:    shaderStorageBufferArrayDynamicIndexing : 1
+info:    shaderStorageImageArrayDynamicIndexing : 1
+info:    sparseBinding                  : 1
+info:    sparseResidencyBuffer          : 1
+info:    sparseResidencyImage2D         : 1
+info:    sparseResidencyImage3D         : 1
+info:    sparseResidency2Samples        : 0
+info:    sparseResidency4Samples        : 0
+info:    sparseResidency8Samples        : 0
+info:    sparseResidency16Samples       : 0
+info:    sparseResidencyAliased         : 1
+info:    shaderResourceResidency        : 1
+info:    shaderResourceMinLod           : 1
+info:    tessellationShader             : 1
+info:    textureCompressionBC           : 1
+info:    variableMultisampleRate        : 1
+info:    vertexPipelineStoresAndAtomics : 1
+info:    wideLines                      : 1
+info:    shaderDrawParameters           : 1
+info:    storageBuffer16BitAccess       : 1
+info:    storagePushConstant16          : 1
+info:    bufferDeviceAddress            : 1
+info:    descriptorIndexing             : 1
+info:    storageBuffer8BitAccess        : 1
+info:    storagePushConstant8           : 1
+info:    shaderUniformTexelBufferArrayDynamicIndexing : 1
+info:    shaderStorageTexelBufferArrayDynamicIndexing : 1
+info:    shaderUniformBufferArrayNonUniformIndexing : 1
+info:    shaderSampledImageArrayNonUniformIndexing : 1
+info:    shaderStorageBufferArrayNonUniformIndexing : 1
+info:    shaderStorageImageArrayNonUniformIndexing : 1
+info:    shaderUniformTexelBufferArrayNonUniformIndexing : 1
+info:    shaderStorageTexelBufferArrayNonUniformIndexing : 1
+info:    descriptorBindingSampledImageUpdateAfterBind : 1
+info:    descriptorBindingUpdateUnusedWhilePending : 1
+info:    descriptorBindingPartiallyBound : 1
+info:    drawIndirectCount              : 1
+info:    hostQueryReset                 : 1
+info:    runtimeDescriptorArray         : 1
+info:    samplerFilterMinmax            : 1
+info:    samplerMirrorClampToEdge       : 1
+info:    scalarBlockLayout              : 1
+info:    shaderFloat16                  : 1
+info:    shaderInt8                     : 1
+info:    shaderOutputViewportIndex      : 1
+info:    shaderOutputLayer              : 1
+info:    timelineSemaphore              : 1
+info:    uniformBufferStandardLayout    : 1
+info:    vulkanMemoryModel              : 1
+info:    inlineUniformBlock             : 1
+info:    computeFullSubgroups           : 1
+info:    dynamicRendering               : 1
+info:    maintenance4                   : 1
+info:    robustImageAccess              : 0
+info:    pipelineCreationCacheControl   : 1
+info:    shaderDemoteToHelperInvocation : 1
+info:    shaderZeroInitializeWorkgroupMemory : 1
+info:    subgroupSizeControl            : 1
+info:    synchronization2               : 1
+info:  VK_EXT_attachment_feedback_loop_layout:
+info:    attachmentFeedbackLoopLayout   : 1
+info:  VK_EXT_border_color_swizzle:
+info:    borderColorSwizzle             : 1
+info:    borderColorSwizzleFromImage    : 1
+info:  VK_EXT_conservative_rasterization:
+info:    extConservativeRasterization   : 1
+info:  VK_EXT_custom_border_color:
+info:    customBorderColors             : 1
+info:    customBorderColorWithoutFormat : 1
+info:  VK_EXT_depth_clip_enable:
+info:    depthClipEnable                : 1
+info:  VK_EXT_depth_bias_control:
+info:    depthBiasControl               : 1
+info:    leastRepresentableValueForceUnormRepresentation : 1
+info:    floatRepresentation            : 1
+info:    depthBiasExact                 : 1
+info:  VK_EXT_descriptor_buffer:
+info:    descriptorBuffer               : 0
+info:  VK_EXT_descriptor_heap:
+info:    descriptorHeap                 : 1
+info:  VK_EXT_dynamic_rendering_unused_attachments:
+info:    dynamicRenderingUnusedAttachments : 1
+info:  VK_EXT_extended_dynamic_state3:
+info:    extendedDynamicState3AlphaToCoverageEnable : 1
+info:    extendedDynamicState3DepthClipEnable : 1
+info:    extendedDynamicState3RasterizationSamples : 1
+info:    extendedDynamicState3SampleMask : 1
+info:    extendedDynamicState3LineRasterizationMode : 1
+info:    extendedDynamicState3SampleLocationsEnable : 1
+info:  VK_EXT_fragment_shader_interlock:
+info:    fragmentShaderSampleInterlock  : 1
+info:    fragmentShaderPixelInterlock   : 1
+info:  VK_EXT_full_screen_exclusive:
+info:    extFullScreenExclusive         : 0
+info:  VK_EXT_graphics_pipeline_library:
+info:    graphicsPipelineLibrary        : 1
+info:  VK_EXT_hdr_metadata:
+info:    extHdrMetadata                 : 1
+info:  VK_EXT_line_rasterization:
+info:    rectangularLines               : 1
+info:    smoothLines                    : 1
+info:  VK_EXT_memory_budget:
+info:    extMemoryBudget                : 1
+info:  VK_EXT_memory_priority:
+info:    memoryPriority                 : 1
+info:  VK_EXT_multi_draw:
+info:    multiDraw                      : 1
+info:  VK_EXT_non_seamless_cube_map:
+info:    nonSeamlessCubeMap             : 1
+info:  VK_EXT_pageable_device_local_memory:
+info:    pageableDeviceLocalMemory      : 0
+info:  VK_EXT_robustness2:
+info:    robustBufferAccess2            : 1
+info:    robustImageAccess2             : 1
+info:    nullDescriptor                 : 1
+info:  VK_EXT_sample_locations:
+info:    extSampleLocations             : 1
+info:  VK_EXT_shader_module_identifier:
+info:    shaderModuleIdentifier         : 1
+info:  VK_EXT_shader_stencil_export:
+info:    extShaderStencilExport         : 1
+info:  VK_EXT_swapchain_colorspace:
+info:    extSwapchainColorSpace         : 0
+info:  VK_EXT_swapchain_maintenance1:
+info:    swapchainMaintenance1          : 0
+info:  VK_EXT_transform_feedback:
+info:    transformFeedback              : 1
+info:    geometryStreams                : 1
+info:  VK_EXT_vertex_attribute_divisor:
+info:    vertexAttributeInstanceRateDivisor : 1
+info:    vertexAttributeInstanceRateZeroDivisor : 1
+info:  VK_KHR_device_fault:
+info:    deviceFault                    : 0
+info:    deviceFaultVendorBinary        : 0
+info:  VK_KHR_dynamic_rendering_local_read:
+info:    dynamicRenderingLocalRead      : 1
+info:  VK_KHR_external_memory_win32:
+info:    khrExternalMemoryWin32         : 1
+info:  VK_KHR_external_semaphore_win32:
+info:    khrExternalSemaphoreWin32      : 1
+info:  VK_KHR_incremental_present:
+info:    khrIncrementalPresent          : 1
+info:  VK_KHR_load_store_op_none:
+info:    khrLoadStoreOpNone             : 1
+info:  VK_KHR_maintenance5:
+info:    maintenance5                   : 1
+info:  VK_KHR_maintenance6:
+info:    maintenance6                   : 1
+info:  VK_KHR_maintenance7:
+info:    maintenance7                   : 0
+info:  VK_KHR_maintenance8:
+info:    maintenance8                   : 1
+info:  VK_KHR_maintenance9:
+info:    maintenance9                   : 1
+info:  VK_KHR_maintenance10:
+info:    maintenance10                  : 1
+info:  VK_KHR_maintenance11:
+info:    maintenance11                  : 1
+info:  VK_KHR_pipeline_library:
+info:    khrPipelineLibrary             : 1
+info:  VK_KHR_present_id:
+info:    presentId                      : 1
+info:  VK_KHR_present_id2:
+info:    presentId2                     : 0
+info:  VK_KHR_present_wait:
+info:    presentWait                    : 1
+info:  VK_KHR_present_wait2:
+info:    presentWait2                   : 0
+info:  VK_KHR_shader_float_controls2:
+info:    shaderFloatControls2           : 1
+info:  VK_KHR_shader_subgroup_uniform_control_flow:
+info:    shaderSubgroupUniformControlFlow : 1
+info:  VK_KHR_shader_untyped_pointers:
+info:    shaderUntypedPointers          : 1
+info:  VK_KHR_swapchain:
+info:    khrSwapchain                   : 1
+info:  VK_KHR_swapchain_maintenance1:
+info:    swapchainMaintenance1          : 1
+info:  VK_KHR_swapchain_mutable_format:
+info:    khrSwapchainMutableFormat      : 1
+info:  VK_KHR_unified_image_layouts:
+info:    unifiedImageLayouts            : 1
+info:  VK_KHR_win32_keyed_mutex:
+info:    khrWin32KeyedMutex             : 1
+info:  VK_AMD_buffer_marker:
+info:    amdBufferMarker                : 0
+info:  VK_NV_device_diagnostic_checkpoints:
+info:    nvDeviceDiagnosticCheckpoints  : 0
+info:  VK_NV_low_latency2:
+info:    nvLowLatency2                  : 0
+info:  VK_NV_raw_access_chains:
+info:    shaderRawAccessChains          : 0
+info:  VK_NVX_binary_import:
+info:    nvxBinaryImport                : 0
+info:  VK_NVX_image_view_handle:
+info:    nvxImageViewHandle             : 0
+info:  Descriptor sizes (set alignment: 64)
+info:    Sampler              : 16
+info:    Uniform buffer       : 16
+info:    Storage buffer       : 16
+info:    Uniform texel buffer : 16
+info:    Storage texel buffer : 16
+info:    Sampled image        : 32
+info:    Storage image        : 32
+info:    Input attachment     : 32
+info:  Memory type mask for sparse resources: 0x2d
+info:  Memory type mask for buffer resources: 0x2d, usage: 0x219ff
+info:  Creating sampler descriptor heap (32 kB)
+info:  Graphics pipeline libraries supported
+info:  Binding model: Descriptor heap
+info:  D3D11InternalCreateDevice: Maximum supported feature level: D3D_FEATURE_LEVEL_12_1
+info:  D3D11InternalCreateDevice: Using feature level D3D_FEATURE_LEVEL_11_0
+info:  DXGI: VK_FORMAT_D24_UNORM_S8_UINT -> VK_FORMAT_D32_SFLOAT_S8_UINT
+info:  Creating resource descriptor heap (8192 kB)
+warn:  DxgiAdapter::QueryInterface: Unknown interface query
+warn:  f0db4c7f-fe5a-42a2-bd62-f2a6cf6fc83e
+18895.119:0164:0168:warn:vkd3d-proton:openvr_instance_extensions: Failed to wait for VR registry key ready.
+18895.119:0164:0168:warn:vkd3d-proton:openxr_vulkan_extensions: Failed to get OpenXR extensions size from wineopenxr.
+18895.119:0164:0168:info:vkd3d-proton:vkd3d_instance_apply_application_workarounds: Detected SteamAppID 0
+18895.119:0164:0168:info:vkd3d-proton:vkd3d_instance_deduce_config_flags_from_environment: shader_cache is used, global_pipeline_cache is enforced.
+18895.119:0164:0168:info:vkd3d-proton:vkd3d_config_flags_init_once: VKD3D_CONFIG=''.
+18895.120:0164:0168:info:vkd3d-proton:vkd3d_get_vk_version: vkd3d-proton - applicationVersion: 3.1.0.
+18895.120:0164:0168:info:vkd3d-proton:vkd3d_instance_init: vkd3d-proton - build: af89350cc2eacd9+.
+WARNING: radv is not a conformant Vulkan implementation, testing use only.
+18895.126:0164:0168:warn:vkd3d-proton:openvr_device_extensions: Failed to wait for VR registry key ready.
+18895.126:0164:0168:warn:vkd3d-proton:openxr_vulkan_extensions: Failed to get OpenXR extensions size from wineopenxr.
+18895.146:0164:0168:info:vkd3d-proton:vkd3d_physical_device_info_init_maint9: Implementation supports eliding QFOT for non-compressed optimal images.
+18895.146:0164:0168:info:vkd3d-proton:vkd3d_physical_device_info_init_maint10: Implementation can copy depth aspect on compute queue.
+18895.146:0164:0168:info:vkd3d-proton:vkd3d_physical_device_info_init_maint10: Implementation can copy stencil aspect on compute queue.
+18895.146:0164:0168:warn:vkd3d-proton:vkd3d_supports_minimum_coopmat_caps: 8-bit Accumulator type not exposed, but assuming it works anyway. This is required for FSR4 and happens to work in practice on AMD GPUs.
+18895.150:0164:0168:info:vkd3d-proton:d3d12_device_init_workarounds: Detected Linux kernel version 7.2.10
+18895.151:0164:0168:info:vkd3d-proton:d3d12_device_init_vendor_hacks: Loaded amdxc64.dll successfully.
+18895.153:0164:0168:warn:vkd3d-proton:vkd3d_init_depth_stencil_formats: Mapping VK_FORMAT_D24_UNORM_S8_UINT to VK_FORMAT_D32_SFLOAT_S8_UINT.
+18895.153:0164:0168:info:vkd3d-proton:vkd3d_memory_info_decide_hvv_usage: Topology: No more than 1 device local heap, HVV access is viable.
+18895.153:0164:0168:info:vkd3d-proton:vkd3d_memory_info_upload_hvv_memory_properties: Topology: HVV usage is allowed, using DEVICE_LOCAL | HOST_COHERENT for UPLOAD.
+18895.153:0164:0168:info:vkd3d-proton:vkd3d_memory_info_init_budgets: Applying resizable BAR budget to memory types: 0x218.
+18895.153:0164:0168:info:vkd3d-proton:vkd3d_bindless_state_get_bindless_flags: Enabling fast paths for advanced ExecuteIndirect() graphics and compute (EXT_dgc).
+18895.153:0164:0168:info:vkd3d-proton:vkd3d_bindless_state_get_bindless_flags: Device supports VK_EXT_mutable_descriptor_type.
+18895.153:0164:0168:info:vkd3d-proton:vkd3d_bindless_state_get_bindless_flags: Device supports ultra-fast path for descriptor copies.
+18895.153:0164:0168:info:vkd3d-proton:vkd3d_bindless_state_add_binding: Device supports VK_EXT_descriptor_buffer!
+18895.153:0164:0168:info:vkd3d-proton:vkd3d_bindless_state_add_binding: Device supports VK_EXT_descriptor_buffer!
+18895.153:0164:0168:info:vkd3d-proton:vkd3d_bindless_state_add_binding: Device supports VK_EXT_descriptor_buffer!
+18895.154:0164:0168:info:vkd3d-proton:d3d12_device_caps_init_shader_model: Enabling support for SM 6.6.
+18895.154:0164:0168:info:vkd3d-proton:d3d12_device_caps_init_shader_model: Enabling support for SM 6.7.
+18895.154:0164:0168:info:vkd3d-proton:d3d12_device_caps_init_shader_model: Enabling support for SM 6.8.
+18895.154:0164:0168:fixme:vkd3d-proton:d3d12_device_caps_init_feature_options1: TotalLaneCount = 4096, may be inaccurate.
+18895.154:0164:0168:info:vkd3d-proton:d3d12_device_determine_ray_tracing_tier: DXR support enabled.
+18895.154:0164:0168:info:vkd3d-proton:d3d12_device_determine_ray_tracing_tier: DXR 1.1 support enabled.
+18895.154:0164:0168:info:vkd3d-proton:d3d12_device_caps_init_feature_level: DX Ultimate supported!
+18895.154:0164:0168:info:vkd3d-proton:vkd3d_pipeline_library_init_disk_cache: Remapping VKD3D_SHADER_CACHE to: vkd3d-proton.cache.
+18895.154:0164:0168:info:vkd3d-proton:vkd3d_pipeline_library_init_disk_cache: Attempting to load disk cache from: vkd3d-proton.cache.
+18895.154:0164:0198:info:vkd3d-proton:vkd3d_pipeline_library_disk_thread_main: Performing async setup of stream archive ...
+18895.154:0164:0168:warn:vkd3d-proton:d3d12_shared_fence_QueryInterface: {696442be-a72e-4059-bc79-5b5c98040fad} not implemented, returning E_NOINTERFACE.
+18895.154:0164:0198:info:vkd3d-proton:vkd3d_pipeline_library_disk_cache_merge: No write cache exists. No need to merge any disk caches.
+18895.154:0164:0198:info:vkd3d-proton:vkd3d_pipeline_library_disk_cache_initial_setup: Merging pipeline libraries took 0.166 ms.
+18895.154:0164:0198:info:vkd3d-proton:vkd3d_pipeline_library_disk_cache_initial_setup: Failed to map read-only cache: vkd3d-proton.cache.
+18895.154:0164:0198:info:vkd3d-proton:vkd3d_pipeline_library_disk_thread_main: Done performing async setup of stream archive.
+18895.161:0164:0168:warn:vkd3d-proton:d3d12_device_CheckFeatureSupport: Assuming device does not support tile based rendering.
+warn:  CreateDXGIFactory2: Ignoring flags
+18895.163:0164:0168:warn:vkd3d-proton:d3d12_resource_SetName: FSR4 resource detected. Forcing retained GPU reference to work around broken integration code in either game or UE5.
+18895.163:0164:0168:warn:vkd3d-proton:d3d12_resource_SetName: FSR4 resource detected. Forcing retained GPU reference to work around broken integration code in either game or UE5.
+18895.163:0164:0168:warn:vkd3d-proton:d3d12_resource_SetName: FSR4 resource detected. Forcing retained GPU reference to work around broken integration code in either game or UE5.
+18895.163:0164:0168:warn:vkd3d-proton:d3d12_resource_SetName: FSR4 resource detected. Forcing retained GPU reference to work around broken integration code in either game or UE5.
+18895.163:0164:0168:warn:vkd3d-proton:d3d12_resource_SetName: FSR4 resource detected. Forcing retained GPU reference to work around broken integration code in either game or UE5.
+18895.163:0164:0168:warn:vkd3d-proton:d3d12_resource_SetName: FSR4 resource detected. Forcing retained GPU reference to work around broken integration code in either game or UE5.
+18895.163:0164:0168:warn:vkd3d-proton:d3d12_resource_SetName: FSR4 resource detected. Forcing retained GPU reference to work around broken integration code in either game or UE5.
+18895.163:0164:0168:warn:vkd3d-proton:d3d12_resource_SetName: FSR4 resource detected. Forcing retained GPU reference to work around broken integration code in either game or UE5.
+18895.163:0164:0168:warn:vkd3d-proton:d3d12_resource_SetName: FSR4 resource detected. Forcing retained GPU reference to work around broken integration code in either game or UE5.
+18895.163:0164:0168:warn:vkd3d-proton:d3d12_resource_SetName: FSR4 resource detected. Forcing retained GPU reference to work around broken integration code in either game or UE5.
+18895.163:0164:0168:warn:vkd3d-proton:d3d12_resource_SetName: FSR4 resource detected. Forcing retained GPU reference to work around broken integration code in either game or UE5.
+18895.163:0164:0168:warn:vkd3d-proton:d3d12_resource_SetName: FSR4 resource detected. Forcing retained GPU reference to work around broken integration code in either game or UE5.
+18895.163:0164:0168:warn:vkd3d-proton:d3d12_resource_SetName: FSR4 resource detected. Forcing retained GPU reference to work around broken integration code in either game or UE5.
+warn:  D3D11Device::ConvertRuntimeDescriptor: D3D12 descriptor conversion not implemented
+warn:  DxvkMemoryAllocator::createImageResource: Failed to open shared NT handle
+warn:  D3D11Device::ConvertRuntimeDescriptor: D3D12 descriptor conversion not implemented
+warn:  DxvkMemoryAllocator::createImageResource: Failed to open shared NT handle
+warn:  D3D11Device::ConvertRuntimeDescriptor: D3D12 descriptor conversion not implemented
+warn:  DxvkMemoryAllocator::createImageResource: Failed to open shared NT handle
+warn:  D3D11Device::ConvertRuntimeDescriptor: D3D12 descriptor conversion not implemented
+warn:  DxvkMemoryAllocator::createImageResource: Failed to open shared NT handle
+18895.168:0164:0198:info:vkd3d-proton:vkd3d_pipeline_library_disk_thread_main: Pipeline cache marked dirty. Flush is scheduled.
+warn:  CreateDXGIFactory2: Ignoring flags
+18895.252:0164:0168:warn:vkd3d-proton:d3d12_resource_SetName: FSR4 resource detected. Forcing retained GPU reference to work around broken integration code in either game or UE5.
+18895.252:0164:0168:warn:vkd3d-proton:d3d12_resource_SetName: FSR4 resource detected. Forcing retained GPU reference to work around broken integration code in either game or UE5.
+18895.252:0164:0168:warn:vkd3d-proton:d3d12_resource_SetName: FSR4 resource detected. Forcing retained GPU reference to work around broken integration code in either game or UE5.
+18895.252:0164:0168:warn:vkd3d-proton:d3d12_resource_SetName: FSR4 resource detected. Forcing retained GPU reference to work around broken integration code in either game or UE5.
+18895.252:0164:0168:warn:vkd3d-proton:d3d12_resource_SetName: FSR4 resource detected. Forcing retained GPU reference to work around broken integration code in either game or UE5.
+18895.252:0164:0168:warn:vkd3d-proton:d3d12_resource_SetName: FSR4 resource detected. Forcing retained GPU reference to work around broken integration code in either game or UE5.
+18895.252:0164:0168:warn:vkd3d-proton:d3d12_resource_SetName: FSR4 resource detected. Forcing retained GPU reference to work around broken integration code in either game or UE5.
+18895.252:0164:0168:warn:vkd3d-proton:d3d12_resource_SetName: FSR4 resource detected. Forcing retained GPU reference to work around broken integration code in either game or UE5.
+18895.252:0164:0168:warn:vkd3d-proton:d3d12_resource_SetName: FSR4 resource detected. Forcing retained GPU reference to work around broken integration code in either game or UE5.
+18895.252:0164:0168:warn:vkd3d-proton:d3d12_resource_SetName: FSR4 resource detected. Forcing retained GPU reference to work around broken integration code in either game or UE5.
+18895.253:0164:0168:warn:vkd3d-proton:d3d12_resource_SetName: FSR4 resource detected. Forcing retained GPU reference to work around broken integration code in either game or UE5.
+18895.253:0164:0168:warn:vkd3d-proton:d3d12_resource_SetName: FSR4 resource detected. Forcing retained GPU reference to work around broken integration code in either game or UE5.
+18895.253:0164:0168:warn:vkd3d-proton:d3d12_resource_SetName: FSR4 resource detected. Forcing retained GPU reference to work around broken integration code in either game or UE5.
+warn:  DxvkMemoryAllocator::createImageResource: Failed to open shared NT handle
+warn:  DxvkMemoryAllocator::createImageResource: Failed to open shared NT handle
+warn:  DxvkMemoryAllocator::createImageResource: Failed to open shared NT handle

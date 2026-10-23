@@ -1,0 +1,115 @@
+{
+  "scope": "static executable + previously recorded frames; no game execution or new GPU work",
+  "exe": "input/NieRAutomata_win10.unpacked.exe",
+  "exe_sha256": "44ee2dc0e1f2fd939ddb39f028edb4238ecac4e9c80daad3ce925d50545a28c2",
+  "address_base": "0x140000000",
+  "checks": [
+    "analysed executable SHA-256",
+    "trace starts at colour_initial_size 0x140248170",
+    "trace starts at depth_initial_size 0x14024c340",
+    "trace starts at depth_resize 0x140252210",
+    "trace starts at colour_resize_size_branch 0x1402526f5",
+    "trace starts at depth_init_callers 0x140772505",
+    "trace starts at half_depth_init_caller 0x140772632",
+    "trace starts at depth_object_factory 0x14024aa90",
+    "trace starts at depth_backend_dispatch 0x140253410",
+    "trace starts at depth_backend_thunk 0x14025ce80",
+    "trace starts at depth_d3d_creation 0x140258fe0",
+    "trace starts at pass_validation 0x1402439a0",
+    "trace starts at begin_pass 0x140243b90",
+    "trace starts at half_velocity_pass 0x14077edc0",
+    "trace starts at old_resize_attribution 0x14024a9c0",
+    "half-size constant is 0.5, not renderer scale",
+    "depth_initial_size uses native W/H but never reads +0x80",
+    "depth_resize uses native W/H but never reads +0x80",
+    "colour creation multiplies both dimensions by renderer scale",
+    "colour resize multiplies both dimensions by renderer scale",
+    "three full-screen depth handles pass half-size flag=0",
+    "half-screen depth handle passes half-size flag=1",
+    "initial depth creation dispatches through backend +0x50",
+    "backend +0x50 points to depth creation thunk",
+    "depth backend uses D24S8 enum 45 and D3D11 CreateTexture2D/CreateDSV",
+    "backend records descriptor W/H in engine depth metadata",
+    "depth resize callback is registered in depth node vtable",
+    "engine validator rejects either depth dimension mismatch",
+    "failed validation returns before backend target-binding call",
+    "old alleged target-resize helper builds a 16-byte constant buffer",
+    "scaled capture has 444 HDR scene draw entries, all DS=-",
+    "scaled capture references only fixed 256x256 D24S8, not scene depth",
+    "scaled capture has native 1920x1080 output resources",
+    "native capture references full-size D24S8 scene depth"
+  ],
+  "passed": true,
+  "captures": {
+    "scaled": {
+      "path": "scale-test-20261023/NIER_DLAA_frame_20261023_125421_835.txt",
+      "sha256": "7192083050984185d2c0e54b314bd0a103beec62b96f33e89827300145dd45f8",
+      "referenced_D24S8_textures": 1,
+      "scene_draw_entries": 444
+    },
+    "native": {
+      "path": "framedump-capture/NIER_DLAA_frame_20261019_224339_508.txt",
+      "sha256": "ae1f2a14d573190764ef1c8f8b67547db5755f31ee294daa12f9f371d2528894",
+      "referenced_D24S8_textures": 4
+    }
+  },
+  "ranges": {
+    "colour_initial_size": [
+      "0x140248170",
+      "0x140248262"
+    ],
+    "depth_initial_size": [
+      "0x14024c340",
+      "0x14024c431"
+    ],
+    "depth_resize": [
+      "0x140252210",
+      "0x140252322"
+    ],
+    "colour_resize_size_branch": [
+      "0x1402526f5",
+      "0x140252780"
+    ],
+    "depth_init_callers": [
+      "0x140772505",
+      "0x140772572"
+    ],
+    "half_depth_init_caller": [
+      "0x140772632",
+      "0x140772652"
+    ],
+    "depth_object_factory": [
+      "0x14024aa90",
+      "0x14024ab94"
+    ],
+    "depth_backend_dispatch": [
+      "0x140253410",
+      "0x1402534e1"
+    ],
+    "depth_backend_thunk": [
+      "0x14025ce80",
+      "0x14025ce8c"
+    ],
+    "depth_d3d_creation": [
+      "0x140258fe0",
+      "0x1402591a0"
+    ],
+    "pass_validation": [
+      "0x1402439a0",
+      "0x140243b85"
+    ],
+    "begin_pass": [
+      "0x140243b90",
+      "0x140243e98"
+    ],
+    "half_velocity_pass": [
+      "0x14077edc0",
+      "0x14077ee17"
+    ],
+    "old_resize_attribution": [
+      "0x14024a9c0",
+      "0x14024aa82"
+    ]
+  },
+  "traces_sha256": "ea6cb63fef64ab56b6115598786e4b5ff70bfa52a87b47bdf1e4bebdbd53a695"
+}

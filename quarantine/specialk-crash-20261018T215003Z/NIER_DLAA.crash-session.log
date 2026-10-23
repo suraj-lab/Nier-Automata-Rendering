@@ -1,0 +1,91 @@
+22:48:02.788  NIER_DLAA proxy attached
+22:48:02.789  config: ObjectMotion=1 HideMotionBlur=1
+22:48:02.789  config: Enabled=1 Debug=0 DumpFrameKey=0x79 DumpFrameAt=0 DumpShaders=0 Jitter=0 JitterDebugScale=1.00
+22:48:02.789  config: DLSS=1 Preset=0 JitterSign=+1 ToggleKey=0x77 MipBias=-0.50 MipBiasKey=0x23 DebugView=0
+22:48:03.848  warning: real d3d11 has no export D3D11CreateDeviceForD3D12
+22:48:03.848  warning: real d3d11 has no export D3DKMTCloseAdapter
+22:48:03.848  warning: real d3d11 has no export D3DKMTDestroyAllocation
+22:48:03.848  warning: real d3d11 has no export D3DKMTDestroyContext
+22:48:03.848  warning: real d3d11 has no export D3DKMTDestroyDevice
+22:48:03.848  warning: real d3d11 has no export D3DKMTDestroySynchronizationObject
+22:48:03.848  warning: real d3d11 has no export D3DKMTPresent
+22:48:03.848  warning: real d3d11 has no export D3DKMTQueryAdapterInfo
+22:48:03.848  warning: real d3d11 has no export D3DKMTSetDisplayPrivateDriverFormat
+22:48:03.848  warning: real d3d11 has no export D3DKMTSignalSynchronizationObject
+22:48:03.848  warning: real d3d11 has no export D3DKMTUnlock
+22:48:03.848  warning: real d3d11 has no export D3DKMTWaitForSynchronizationObject
+22:48:03.848  warning: real d3d11 has no export EnableFeatureLevelUpgrade
+22:48:03.848  warning: real d3d11 has no export OpenAdapter10
+22:48:03.848  warning: real d3d11 has no export OpenAdapter10_2
+22:48:03.848  warning: real d3d11 has no export CreateDirect3D11DeviceFromDXGIDevice
+22:48:03.848  warning: real d3d11 has no export CreateDirect3D11SurfaceFromDXGISurface
+22:48:03.848  warning: real d3d11 has no export D3D11CoreCreateLayeredDevice
+22:48:03.848  warning: real d3d11 has no export D3D11CoreGetLayeredDeviceSize
+22:48:03.848  warning: real d3d11 has no export D3D11CoreRegisterLayers
+22:48:03.848  warning: real d3d11 has no export D3DKMTCreateAllocation
+22:48:03.848  warning: real d3d11 has no export D3DKMTCreateContext
+22:48:03.848  warning: real d3d11 has no export D3DKMTCreateDevice
+22:48:03.848  warning: real d3d11 has no export D3DKMTCreateSynchronizationObject
+22:48:03.848  warning: real d3d11 has no export D3DKMTEscape
+22:48:03.848  warning: real d3d11 has no export D3DKMTGetContextSchedulingPriority
+22:48:03.848  warning: real d3d11 has no export D3DKMTGetDeviceState
+22:48:03.848  warning: real d3d11 has no export D3DKMTGetDisplayModeList
+22:48:03.848  warning: real d3d11 has no export D3DKMTGetMultisampleMethodList
+22:48:03.848  warning: real d3d11 has no export D3DKMTGetRuntimeData
+22:48:03.848  warning: real d3d11 has no export D3DKMTGetSharedPrimaryHandle
+22:48:03.848  warning: real d3d11 has no export D3DKMTLock
+22:48:03.848  warning: real d3d11 has no export D3DKMTOpenAdapterFromHdc
+22:48:03.848  warning: real d3d11 has no export D3DKMTOpenResource
+22:48:03.848  warning: real d3d11 has no export D3DKMTQueryAllocationResidency
+22:48:03.848  warning: real d3d11 has no export D3DKMTQueryResourceInfo
+22:48:03.848  warning: real d3d11 has no export D3DKMTRender
+22:48:03.848  warning: real d3d11 has no export D3DKMTSetAllocationPriority
+22:48:03.848  warning: real d3d11 has no export D3DKMTSetContextSchedulingPriority
+22:48:03.848  warning: real d3d11 has no export D3DKMTSetDisplayMode
+22:48:03.848  warning: real d3d11 has no export D3DKMTSetGammaRamp
+22:48:03.848  warning: real d3d11 has no export D3DKMTSetVidPnSourceOwner
+22:48:03.848  warning: real d3d11 has no export D3DKMTWaitForVerticalBlankEvent
+22:48:03.848  warning: real d3d11 has no export D3DPerformance_BeginEvent
+22:48:03.848  warning: real d3d11 has no export D3DPerformance_EndEvent
+22:48:03.848  warning: real d3d11 has no export D3DPerformance_GetStatus
+22:48:03.848  warning: real d3d11 has no export D3DPerformance_SetMarker
+22:48:03.848  loaded real d3d11: C:\windows\system32\d3d11.dll
+22:48:04.224  D3D11CreateDevice(flags=0x0) -> 0x00000000
+22:48:04.224  device 0000000001F2AC68 feature level 0xB100: installing hooks
+22:48:04.224  hook Device::CreateVertexShader           slot 12 at 00006FFFF8965840: MH_OK
+22:48:04.224  hook Device::CreatePixelShader            slot 15 at 00006FFFF8962300: MH_OK
+22:48:04.224  hook Device::CreateComputeShader          slot 18 at 00006FFFF8967040: MH_OK
+22:48:04.224  hook Device::CreateSamplerState           slot 23 at 00006FFFF8962F80: MH_OK
+22:48:04.224  hook Device::CreateBuffer                 slot  3 at 00006FFFF8960440: MH_OK
+22:48:04.224  hook Device::CreateDeferredContext        slot 27 at 00006FFFF8968B10: MH_OK
+22:48:04.224  hook Immediate::VSSetShader               slot 11 at 00006FFFF8A50F60: MH_OK
+22:48:04.224  hook Immediate::PSSetShader               slot  9 at 00006FFFF8A50390: MH_OK
+22:48:04.224  hook Immediate::PSSetSamplers             slot 10 at 00006FFFF8A53670: MH_OK
+22:48:04.224  hook Immediate::OMSetRenderTargets        slot 33 at 00006FFFF8A5E940: MH_OK
+22:48:04.224  hook Immediate::OMSetRenderTargetsAndUnorderedAccessViews slot 34 at 00006FFFF8A6BBE0: MH_OK
+22:48:04.224  hook Immediate::OMSetBlendState           slot 35 at 00006FFFF8A56B20: MH_OK
+22:48:04.224  hook Immediate::OMSetDepthStencilState    slot 36 at 00006FFFF8A67CA0: MH_OK
+22:48:04.224  hook Immediate::ClearState                slot 110 at 00006FFFF8A4EA70: MH_OK
+22:48:04.224  hook Immediate::Draw                      slot 13 at 00006FFFF8A6BC90: MH_OK
+22:48:04.224  hook Immediate::DrawIndexed               slot 12 at 00006FFFF8A4FA00: MH_OK
+22:48:04.224  hook Immediate::DrawInstanced             slot 21 at 00006FFFF8A52B10: MH_OK
+22:48:04.224  hook Immediate::DrawIndexedInstanced      slot 20 at 00006FFFF8A648E0: MH_OK
+22:48:04.224  hook Immediate::Dispatch                  slot 41 at 00006FFFF8A6BD70: MH_OK
+22:48:04.224  hook Immediate::CopyResource              slot 47 at 00006FFFF8A510A0: MH_OK
+22:48:04.224  hook Immediate::CopySubresourceRegion     slot 46 at 00006FFFF8A65FE0: MH_OK
+22:48:04.224  hook Immediate::ResolveSubresource        slot 57 at 00006FFFF8A5EA90: MH_OK
+22:48:04.224  hook Immediate::ClearRenderTargetView     slot 50 at 00006FFFF8A65D20: MH_OK
+22:48:04.224  hook Immediate::ClearDepthStencilView     slot 53 at 00006FFFF8A65A50: MH_OK
+22:48:04.224  hook Immediate::ExecuteCommandList        slot 58 at 00006FFFF8AC81B0: MH_OK
+22:48:04.225  hook Immediate::FinishCommandList         slot 114 at 00006FFFF8AC8120: MH_OK
+22:48:04.225  hook Immediate::Map                       slot 14 at 00006FFFF8ACA0F0: MH_OK
+22:48:04.225  hook Immediate::Unmap                     slot 15 at 00006FFFF8ACA660: MH_OK
+22:48:04.225  hook Immediate::UpdateSubresource         slot 48 at 00006FFFF8A5BAE0: MH_OK
+22:48:04.225  hook Immediate::UpdateSubresource1        slot 116 at 00006FFFF8A61980: MH_OK
+22:48:04.225  hook IDXGIFactory::CreateSwapChain        slot 10 at 00006FFFF9078E80: MH_OK
+22:48:04.225  hook IDXGIFactory2::CreateSwapChainForHwnd slot 15 at 00006FFFF9079F30: MH_OK
+22:48:04.231  hooks enabled: MH_OK
+22:48:04.231  IDXGIFactory::CreateSwapChain -> 0x00000000
+22:48:04.231  hook SwapChain::Present                   slot  8 at 00006FFFF915AFF0: MH_OK
+22:48:04.231  hook SwapChain::ResizeBuffers             slot 13 at 00006FFFF9159560: MH_OK
+22:48:04.238  hooks enabled: MH_OK

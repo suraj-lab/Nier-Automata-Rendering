@@ -1,0 +1,4 @@
+12:51:01.615 pid=328 next-stage module=00006ffff83d0000 exports_ready=1
+12:51:01.958 pid=328 setter start exe_base=00006ffffbe90000 size_of_image=0x18f7000 target_scale=0.750
+12:51:01.958 pid=328 waiting: no-renderer
+12:51:02.458 pid=328 applied renderer=00000000034200e0 screen=1600x900 scale 1.000 -> 0.750 (scaled targets 1200x675 after resolution re-apply)

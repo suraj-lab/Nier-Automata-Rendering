@@ -1,0 +1,4 @@
+NIER_FSR4 log, 2026-10-18
+20:16:06.802 NIER_FSR4 32667ad-local-check loaded from Z:\home\suraj\Projects\Nier-Automata-Rendering\analysis\build\NIER_FSR4.dll (FSR SDK 2.3.0 / FSR 4.1.1 API)
+20:16:06.802 process Z:\home\suraj\Projects\Nier-Automata-Rendering\analysis\build\proton_abi_smoke.exe, Windows 10.0 build 19045
+20:16:06.803 config: Version=4.1.1 Sharpening=0 Sharpness=0.00 JitterSign=+1/+1 MVScale=1.000/1.000 DepthInverted=-1 DepthInfinite=0 AutoExposure=-1 HDR=-1 DebugView=0 ReadFromMod=1 Near=0.0000 Far=0.0 Fov=0.0

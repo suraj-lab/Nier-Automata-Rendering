@@ -1,0 +1,27 @@
+# Bulky runtime/runner artifacts — not version-controlled
+analysis/runtime/
+analysis/runners/
+analysis/visual-stack/
+analysis/downloads/
+analysis/offline-unpack/
+analysis/isolated-gpu-3440-20261019/
+analysis/isolated-scale-setter-20261023/
+analysis/offline-motion/
+analysis/offline-framedump/
+analysis/offline-routing/
+analysis/offline-dimensions/
+analysis/offline-camera/
+analysis/wax/
+analysis/snapshots/
+analysis/input/
+analysis/fsr-test-trace/
+analysis/fsr-test-ge11-7/
+analysis/fsr-test/
+analysis/offline-gameexe/
+
+# Extracted/upstream clones (separate repos)
+upstream/
+
+# Large dumps and archives
+*.dis
+*.tar.gz

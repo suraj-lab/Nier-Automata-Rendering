@@ -1,0 +1,18 @@
+{
+  "quarantine": "/home/suraj/Projects/Nier-Automata-Rendering/quarantine/instrumentation-20261018T225015Z",
+  "moved": {
+    "d3d11.dll": "3d628eb576b505180206653d72e4e4da6a4345334f19863256ab5b10e06b6915",
+    "dinput8.dll": "06c5e5f1b3f4675f6d09fcaa81a6b5326b74e15a3d12312678527df68922c919",
+    "dxgi.dll": "f17c392569cbb3d1ab2dbdcc19f8f1d5b779c70ce25b3a6a6aa98f1299f7517d"
+  },
+  "installed": "d3d11_log_proxy.dll (instrumentation)",
+  "mods_disabled": [
+    "d3d11.dll",
+    "dinput8.dll",
+    "dxgi.dll"
+  ],
+  "note": "FSR4/WAX/LodMod temporarily moved out for clean render-target mapping",
+  "restore": {
+    "step": "move d3d11.dll,dinput8.dll,dxgi.dll back from quarantine; delete logger d3d11.dll first"
+  }
+}

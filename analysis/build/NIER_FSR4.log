@@ -1,0 +1,13 @@
+NIER_FSR4 log, 2026-10-18
+20:16:08.460 bridge: game adapter AMD Radeon RX 9070 XT (RADV GFX1201) (vendor 0x1002 device 0x7550), driver 35.0.65535.65535, 16304 MB dedicated VRAM
+20:16:08.555 bridge: D3D12 device ready
+20:16:08.558 bridge: the shared probe-colour texture needed the fallback flags 0x21 on this driver
+20:16:08.558 bridge: shared probe-colour texture 16x16, game format 10, shared format 10, flags 0x21
+20:16:08.559 bridge: the shared probe-output texture needed the fallback flags 0x25 on this driver
+20:16:08.559 bridge: shared probe-output texture 16x16, game format 10, shared format 10, flags 0x25
+20:16:08.559 bridge: the shared probe-depth texture needed the fallback flags 0x21 on this driver
+20:16:08.559 bridge: shared probe-depth texture 16x16, game format 41, shared format 41, flags 0x21
+20:16:08.559 bridge: the shared probe-motion texture needed the fallback flags 0x21 on this driver
+20:16:08.559 bridge: shared probe-motion texture 16x16, game format 34, shared format 34, flags 0x21
+20:16:08.574 bridge: shared probe-colour texture 16x16, game format 26, shared format 26, flags 0x21
+20:16:08.575 bridge: shared probe-output texture 16x16, game format 26, shared format 26, flags 0x25

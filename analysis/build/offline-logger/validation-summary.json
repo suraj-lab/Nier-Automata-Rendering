@@ -1,0 +1,17 @@
+{
+  "scope": "offline source fixes and private synthetic GPU tests, not game integration",
+  "passed": true,
+  "python_tests": 7,
+  "native_registry": "ASan/UBSan and normal pass",
+  "sdk_abi": "compile pass",
+  "exports": "51 exact names/ordinals,49 forwarders,2 wrappers",
+  "review": "P2 fixed, focused follow-up no issues",
+  "gpu": "64 evaluations across two isolated 3440x1440 native/upscale runs, provider4.1.1",
+  "not_validated": [
+    "real game dispatch/copy-back/HUD",
+    "motion-vector shader units",
+    "full logger resource-flow coverage",
+    "multi-device/recreation and swap-chain paths",
+    "performance and temporal quality"
+  ]
+}

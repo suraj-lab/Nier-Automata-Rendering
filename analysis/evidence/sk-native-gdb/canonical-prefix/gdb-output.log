@@ -1,0 +1,11 @@
+Setting environment variable "ORIG_LD_LIBRARY_PATH" to null value.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/usr/lib/libthread_db.so.1".
+wine: Bad server socket 36 : Bad file descriptor
+[Inferior 1 (process 657267) exited with code 01]
+
+WAIT_SNAPSHOT
+  Num  Description       Connection           Executable        
+* 1    <null>                                 /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/bin/wine 
+/home/suraj/Projects/Nier-Automata-Rendering/analysis/evidence/sk-native-gdb/canonical-prefix/commands.gdb:72: Error in sourced command file:
+No current process: you must name one.

@@ -1,0 +1,39 @@
+ok   mod != nullptr
+ok   GetModuleHandleA("NIER_FSR4.dll") == nullptr
+ok   bound
+     stub loaded Z:\home\suraj\Projects\Nier-Automata-Rendering\analysis\build\NIER_FSR4.dll
+ok   r != nullptr && lstrcmpiA(got, want) == 0
+ok   fn != nullptr
+ok   ui[0] == 0x01 && ui[1] == 0 && ui[2] == 0 && ui[3] == 0
+ok   c.Rip == 0x1122334455667788ull && c.Rsp == (DWORD64)stack + 8
+ok   c0.Rip == 0x1122334455667788ull && c0.Rsp == (DWORD64)stack + 8
+ok   m != nullptr
+ok   fromStub == m
+NVSDK_NGX_D3D11_Init                    ok   GetProcAddress(m, n) != nullptr
+NVSDK_NGX_D3D11_Init_Ext                ok   GetProcAddress(m, n) != nullptr
+NVSDK_NGX_D3D11_Init_ProjectID          ok   GetProcAddress(m, n) != nullptr
+NVSDK_NGX_D3D11_Shutdown                ok   GetProcAddress(m, n) != nullptr
+NVSDK_NGX_D3D11_Shutdown1               ok   GetProcAddress(m, n) != nullptr
+NVSDK_NGX_D3D11_GetParameters           ok   GetProcAddress(m, n) != nullptr
+NVSDK_NGX_D3D11_GetScratchBufferSize    ok   GetProcAddress(m, n) != nullptr
+NVSDK_NGX_D3D11_CreateFeature           ok   GetProcAddress(m, n) != nullptr
+NVSDK_NGX_D3D11_EvaluateFeature         ok   GetProcAddress(m, n) != nullptr
+NVSDK_NGX_D3D11_ReleaseFeature          ok   GetProcAddress(m, n) != nullptr
+NVSDK_NGX_D3D11_GetFeatureRequirements  ok   GetProcAddress(m, n) != nullptr
+NVSDK_NGX_D3D11_AllocateParameters      ok   GetProcAddress(m, n) != nullptr
+NVSDK_NGX_D3D11_GetCapabilityParameters ok   GetProcAddress(m, n) != nullptr
+NVSDK_NGX_D3D11_DestroyParameters       ok   GetProcAddress(m, n) != nullptr
+ok   ((PfnGetCaps)GetProcAddress(m, "NVSDK_NGX_D3D11_GetCapabilityParameters"))(&caps) == 1
+ok   Slot<int (*)(void*, const char*, int*)>(caps, 0x58)(caps, "SuperSampling.Available", &avail) == 1
+ok   avail == 1
+ok   Slot<int (*)(void*, const char*, int*)>(caps, 0x58)(caps, "SuperSampling.NeedsUpdatedDriver", &drv) == 1
+ok   drv == 0
+ok   Slot<int (*)(void*, const char*, unsigned*)>(caps, 0x60)(caps, "Width", &w) == 1 && w == 3840
+ok   Slot<int (*)(void*, const char*, int*)>(caps, 0x58)(caps, "DLSS.Feature.Create.Flags", &fl) == 1 && fl == 0x43
+ok   Slot<int (*)(void*, const char*, float*)>(caps, 0x70)(caps, "Jitter.Offset.X", &jx) == 1 && jx == -0.375f
+ok   Slot<int (*)(void*, const char*, void**)>(caps, 0x50)(caps, "Color", &got) == 1 && got == fake
+ok   Slot<int (*)(void*, const char*, unsigned*)>(caps, 0x60)(caps, "Sentinel", &bits) == 1 && bits == 0xFFFFFFFFu
+ok   Slot<int (*)(void*, const char*, unsigned*)>(caps, 0x60)(caps, "NotSet", &missing) == (int)0xBAD00010
+ok   Slot<int (*)(void*, const char*, unsigned*)>(caps, 0x60)(caps, "DLSS.Hint.Render.Preset.DLAA", &missing) != 1
+SMOKE TEST PASSED
+RESULT exit=0

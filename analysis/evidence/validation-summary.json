@@ -1,0 +1,16 @@
+{
+  "abi_assertions_passed": 36,
+  "gpu_colour_roundtrips_passed": [
+    10,
+    26
+  ],
+  "gpu_probe_dimensions": [
+    16,
+    16
+  ],
+  "fsr_dispatch_tested": false,
+  "game_runtime_tested": false,
+  "game_sha256_unchanged": "042e9fef839eb1c7722cee971d5f50c132b018ec02aa0d4ae38dbc62d5a9daa8",
+  "upstream_checkout_clean": true,
+  "documentation_shell_syntax_passed": true
+}

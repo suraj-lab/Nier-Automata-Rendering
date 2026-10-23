@@ -1,0 +1,30 @@
+D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, 0, &level, 1, D3D11_SDK_VERSION, &device, nullptr, nullptr): 0x00000000
+bridge.dev11->CreateTexture2D(&desc, &initial, &source): 0x00000000
+CASE format=10
+bridge.dev11->CreateTexture2D(&auxDesc, nullptr, &texture): 0x00000000
+bridge.dev11->CreateTexture2D(&auxDesc, nullptr, &texture): 0x00000000
+bridge.dev11->CreateTexture2D(&desc, nullptr, &readback): 0x00000000
+bridge.alloc[0]->Reset(): 0x00000000
+bridge.list->Reset(bridge.alloc[0], nullptr): 0x00000000
+bridge.list->Close(): 0x00000000
+bridge.ctx11->Signal(bridge.readyFence11, ready): 0x00000000
+bridge.queue->Wait(bridge.readyFence12, ready): 0x00000000
+bridge.queue->Signal(bridge.fence12, done): 0x00000000
+bridge.ctx11->Wait(bridge.fence11, done): 0x00000000
+bridge.ctx11->Map(readback, 0, D3D11_MAP_READ, 0, &mapped): 0x00000000
+READBACK format=10 PASS
+bridge.dev11->CreateTexture2D(&desc, &initial, &source): 0x00000000
+CASE format=26
+bridge.dev11->CreateTexture2D(&auxDesc, nullptr, &texture): 0x00000000
+bridge.dev11->CreateTexture2D(&auxDesc, nullptr, &texture): 0x00000000
+bridge.dev11->CreateTexture2D(&desc, nullptr, &readback): 0x00000000
+bridge.alloc[0]->Reset(): 0x00000000
+bridge.list->Reset(bridge.alloc[0], nullptr): 0x00000000
+bridge.list->Close(): 0x00000000
+bridge.ctx11->Signal(bridge.readyFence11, ready): 0x00000000
+bridge.queue->Wait(bridge.readyFence12, ready): 0x00000000
+bridge.queue->Signal(bridge.fence12, done): 0x00000000
+bridge.ctx11->Wait(bridge.fence11, done): 0x00000000
+bridge.ctx11->Map(readback, 0, D3D11_MAP_READ, 0, &mapped): 0x00000000
+READBACK format=26 PASS
+RESULT exit=0

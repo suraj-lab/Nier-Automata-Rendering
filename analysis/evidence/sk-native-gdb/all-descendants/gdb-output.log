@@ -1,0 +1,104 @@
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.archlinux.org>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+Setting environment variable "ORIG_LD_LIBRARY_PATH" to null value.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/usr/lib/libthread_db.so.1".
+process 658151 is executing new program: /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-unix/wine-preloader
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/usr/lib/libthread_db.so.1".
+[New inferior 2 (process 658154)]
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/usr/lib/libthread_db.so.1".
+process 658154 is executing new program: /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/bin/wineserver
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/usr/lib/libthread_db.so.1".
+[New inferior 3 (process 658155)]
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/usr/lib/libthread_db.so.1".
+ntsync: up and running.
+[Inferior 2 (process 658154) exited normally]
+
+WAIT_SNAPSHOT
+  Num  Description       Connection           Executable        
+  1    process 658151    1 (native)           /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-unix/wine-preloader 
+* 2    <null>                                 /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/bin/wineserver 
+  3    process 658155    1 (native)           /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/bin/wineserver 
+
+Thread 3.1 (Thread 0x7f5e8a303740 (LWP 658155) "wineserver"):
+#0  0x00005590b6ff2d58 in lookup_named_object ()
+#1  0x00005590b6ff37fc in create_named_object ()
+#2  0x00005590b6fdd0df in init_directories ()
+#3  0x00005590b6fce365 in main ()
+
+Thread 1.1 (Thread 0xf7e97a80 (LWP 658151) "wine"):
+#0  0xf7f202cc in __kernel_vsyscall ()
+#1  0xf7d6d7b2 in ?? () from /usr/lib32/libc.so.6
+#2  0xf7d51c6e in wait4 () from /usr/lib32/libc.so.6
+#3  0xf7d51f4a in waitpid () from /usr/lib32/libc.so.6
+#4  0xf7b42bab in start_server () from /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-unix/ntdll.so
+#5  0xf7b578a6 in server_init_process () from /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-unix/ntdll.so
+#6  0xf7b43bbc in __wine_main () from /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-unix/ntdll.so
+#7  0xf7f141a0 in ?? ()
+#8  0xf7c1b9b0 in ?? () from /usr/lib32/libc.so.6
+#9  0xed42db00 in ?? ()
+Backtrace stopped: previous frame inner to this frame (corrupt stack?)
+[Switching to inferior 1 [process 658151] (/home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-unix/wine-preloader)]
+[Switching to thread 1.1 (Thread 0xf7e97a80 (LWP 658151))]
+#0  0xf7f202cc in __kernel_vsyscall ()
+process 658151
+Mapped address spaces:
+
+Start Addr End Addr   Size       Offset     Perms File 
+0x00010000 0x00110000 0x100000   0x0        rw-p   
+0x00110000 0x68000000 0x67ef0000 0x0        ---p   
+0x7d400000 0x7d402000 0x2000     0x1000     r-xp  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-unix/wine-preloader 
+0x7d402000 0x7d403000 0x1000     0x3000     r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-unix/wine-preloader 
+0x7d403000 0x7d405000 0x2000     0x3000     rw-p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-unix/wine-preloader 
+0x7e6b8000 0x7e6da000 0x22000    0x0        rw-p  [heap] 
+0x7ed9e000 0x7eda5000 0x7000     0x0        r--s  /usr/lib32/gconv/gconv-modules.cache 
+0x7eda5000 0x7ee00000 0x5b000    0x0        r--p  /usr/lib/locale/C.utf8/LC_CTYPE 
+0x7ee00000 0x7f000000 0x200000   0x0        r--p  /usr/lib/locale/locale-archive 
+0x7f000000 0x7fde0000 0xde0000   0x0        ---p   
+0x7fde0000 0x7ffc0000 0x1e0000   0x0        ---p   
+0x7ffc0000 0x7ffe0000 0x20000    0x0        rw-p   
+0x7ffe0000 0x7ffe1000 0x1000     0x0        r--p   
+0x7ffe1000 0x7ffff000 0x1e000    0x0        ---p   
+0x7ffff000 0x80000000 0x1000     0x0        r-xp   
+0x80000000 0xf7b10000 0x77b10000 0x0        ---p   
+0xf7b13000 0xf7b1a000 0x7000     0x0        r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-unix/ntdll.so 
+0xf7b1a000 0xf7b90000 0x76000    0x7000     r-xp  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-unix/ntdll.so 
+0xf7b90000 0xf7bb5000 0x25000    0x7d000    r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-unix/ntdll.so 
+0xf7bb5000 0xf7bb6000 0x1000     0xa1000    r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-unix/ntdll.so 
+0xf7bb6000 0xf7bb8000 0x2000     0xa2000    rw-p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-unix/ntdll.so 
+0xf7bb8000 0xf7bf9000 0x41000    0x0        rw-p   
+0xf7bf9000 0xf7c18000 0x1f000    0x0        r--p  /usr/lib32/libc.so.6 
+0xf7c18000 0xf7e11000 0x1f9000   0x1f000    r-xp  /usr/lib32/libc.so.6 
+0xf7e11000 0xf7e8e000 0x7d000    0x218000   r--p  /usr/lib32/libc.so.6 
+0xf7e8e000 0xf7e90000 0x2000     0x295000   r--p  /usr/lib32/libc.so.6 
+0xf7e90000 0xf7e91000 0x1000     0x297000   rw-p  /usr/lib32/libc.so.6 
+0xf7e91000 0xf7e98000 0x7000     0x0        rw-p   
+0xf7e98000 0xf7ecf000 0x37000    0x0        r--p  /etc/ld.so.cache 
+0xf7ecf000 0xf7ed0000 0x1000     0x0        r--p  /usr/lib32/ld-linux.so.2 
+0xf7ed0000 0xf7eff000 0x2f000    0x1000     r-xp  /usr/lib32/ld-linux.so.2 
+0xf7eff000 0xf7f10000 0x11000    0x30000    r--p  /usr/lib32/ld-linux.so.2 
+0xf7f10000 0xf7f12000 0x2000     0x40000    r--p  /usr/lib32/ld-linux.so.2 
+0xf7f12000 0xf7f13000 0x1000     0x42000    rw-p  /usr/lib32/ld-linux.so.2 
+0xf7f13000 0xf7f14000 0x1000     0x0        r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-unix/wine 
+0xf7f14000 0xf7f15000 0x1000     0x1000     r-xp  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-unix/wine 
+0xf7f15000 0xf7f16000 0x1000     0x2000     r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-unix/wine 
+0xf7f16000 0xf7f17000 0x1000     0x2000     r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-unix/wine 
+0xf7f17000 0xf7f18000 0x1000     0x3000     rw-p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-unix/wine 
+0xf7f18000 0xf7f1c000 0x4000     0x0        r--p  [vvar] 
+0xf7f1c000 0xf7f1e000 0x2000     0x0        r--p  [vvar_vclock] 
+0xf7f1e000 0xf7f21000 0x3000     0x0        r-xp  [vdso] 
+0xf7f30000 0xffc80000 0x7d50000  0x0        ---p   
+0xffc88000 0xffcaa000 0x22000    0x0        rw-p  [stack] 
+0xffcb0000 0xffcf0000 0x40000    0x0        ---p   
+0xffcf0000 0xffff0000 0x300000   0x0        rw-p   
+Python Exception <class 'RuntimeError'>: Inferior no longer exists.
+/home/suraj/Projects/Nier-Automata-Rendering/analysis/evidence/sk-native-gdb/all-descendants/commands.gdb:77: Error in sourced command file:
+Error occurred in Python: Inferior no longer exists.

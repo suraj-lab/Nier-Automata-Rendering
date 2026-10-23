@@ -1,0 +1,42 @@
+"InstallScript"
+{
+	"Run Process"
+	{
+		"Win10Install"
+		{
+			"process 1"		"%INSTALLDIR%\\win10setup.bat"
+			"Requirement_OS"
+			{
+				"OSType"		"Windows 10"
+			}
+		}
+		"Win8_1_Install"
+		{
+			"process 1"		"%INSTALLDIR%\\win8_7_setup.bat"
+			"Requirement_OS"
+			{
+				"OSType"		"Windows 8.1"
+			}
+		}
+		"Win8Install"
+		{
+			"process 1"		"%INSTALLDIR%\\win8_7_setup.bat"
+			"Requirement_OS"
+			{
+				"OSType"		"Windows 8"
+			}
+		}
+		"Win7Install"
+		{
+			"process 1"		"%INSTALLDIR%\\win8_7_setup.bat"
+			"Requirement_OS"
+			{
+				"OSType"		"Windows 7"
+			}
+		}
+	}
+}
+"kvsignatures"
+{
+	"InstallScript"		"a932e3a0eba8aed12e7a94ea0492c0275e50ed44650b5b1cd2aa099b8e9df89c26d764823b3a5adb1923cb1e12881cb983bbcc12954618caf5dddbd7aeaf6d4f9d6e7c5b8d72021cc3cd571a8ea067d1816d7ae927f063a79dc7745cfbc4b096b1005f1e3c88b096fa906cc3db82daa2d56fe15376c051a023508b437ece1951"
+}

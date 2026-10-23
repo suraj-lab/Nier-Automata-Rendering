@@ -1,0 +1,6 @@
+attach 0x0000016c
+info threads
+bt
+info modules
+detach
+quit

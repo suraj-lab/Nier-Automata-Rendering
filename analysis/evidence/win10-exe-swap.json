@@ -1,0 +1,21 @@
+{
+  "backup": "/home/suraj/Projects/Nier-Automata-Rendering/backups/win10-exe-swap-20261018T222716Z",
+  "current_exe_sha1": "f734bef5403c77e29cfc55f57707df19c3655751",
+  "current_exe_sha256": "042e9fef839eb1c7722cee971d5f50c132b018ec02aa0d4ae38dbc62d5a9daa8",
+  "current_exe_variant": "Windows 7/8 compat (not WAX-supported)",
+  "target_sha1": "420cbab7daa1d94a79473c0a6271ef9c30e516e5",
+  "target_variant": "Windows 10 (WAX-supported)",
+  "target_size": 17837952,
+  "status": "win10 exe in place, awaiting in-game WAX/FSR4/LodMod verification",
+  "compat_exe_moved_to": "/home/suraj/Projects/Nier-Automata-Rendering/quarantine/compat-exe-20261018T222737Z/NieRAutomata.exe",
+  "exe_removed_from_game_dir": true,
+  "win10_exe_verified": true,
+  "win10_exe_sha1": "420cbab7daa1d94a79473c0a6271ef9c30e516e5",
+  "osverification_moved_to": "/home/suraj/Projects/Nier-Automata-Rendering/quarantine/osverification-20261018T223055Z",
+  "moved": [
+    "NieRAutomataCompat.exe",
+    "win10setup.bat",
+    "win8_7_setup.bat",
+    "installation_os_check.vdf"
+  ]
+}

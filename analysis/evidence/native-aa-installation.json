@@ -1,0 +1,69 @@
+{
+  "game_directory": "/mnt/second/SteamLibrary/steamapps/common/NieRAutomata",
+  "backup_directory": "/home/suraj/Projects/Nier-Automata-Rendering/backups/native-aa-20261018T201659Z",
+  "installed_files": [
+    {
+      "path": "/mnt/second/SteamLibrary/steamapps/common/NieRAutomata/NIER_DLAA.ini",
+      "source": "/home/suraj/Projects/Nier-Automata-Rendering/upstream/Nier-FSR4/third_party/NIER_DLAA/NIER_DLAA.ini",
+      "bytes": 1582,
+      "sha256": "7016a23820c56b8afc3d17a7f4a3c84af1a8df57930b1f2334f7f6bc00a504cc"
+    },
+    {
+      "path": "/mnt/second/SteamLibrary/steamapps/common/NieRAutomata/NIER_FSR4.dll",
+      "source": "/home/suraj/Projects/Nier-Automata-Rendering/analysis/fsr-test-ge11-7/NIER_FSR4.dll",
+      "bytes": 2905213,
+      "sha256": "236511e11b0e4f516d1d6c475bcf2ffccbf05f662a7b468d9e0597cf1afb87c9"
+    },
+    {
+      "path": "/mnt/second/SteamLibrary/steamapps/common/NieRAutomata/NIER_FSR4.ini",
+      "source": "/home/suraj/Projects/Nier-Automata-Rendering/upstream/Nier-FSR4/dist/NIER_FSR4.ini",
+      "bytes": 1611,
+      "sha256": "e87fe977d8df2f1634c09997ed837b923dc65dcc53bb571e973b3657bf08fe50"
+    },
+    {
+      "path": "/mnt/second/SteamLibrary/steamapps/common/NieRAutomata/amd_fidelityfx_loader_dx12.dll",
+      "source": "/home/suraj/Projects/Nier-Automata-Rendering/analysis/fsr-test-ge11-7/amd_fidelityfx_loader_dx12.dll",
+      "bytes": 26376,
+      "sha256": "e2d85aa05a9bd9ed8b38935fdf5199372cca6f74c12015143bb6f945ee1608aa"
+    },
+    {
+      "path": "/mnt/second/SteamLibrary/steamapps/common/NieRAutomata/amd_fidelityfx_upscaler_dx12.dll",
+      "source": "/home/suraj/Projects/Nier-Automata-Rendering/analysis/fsr-test-ge11-7/amd_fidelityfx_upscaler_dx12.dll",
+      "bytes": 28761864,
+      "sha256": "d0dcccc74a43c44ba435b7a369b456e0970d8a4464e4bd683119b374f2c9fb46"
+    },
+    {
+      "path": "/mnt/second/SteamLibrary/steamapps/common/NieRAutomata/AMD_FidelityFX_LICENSE.md",
+      "source": "/home/suraj/Projects/Nier-Automata-Rendering/analysis/fsr-test-ge11-7/AMD_FidelityFX_LICENSE.md",
+      "bytes": 60891,
+      "sha256": "6757f2fec461238da6f84f83536ec195e8c036b1773a06f6f34301b9ed8c0963"
+    },
+    {
+      "path": "/mnt/second/SteamLibrary/steamapps/common/NieRAutomata/NIER_FSR4_README.md",
+      "source": "/home/suraj/Projects/Nier-Automata-Rendering/upstream/Nier-FSR4/README.md",
+      "bytes": 5433,
+      "sha256": "0802f9bf16fd5823d7bd0e22f9ba1db6e778929ebaed105e4613cfa1d4f3a117"
+    },
+    {
+      "path": "/mnt/second/SteamLibrary/steamapps/common/NieRAutomata/d3d11.dll",
+      "source": "/home/suraj/Projects/Nier-Automata-Rendering/analysis/build/mod_proxy.dll",
+      "bytes": 452608,
+      "sha256": "3d628eb576b505180206653d72e4e4da6a4345334f19863256ab5b10e06b6915"
+    }
+  ],
+  "runner_link": "/home/suraj/.local/share/Steam/compatibilitytools.d/GE-Proton11-7-x86_64",
+  "runner_target": "/home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64",
+  "steam_display_name": "GE-Proton11-7-x86_64",
+  "original_launch_options": "mangohud gamemoderun %command%",
+  "required_launch_options": "WINEDLLOVERRIDES=\"d3d11=n,b\" mangohud gamemoderun %command%",
+  "steam_settings_edited": false,
+  "steam_restart_required": true,
+  "required_game_settings": {
+    "Anti-Aliasing": "Off",
+    "Motion Blur": "On"
+  },
+  "game_executable_unchanged": true,
+  "existing_saves_and_configs_unchanged": true,
+  "game_runtime_tested": false,
+  "deployment": "native-AA only"
+}

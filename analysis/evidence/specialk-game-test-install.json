@@ -1,0 +1,35 @@
+{
+  "installed": [
+    {
+      "path": "/mnt/second/SteamLibrary/steamapps/common/NieRAutomata/dxgi.dll",
+      "sha256": "8a7d7e42fecf0035ab26d57b46c78a02219e4e92c0239d76ac3827093fdeb9dd",
+      "overwrote": false
+    },
+    {
+      "path": "/mnt/second/SteamLibrary/steamapps/common/NieRAutomata/dxgi.ini",
+      "sha256": "d0983afd0b8e8c9eb17824c28da22f4122d7a6f68ae9887919e93d4b4a62b1a2",
+      "overwrote": false
+    },
+    {
+      "path": "/mnt/second/SteamLibrary/steamapps/common/NieRAutomata/FAR.ini",
+      "sha256": "e703e44b5e6e11ec066200c7745c802e54a55805f8263d7a0f394892facee217",
+      "overwrote": true
+    }
+  ],
+  "textures_installed": 292,
+  "texture_root": "/mnt/second/SteamLibrary/steamapps/common/NieRAutomata/SK_Res/inject",
+  "far_backup": "/home/suraj/Projects/Nier-Automata-Rendering/backups/visual-stack-20261018T210248Z/game-config/FAR.ini",
+  "far_changes": [
+    "UncapFPS=false",
+    "FastLoad=false",
+    "FixMotionBlur=false"
+  ],
+  "launch_options": "WINEDLLOVERRIDES=\"d3d11=n,b;dinput8=n,b;dxgi=n,b\" mangohud gamemoderun %command%",
+  "rollback": [
+    "move dxgi.dll, dxgi.ini out of game dir",
+    "move SK_Res/inject out (SK_Res/Achievements is pre-existing)",
+    "restore FAR.ini from far_backup",
+    "remove dxgi=n,b from launch options"
+  ],
+  "runtime_verified": false
+}

@@ -1,0 +1,310 @@
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.archlinux.org>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+Setting environment variable "ORIG_LD_LIBRARY_PATH" to null value.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/usr/lib/libthread_db.so.1".
+process 657473 is executing new program: /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-unix/wine-preloader
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/usr/lib/libthread_db.so.1".
+[Detaching after vfork from child process 657476]
+ntsync: up and running.
+[Detaching after fork from child process 657479]
+Error while mapping shared library sections:
+`/home/suraj/Projects/Nier-Automata-Rendering/analysis/visual-stack/sk-native-gdb/fsr_inference_probe.exe': Shared library architecture i386:x86-64 is not compatible with target architecture i386.
+Error while mapping shared library sections:
+`/home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/x86_64-windows/tzres.dll': Shared library architecture i386:x86-64 is not compatible with target architecture i386.
+Error while mapping shared library sections:
+`/home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/x86_64-windows/tzres.dll': Shared library architecture i386:x86-64 is not compatible with target architecture i386.
+Error while mapping shared library sections:
+`/home/suraj/Projects/Nier-Automata-Rendering/analysis/visual-stack/sk-native-gdb/fsr_inference_probe.exe': Shared library architecture i386:x86-64 is not compatible with target architecture i386.
+[Detaching after fork from child process 657541]
+WARNING: radv is not a conformant Vulkan implementation, testing use only.
+20860.937:010c:0110:info:nvapi64:nvapi_QueryInterface (NvAPI_Disp_ColorControl): Not implemented method
+
+Program received signal SIGINT, Interrupt.
+0xf7f472cc in ?? ()
+
+WAIT_SNAPSHOT
+  Num  Description       Connection           Executable        
+* 1    process 657473    1 (native)           /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-unix/wine-preloader 
+
+Thread 1 (Thread 0xf7ebea80 (LWP 657473) "start.exe"):
+#0  0xf7f472cc in ?? ()
+#1  0xf7b8c49f in inproc_wait () from /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-unix/ntdll.so
+#2  0xf7b9027d in NtWaitForSingleObject () from /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-unix/ntdll.so
+#3  0xf7b80d1f in __wine_syscall_dispatcher () from /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-unix/ntdll.so
+#4  0xf7b7edd2 in server_init_process_done () from /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-unix/ntdll.so
+#5  0xf7b6baaa in __wine_main () from /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-unix/ntdll.so
+#6  0xf7f3b1a0 in ?? ()
+#7  0xf7c429b0 in ?? () from /usr/lib32/libc.so.6
+#8  0xe6380200 in ?? ()
+#9  0xf7c42947 in ?? () from /usr/lib32/libc.so.6
+#10 0xf7c42b0d in __libc_start_main () from /usr/lib32/libc.so.6
+#11 0xf7f3b237 in ?? ()
+process 657473
+Mapped address spaces:
+
+Start Addr End Addr   Size       Offset     Perms File 
+0x00010000 0x00110000 0x100000   0x0        rw-p   
+0x00110000 0x0011f000 0xf000     0x0        r-xp  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/x86_64-windows/wow64cpu.dll 
+0x0011f000 0x00120000 0x1000     0x0        ---p   
+0x00120000 0x00125000 0x5000     0x0        rw-p   
+0x00125000 0x00130000 0xb000     0x0        ---p   
+0x00130000 0x00131000 0x1000     0x0        r--p   
+0x00131000 0x00230000 0xff000    0x0        rw-p   
+0x00230000 0x00232000 0x2000     0x0        ---p   
+0x00232000 0x00330000 0xfe000    0x0        rw-p   
+0x00330000 0x00332000 0x2000     0x0        ---p   
+0x00332000 0x00530000 0x1fe000   0x0        rw-p   
+0x00530000 0x00546000 0x16000    0x0        r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/apisetschema.dll 
+0x00546000 0x00550000 0xa000     0x0        ---p   
+0x00550000 0x00566000 0x16000    0x0        rw-p   
+0x00566000 0x00570000 0xa000     0x0        ---p   
+0x00570000 0x00590000 0x20000    0x0        rw-p   
+0x00590000 0x00670000 0xe0000    0x0        ---p   
+0x00670000 0x00733000 0xc3000    0x0        r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/share/wine/nls/locale.nls 
+0x00733000 0x00740000 0xd000     0x0        ---p   
+0x00740000 0x00742000 0x2000     0x0        r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/share/wine/nls/l_intl.nls 
+0x00742000 0x00750000 0xe000     0x0        ---p   
+0x00750000 0x00761000 0x11000    0x0        r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/share/wine/nls/c_1252.nls 
+0x00761000 0x00770000 0xf000     0x0        ---p   
+0x00770000 0x00781000 0x11000    0x0        r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/share/wine/nls/c_437.nls 
+0x00781000 0x00790000 0xf000     0x0        ---p   
+0x00790000 0x00810000 0x80000    0x0        rw-p   
+0x00810000 0x00b4a000 0x33a000   0x0        r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/share/wine/nls/sortdefault.nls 
+0x00b4a000 0x00b50000 0x6000     0x0        ---p   
+0x00b50000 0x00b5f000 0xf000     0x0        r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/share/wine/nls/normnfc.nls 
+0x00b5f000 0x00b60000 0x1000     0x0        ---p   
+0x00b60000 0x00b76000 0x16000    0x0        rw-p   
+0x00b76000 0x00b80000 0xa000     0x0        ---p   
+0x00b80000 0x00b91000 0x11000    0x0        r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/share/wine/nls/c_20127.nls 
+0x00b91000 0x00ba0000 0xf000     0x0        ---p   
+0x00ba0000 0x00ce4000 0x144000   0x0        r--p  /memfd:wine-mapping (deleted) 
+0x00ce4000 0x00cf0000 0xc000     0x0        ---p   
+0x00cf0000 0x00e70000 0x180000   0x0        rw-p   
+0x00e70000 0x00e81000 0x11000    0x0        r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/share/wine/nls/c_10000.nls 
+0x00e81000 0x68000000 0x6717f000 0x0        ---p   
+0x7aa80000 0x7aa81000 0x1000     0x0        r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/imm32.dll 
+0x7aa81000 0x7aa90000 0xf000     0x1000     r-xp  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/imm32.dll 
+0x7aa90000 0x7aa91000 0x1000     0x10000    rw-p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/imm32.dll 
+0x7aa91000 0x7aa9f000 0xe000     0x11000    r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/imm32.dll 
+0x7aab0000 0x7aab1000 0x1000     0x0        r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/shcore.dll 
+0x7aab1000 0x7aabc000 0xb000     0x1000     r-xp  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/shcore.dll 
+0x7aabc000 0x7aabd000 0x1000     0xc000     rw-p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/shcore.dll 
+0x7aabd000 0x7aac9000 0xc000     0xd000     r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/shcore.dll 
+0x7aae0000 0x7aae1000 0x1000     0x0        r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/shlwapi.dll 
+0x7aae1000 0x7aaff000 0x1e000    0x1000     r-xp  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/shlwapi.dll 
+0x7aaff000 0x7ab00000 0x1000     0x1f000    rw-p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/shlwapi.dll 
+0x7ab00000 0x7ab2e000 0x2e000    0x20000    r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/shlwapi.dll 
+0x7ab40000 0x7ab41000 0x1000     0x0        r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/win32u.dll 
+0x7ab41000 0x7ab54000 0x13000    0x1000     r-xp  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/win32u.dll 
+0x7ab54000 0x7ab55000 0x1000     0x14000    rw-p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/win32u.dll 
+0x7ab55000 0x7ab7c000 0x27000    0x15000    r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/win32u.dll 
+0x7ab90000 0x7ab91000 0x1000     0x0        r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/user32.dll 
+0x7ab91000 0x7ac2f000 0x9e000    0x1000     r-xp  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/user32.dll 
+0x7ac2f000 0x7ac30000 0x1000     0x9f000    rw-p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/user32.dll 
+0x7ac30000 0x7ad63000 0x133000   0xa0000    r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/user32.dll 
+0x7ad80000 0x7ad81000 0x1000     0x0        r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/gdi32.dll 
+0x7ad81000 0x7add2000 0x51000    0x1000     r-xp  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/gdi32.dll 
+0x7add2000 0x7add3000 0x1000     0x52000    rw-p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/gdi32.dll 
+0x7add3000 0x7ae0b000 0x38000    0x53000    r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/gdi32.dll 
+0x7ae20000 0x7ae21000 0x1000     0x0        r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/cryptbase.dll 
+0x7ae21000 0x7ae23000 0x2000     0x1000     r-xp  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/cryptbase.dll 
+0x7ae23000 0x7ae25000 0x2000     0x3000     rw-p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/cryptbase.dll 
+0x7ae25000 0x7ae2b000 0x6000     0x5000     r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/cryptbase.dll 
+0x7ae40000 0x7ae41000 0x1000     0x0        r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/rpcrt4.dll 
+0x7ae41000 0x7ae92000 0x51000    0x1000     r-xp  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/rpcrt4.dll 
+0x7ae92000 0x7ae93000 0x1000     0x52000    rw-p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/rpcrt4.dll 
+0x7ae93000 0x7aecd000 0x3a000    0x53000    r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/rpcrt4.dll 
+0x7aee0000 0x7aee1000 0x1000     0x0        r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/ucrtbase.dll 
+0x7aee1000 0x7af78000 0x97000    0x1000     r-xp  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/ucrtbase.dll 
+0x7af78000 0x7af7b000 0x3000     0x98000    rw-p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/ucrtbase.dll 
+0x7af7b000 0x7afcf000 0x54000    0x9b000    r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/ucrtbase.dll 
+0x7afe0000 0x7afe1000 0x1000     0x0        r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/cfgmgr32.dll 
+0x7afe1000 0x7aff2000 0x11000    0x1000     r-xp  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/cfgmgr32.dll 
+0x7aff2000 0x7aff3000 0x1000     0x12000    rw-p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/cfgmgr32.dll 
+0x7aff3000 0x7b006000 0x13000    0x13000    r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/cfgmgr32.dll 
+0x7b020000 0x7b021000 0x1000     0x0        r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/setupapi.dll 
+0x7b021000 0x7b05d000 0x3c000    0x1000     r-xp  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/setupapi.dll 
+0x7b05d000 0x7b05e000 0x1000     0x3d000    rw-p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/setupapi.dll 
+0x7b05e000 0x7b09a000 0x3c000    0x3e000    r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/setupapi.dll 
+0x7b0b0000 0x7b0b1000 0x1000     0x0        r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/sechost.dll 
+0x7b0b1000 0x7b0c2000 0x11000    0x1000     r-xp  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/sechost.dll 
+0x7b0c2000 0x7b0c3000 0x1000     0x12000    rw-p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/sechost.dll 
+0x7b0c3000 0x7b0d3000 0x10000    0x13000    r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/sechost.dll 
+0x7b0f0000 0x7b0f1000 0x1000     0x0        r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/msvcrt.dll 
+0x7b0f1000 0x7b16c000 0x7b000    0x1000     r-xp  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/msvcrt.dll 
+0x7b16c000 0x7b16f000 0x3000     0x7c000    rw-p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/msvcrt.dll 
+0x7b16f000 0x7b1a8000 0x39000    0x7f000    r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/msvcrt.dll 
+0x7b1c0000 0x7b1c1000 0x1000     0x0        r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/advapi32.dll 
+0x7b1c1000 0x7b1e3000 0x22000    0x1000     r-xp  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/advapi32.dll 
+0x7b1e3000 0x7b1e4000 0x1000     0x23000    rw-p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/advapi32.dll 
+0x7b1e4000 0x7b200000 0x1c000    0x24000    r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/advapi32.dll 
+0x7b210000 0x7b211000 0x1000     0x0        r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/shell32.dll 
+0x7b211000 0x7b2a3000 0x92000    0x1000     r-xp  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/shell32.dll 
+0x7b2a3000 0x7b2a5000 0x2000     0x93000    rw-p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/shell32.dll 
+0x7b2a5000 0x7bb6c000 0x8c7000   0x95000    r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/shell32.dll 
+0x7bb80000 0x7bb81000 0x1000     0x0        r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/kernelbase.dll 
+0x7bb81000 0x7bc0d000 0x8c000    0x1000     r-xp  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/kernelbase.dll 
+0x7bc0d000 0x7bc11000 0x4000     0x8d000    rw-p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/kernelbase.dll 
+0x7bc11000 0x7be35000 0x224000   0x91000    r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/kernelbase.dll 
+0x7be50000 0x7be51000 0x1000     0x0        r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/kernel32.dll 
+0x7be51000 0x7be81000 0x30000    0x1000     r-xp  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/kernel32.dll 
+0x7be81000 0x7be82000 0x1000     0x31000    rw-p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/kernel32.dll 
+0x7be82000 0x7beb9000 0x37000    0x32000    r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/kernel32.dll 
+0x7bed0000 0x7bed1000 0x1000     0x0        r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/ntdll.dll 
+0x7bed1000 0x7bf47000 0x76000    0x1000     r-xp  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/ntdll.dll 
+0x7bf47000 0x7bf4b000 0x4000     0x77000    rw-p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/ntdll.dll 
+0x7bf4b000 0x7bf90000 0x45000    0x7b000    r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/ntdll.dll 
+0x7bfa0000 0x7bfa1000 0x1000     0x0        r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/start.exe 
+0x7bfa1000 0x7bfa4000 0x3000     0x1000     r-xp  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/start.exe 
+0x7bfa4000 0x7bfa5000 0x1000     0x4000     rw-p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/start.exe 
+0x7bfa5000 0x7bfc4000 0x1f000    0x5000     r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-windows/start.exe 
+0x7d400000 0x7d402000 0x2000     0x1000     r-xp  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-unix/wine-preloader 
+0x7d402000 0x7d403000 0x1000     0x3000     r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-unix/wine-preloader 
+0x7d403000 0x7d405000 0x2000     0x3000     rw-p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-unix/wine-preloader 
+0x7df35000 0x7e0a3000 0x16e000   0x0        rw-p  [heap] 
+0x7eda5000 0x7ee00000 0x5b000    0x0        r--p  /usr/lib/locale/C.utf8/LC_CTYPE 
+0x7ee00000 0x7f000000 0x200000   0x0        r--p  /usr/lib/locale/locale-archive 
+0x7f000000 0x7fde0000 0xde0000   0x0        ---p   
+0x7fde0000 0x7ffc0000 0x1e0000   0x0        ---p   
+0x7ffc0000 0x7ffe0000 0x20000    0x0        rw-p   
+0x7ffe0000 0x7ffe1000 0x1000     0x0        r--s  /memfd:wine-mapping (deleted) 
+0x7ffe1000 0x7ffff000 0x1e000    0x0        ---p   
+0x7ffff000 0x80000000 0x1000     0x0        r-xp   
+0xf7032000 0xf7100000 0xce000    0x0        r--s  /var/cache/fontconfig/923e285e415b1073c8df160bee08820f-le32d4.cache-12 
+0xf7100000 0xf7113000 0x13000    0x0        r--s  /var/cache/fontconfig/42138c104eb74fbdba5a5759d830b924-le32d4.cache-12 
+0xf7113000 0xf711f000 0xc000     0x0        r--s  /var/cache/fontconfig/491f45a0a771fef1c10b9b647a97fb82-le32d4.cache-12 
+0xf711f000 0xf712f000 0x10000    0x0        r--s  /var/cache/fontconfig/614d1caaa4d7914789410f6367de37ca-le32d4.cache-12 
+0xf712f000 0xf7131000 0x2000     0x0        r--s  /var/cache/fontconfig/6ba42ae0000f58711b5caaf10d690066-le32d4.cache-12 
+0xf7131000 0xf7137000 0x6000     0x0        r--s  /var/cache/fontconfig/fb42211fc6e0c1a73c189e83d3791827-le32d4.cache-12 
+0xf7137000 0xf7142000 0xb000     0x0        r--s  /var/cache/fontconfig/210c0516121708a580e22e6b1f9a103a-le32d4.cache-12 
+0xf7142000 0xf7144000 0x2000     0x0        r--s  /var/cache/fontconfig/ec9db0aec63b087e87fa5135389d951c-le32d4.cache-12 
+0xf7144000 0xf7199000 0x55000    0x0        r--s  /var/cache/fontconfig/f6b893a7224233d96cb72fd88691c0b4-le32d4.cache-12 
+0xf7199000 0xf719e000 0x5000     0x0        r--s  /var/cache/fontconfig/28ddbb1b0d023a5cf0e6c50dfe471a8d-le32d4.cache-12 
+0xf719e000 0xf71a2000 0x4000     0x0        r--s  /var/cache/fontconfig/f349e9996a5320f6dd491cedd2b1f964-le32d4.cache-12 
+0xf71a2000 0xf71ab000 0x9000     0x0        r--s  /var/cache/fontconfig/4b31aef11cb0687b6d280d34cbe23592-le32d4.cache-12 
+0xf71ab000 0xf71ae000 0x3000     0x0        r--s  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runtime/visual-stack-cache/fontconfig/efde08813147d75c08c523aacc7f3484-le32d4.cache-12 
+0xf71ae000 0xf71b1000 0x3000     0x0        r--s  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runtime/visual-stack-cache/fontconfig/b8ed3063e854bda2986cf385ee4589e2-le32d4.cache-12 
+0xf71b1000 0xf71b4000 0x3000     0x0        r--s  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runtime/visual-stack-cache/fontconfig/3e69d28ed757fa757b9582178ac1ef4a-le32d4.cache-12 
+0xf71b4000 0xf71b7000 0x3000     0x0        r--s  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runtime/visual-stack-cache/fontconfig/c4affc40e4f8d1be697c96690c642db0-le32d4.cache-12 
+0xf71b7000 0xf71ba000 0x3000     0x0        r--s  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runtime/visual-stack-cache/fontconfig/5d4f19166019fa3f0a191893e85ff26f-le32d4.cache-12 
+0xf71ba000 0xf71bd000 0x3000     0x0        r--s  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runtime/visual-stack-cache/fontconfig/47b4a0170c4d2bee1cdd164dbf7beee5-le32d4.cache-12 
+0xf71bd000 0xf71c0000 0x3000     0x0        r--s  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runtime/visual-stack-cache/fontconfig/3042e941ea666353ac6f572b782377dd-le32d4.cache-12 
+0xf71c0000 0xf71c3000 0x3000     0x0        r--s  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runtime/visual-stack-cache/fontconfig/d6ae2455b380734e257a76db4e0e49e1-le32d4.cache-12 
+0xf71c3000 0xf71c6000 0x3000     0x0        r--s  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runtime/visual-stack-cache/fontconfig/b39350e5568ff956d5d622cbf9ae0ad5-le32d4.cache-12 
+0xf71c6000 0xf71c9000 0x3000     0x0        r--s  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runtime/visual-stack-cache/fontconfig/df45825635d9375285a6db1d6c197d70-le32d4.cache-12 
+0xf71c9000 0xf71cc000 0x3000     0x0        r--s  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runtime/visual-stack-cache/fontconfig/45b5bd71c1469d553b5411e00803cff8-le32d4.cache-12 
+0xf71cc000 0xf71cf000 0x3000     0x0        r--s  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runtime/visual-stack-cache/fontconfig/caa6578f6367d90d0448f76f79a38559-le32d4.cache-12 
+0xf71cf000 0xf71d2000 0x3000     0x0        r--s  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runtime/visual-stack-cache/fontconfig/8485f8d6a2935463e48ea61993d0ebf0-le32d4.cache-12 
+0xf71d2000 0xf71d5000 0x3000     0x0        r--s  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runtime/visual-stack-cache/fontconfig/7c510baa053181e7b85e0f8db130f022-le32d4.cache-12 
+0xf71d5000 0xf71d8000 0x3000     0x0        r--s  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runtime/visual-stack-cache/fontconfig/bafd0fe77711f77e53349b5663622dfc-le32d4.cache-12 
+0xf71d8000 0xf71db000 0x3000     0x0        r--s  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runtime/visual-stack-cache/fontconfig/39f837acdac53598a992ce0e70dcb669-le32d4.cache-12 
+0xf71db000 0xf71de000 0x3000     0x0        r--s  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runtime/visual-stack-cache/fontconfig/0c1f6514a9fed7a9b6b4d9954586ae14-le32d4.cache-12 
+0xf71de000 0xf71e1000 0x3000     0x0        r--s  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runtime/visual-stack-cache/fontconfig/b48dcc38a1df577e3e247e828c9a699c-le32d4.cache-12 
+0xf71e1000 0xf71e5000 0x4000     0x0        r--s  /var/cache/fontconfig/3830d5c3ddfd5cd38a049b759396e72e-le32d4.cache-12 
+0xf71e5000 0xf71e7000 0x2000     0x0        r--p  /usr/lib32/libexpat.so.1.13.0 
+0xf71e7000 0xf7207000 0x20000    0x2000     r-xp  /usr/lib32/libexpat.so.1.13.0 
+0xf7207000 0xf7211000 0xa000     0x22000    r--p  /usr/lib32/libexpat.so.1.13.0 
+0xf7211000 0xf7213000 0x2000     0x2b000    r--p  /usr/lib32/libexpat.so.1.13.0 
+0xf7213000 0xf7214000 0x1000     0x2d000    rw-p  /usr/lib32/libexpat.so.1.13.0 
+0xf7214000 0xf7219000 0x5000     0x0        r--p  /usr/lib32/libfontconfig.so.1.17.0 
+0xf7219000 0xf724d000 0x34000    0x5000     r-xp  /usr/lib32/libfontconfig.so.1.17.0 
+0xf724d000 0xf7282000 0x35000    0x39000    r--p  /usr/lib32/libfontconfig.so.1.17.0 
+0xf7282000 0xf7287000 0x5000     0x6d000    r--p  /usr/lib32/libfontconfig.so.1.17.0 
+0xf7287000 0xf7288000 0x1000     0x72000    rw-p  /usr/lib32/libfontconfig.so.1.17.0 
+0xf7288000 0xf728a000 0x2000     0x0        r--p  /usr/lib32/libpcre2-8.so.0.16.1 
+0xf728a000 0xf7301000 0x77000    0x2000     r-xp  /usr/lib32/libpcre2-8.so.0.16.1 
+0xf7301000 0xf732d000 0x2c000    0x79000    r--p  /usr/lib32/libpcre2-8.so.0.16.1 
+0xf732d000 0xf732e000 0x1000     0xa4000    r--p  /usr/lib32/libpcre2-8.so.0.16.1 
+0xf732e000 0xf732f000 0x1000     0xa5000    rw-p  /usr/lib32/libpcre2-8.so.0.16.1 
+0xf732f000 0xf7348000 0x19000    0x0        r--p  /usr/lib32/libglib-2.0.so.0.9000.1 
+0xf7348000 0xf73f4000 0xac000    0x19000    r-xp  /usr/lib32/libglib-2.0.so.0.9000.1 
+0xf73f4000 0xf7488000 0x94000    0xc5000    r--p  /usr/lib32/libglib-2.0.so.0.9000.1 
+0xf7488000 0xf7489000 0x1000     0x159000   r--p  /usr/lib32/libglib-2.0.so.0.9000.1 
+0xf7489000 0xf748a000 0x1000     0x15a000   rw-p  /usr/lib32/libglib-2.0.so.0.9000.1 
+0xf748a000 0xf7494000 0xa000     0x0        r--p  /usr/lib32/libharfbuzz.so.0.61460.0 
+0xf7494000 0xf759a000 0x106000   0xa000     r-xp  /usr/lib32/libharfbuzz.so.0.61460.0 
+0xf759a000 0xf75d0000 0x36000    0x110000   r--p  /usr/lib32/libharfbuzz.so.0.61460.0 
+0xf75d0000 0xf75d1000 0x1000     0x146000   r--p  /usr/lib32/libharfbuzz.so.0.61460.0 
+0xf75d1000 0xf75d2000 0x1000     0x147000   rw-p  /usr/lib32/libharfbuzz.so.0.61460.0 
+0xf75d2000 0xf75d3000 0x1000     0x0        r--p  /usr/lib32/libbrotlicommon.so.1.2.0 
+0xf75d3000 0xf75d4000 0x1000     0x1000     r-xp  /usr/lib32/libbrotlicommon.so.1.2.0 
+0xf75d4000 0xf75f3000 0x1f000    0x2000     r--p  /usr/lib32/libbrotlicommon.so.1.2.0 
+0xf75f3000 0xf75f4000 0x1000     0x20000    r--p  /usr/lib32/libbrotlicommon.so.1.2.0 
+0xf75f4000 0xf75f5000 0x1000     0x21000    rw-p  /usr/lib32/libbrotlicommon.so.1.2.0 
+0xf75f5000 0xf75f8000 0x3000     0x0        r--p  /usr/lib32/libgcc_s.so.1 
+0xf75f8000 0xf762b000 0x33000    0x3000     r-xp  /usr/lib32/libgcc_s.so.1 
+0xf762b000 0xf7631000 0x6000     0x36000    r--p  /usr/lib32/libgcc_s.so.1 
+0xf7631000 0xf7632000 0x1000     0x3b000    r--p  /usr/lib32/libgcc_s.so.1 
+0xf7632000 0xf7633000 0x1000     0x3c000    rw-p  /usr/lib32/libgcc_s.so.1 
+0xf7633000 0xf7634000 0x1000     0x0        r--p  /usr/lib32/libbrotlidec.so.1.2.0 
+0xf7634000 0xf763e000 0xa000     0x1000     r-xp  /usr/lib32/libbrotlidec.so.1.2.0 
+0xf763e000 0xf7641000 0x3000     0xb000     r--p  /usr/lib32/libbrotlidec.so.1.2.0 
+0xf7641000 0xf7642000 0x1000     0xd000     r--p  /usr/lib32/libbrotlidec.so.1.2.0 
+0xf7642000 0xf7643000 0x1000     0xe000     rw-p  /usr/lib32/libbrotlidec.so.1.2.0 
+0xf7643000 0xf7647000 0x4000     0x0        r--p  /usr/lib32/libpng16.so.16.59.0 
+0xf7647000 0xf7673000 0x2c000    0x4000     r-xp  /usr/lib32/libpng16.so.16.59.0 
+0xf7673000 0xf767d000 0xa000     0x30000    r--p  /usr/lib32/libpng16.so.16.59.0 
+0xf767d000 0xf767e000 0x1000     0x39000    r--p  /usr/lib32/libpng16.so.16.59.0 
+0xf767e000 0xf767f000 0x1000     0x3a000    rw-p  /usr/lib32/libpng16.so.16.59.0 
+0xf767f000 0xf7680000 0x1000     0x0        r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/i386-linux-gnu/libbz2.so.1.0.8 
+0xf7680000 0xf768e000 0xe000     0x1000     r-xp  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/i386-linux-gnu/libbz2.so.1.0.8 
+0xf768e000 0xf7690000 0x2000     0xf000     r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/i386-linux-gnu/libbz2.so.1.0.8 
+0xf7690000 0xf7691000 0x1000     0x10000    r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/i386-linux-gnu/libbz2.so.1.0.8 
+0xf7691000 0xf7692000 0x1000     0x11000    rw-p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/i386-linux-gnu/libbz2.so.1.0.8 
+0xf7692000 0xf7694000 0x2000     0x0        r--p  /usr/lib32/libz.so.1.3.1.zlib-ng 
+0xf7694000 0xf76ce000 0x3a000    0x2000     r-xp  /usr/lib32/libz.so.1.3.1.zlib-ng 
+0xf76ce000 0xf76d9000 0xb000     0x3c000    r--p  /usr/lib32/libz.so.1.3.1.zlib-ng 
+0xf76d9000 0xf76da000 0x1000     0x46000    r--p  /usr/lib32/libz.so.1.3.1.zlib-ng 
+0xf76da000 0xf76db000 0x1000     0x47000    rw-p  /usr/lib32/libz.so.1.3.1.zlib-ng 
+0xf76db000 0xf76df000 0x4000     0x0        r--p  /usr/lib32/libfreetype.so.6.20.7 
+0xf76df000 0xf7781000 0xa2000    0x4000     r-xp  /usr/lib32/libfreetype.so.6.20.7 
+0xf7781000 0xf77af000 0x2e000    0xa6000    r--p  /usr/lib32/libfreetype.so.6.20.7 
+0xf77af000 0xf77b4000 0x5000     0xd4000    r--p  /usr/lib32/libfreetype.so.6.20.7 
+0xf77b4000 0xf77b5000 0x1000     0xd9000    rw-p  /usr/lib32/libfreetype.so.6.20.7 
+0xf77b5000 0xf77c2000 0xd000     0x0        r--p  /usr/lib32/libm.so.6 
+0xf77c2000 0xf78a3000 0xe1000    0xd000     r-xp  /usr/lib32/libm.so.6 
+0xf78a3000 0xf78fa000 0x57000    0xee000    r--p  /usr/lib32/libm.so.6 
+0xf78fa000 0xf78fb000 0x1000     0x144000   r--p  /usr/lib32/libm.so.6 
+0xf78fb000 0xf78fc000 0x1000     0x145000   rw-p  /usr/lib32/libm.so.6 
+0xf78fc000 0xf7911000 0x15000    0x0        r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-unix/win32u.so 
+0xf7911000 0xf7a74000 0x163000   0x15000    r-xp  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-unix/win32u.so 
+0xf7a74000 0xf7ae9000 0x75000    0x178000   r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-unix/win32u.so 
+0xf7ae9000 0xf7aef000 0x6000     0x1ec000   r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-unix/win32u.so 
+0xf7aef000 0xf7af9000 0xa000     0x1f2000   rw-p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-unix/win32u.so 
+0xf7af9000 0xf7b33000 0x3a000    0x0        rw-p   
+0xf7b33000 0xf7b3a000 0x7000     0x0        r--s  /usr/lib32/gconv/gconv-modules.cache 
+0xf7b3a000 0xf7b41000 0x7000     0x0        r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-unix/ntdll.so 
+0xf7b41000 0xf7bb7000 0x76000    0x7000     r-xp  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-unix/ntdll.so 
+0xf7bb7000 0xf7bdc000 0x25000    0x7d000    r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-unix/ntdll.so 
+0xf7bdc000 0xf7bdd000 0x1000     0xa1000    r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-unix/ntdll.so 
+0xf7bdd000 0xf7bdf000 0x2000     0xa2000    rw-p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-unix/ntdll.so 
+0xf7bdf000 0xf7c20000 0x41000    0x0        rw-p   
+0xf7c20000 0xf7c3f000 0x1f000    0x0        r--p  /usr/lib32/libc.so.6 
+0xf7c3f000 0xf7e38000 0x1f9000   0x1f000    r-xp  /usr/lib32/libc.so.6 
+0xf7e38000 0xf7eb5000 0x7d000    0x218000   r--p  /usr/lib32/libc.so.6 
+0xf7eb5000 0xf7eb7000 0x2000     0x295000   r--p  /usr/lib32/libc.so.6 
+0xf7eb7000 0xf7eb8000 0x1000     0x297000   rw-p  /usr/lib32/libc.so.6 
+0xf7eb8000 0xf7ebf000 0x7000     0x0        rw-p   
+0xf7ebf000 0xf7ef6000 0x37000    0x0        r--p  /etc/ld.so.cache 
+0xf7ef6000 0xf7ef7000 0x1000     0x0        r--p  /usr/lib32/ld-linux.so.2 
+0xf7ef7000 0xf7f26000 0x2f000    0x1000     r-xp  /usr/lib32/ld-linux.so.2 
+0xf7f26000 0xf7f37000 0x11000    0x30000    r--p  /usr/lib32/ld-linux.so.2 
+0xf7f37000 0xf7f39000 0x2000     0x40000    r--p  /usr/lib32/ld-linux.so.2 
+0xf7f39000 0xf7f3a000 0x1000     0x42000    rw-p  /usr/lib32/ld-linux.so.2 
+0xf7f3a000 0xf7f3b000 0x1000     0x0        r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-unix/wine 
+0xf7f3b000 0xf7f3c000 0x1000     0x1000     r-xp  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-unix/wine 
+0xf7f3c000 0xf7f3d000 0x1000     0x2000     r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-unix/wine 
+0xf7f3d000 0xf7f3e000 0x1000     0x2000     r--p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-unix/wine 
+0xf7f3e000 0xf7f3f000 0x1000     0x3000     rw-p  /home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/i386-unix/wine 
+0xf7f3f000 0xf7f43000 0x4000     0x0        r--p  [vvar] 
+0xf7f43000 0xf7f45000 0x2000     0x0        r--p  [vvar_vclock] 
+0xf7f45000 0xf7f48000 0x3000     0x0        r-xp  [vdso] 
+0xffb8f000 0xffbb1000 0x22000    0x0        rw-p  [stack] 
+0xffcf0000 0xffff0000 0x300000   0x0        rw-p   
+[Inferior 1 (process 657473) detached]

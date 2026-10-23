@@ -1,0 +1,44 @@
+$ x86_64-w64-mingw32-g++ -std=c++17 -O2 -Wall -Wextra -static -o /home/suraj/Projects/Nier-Automata-Rendering/analysis/fsr-test/fsr_inference_probe.exe /home/suraj/Projects/Nier-Automata-Rendering/analysis/checks/fsr_inference_probe.cpp -ld3d11 -ldxguid -luuid
+/home/suraj/Projects/Nier-Automata-Rendering/analysis/checks/fsr_inference_probe.cpp: In function ‘int main()’:
+/home/suraj/Projects/Nier-Automata-Rendering/analysis/checks/fsr_inference_probe.cpp:200:18: warning: cast between incompatible function types from ‘FARPROC’ {aka ‘long long int (*)()’} to ‘int (*)(const char*, int, const char*, const wchar_t*, ID3D11Device*, int, const void*)’ [-Wcast-function-type]
+  200 |     api.member = reinterpret_cast<decltype(api.member)>(GetProcAddress(module, "NVSDK_NGX_D3D11_" #member)); \
+      |                  ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/suraj/Projects/Nier-Automata-Rendering/analysis/checks/fsr_inference_probe.cpp:202:5: note: in expansion of macro ‘RESOLVE’
+  202 |     RESOLVE(Init_ProjectID);
+      |     ^~~~~~~
+/home/suraj/Projects/Nier-Automata-Rendering/analysis/checks/fsr_inference_probe.cpp:200:18: warning: cast between incompatible function types from ‘FARPROC’ {aka ‘long long int (*)()’} to ‘int (*)(void**)’ [-Wcast-function-type]
+  200 |     api.member = reinterpret_cast<decltype(api.member)>(GetProcAddress(module, "NVSDK_NGX_D3D11_" #member)); \
+      |                  ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/suraj/Projects/Nier-Automata-Rendering/analysis/checks/fsr_inference_probe.cpp:203:5: note: in expansion of macro ‘RESOLVE’
+  203 |     RESOLVE(AllocateParameters);
+      |     ^~~~~~~
+/home/suraj/Projects/Nier-Automata-Rendering/analysis/checks/fsr_inference_probe.cpp:200:18: warning: cast between incompatible function types from ‘FARPROC’ {aka ‘long long int (*)()’} to ‘int (*)(void*)’ [-Wcast-function-type]
+  200 |     api.member = reinterpret_cast<decltype(api.member)>(GetProcAddress(module, "NVSDK_NGX_D3D11_" #member)); \
+      |                  ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/suraj/Projects/Nier-Automata-Rendering/analysis/checks/fsr_inference_probe.cpp:204:5: note: in expansion of macro ‘RESOLVE’
+  204 |     RESOLVE(DestroyParameters);
+      |     ^~~~~~~
+/home/suraj/Projects/Nier-Automata-Rendering/analysis/checks/fsr_inference_probe.cpp:200:18: warning: cast between incompatible function types from ‘FARPROC’ {aka ‘long long int (*)()’} to ‘int (*)(ID3D11DeviceContext*, int, void*, void**)’ [-Wcast-function-type]
+  200 |     api.member = reinterpret_cast<decltype(api.member)>(GetProcAddress(module, "NVSDK_NGX_D3D11_" #member)); \
+      |                  ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/suraj/Projects/Nier-Automata-Rendering/analysis/checks/fsr_inference_probe.cpp:205:5: note: in expansion of macro ‘RESOLVE’
+  205 |     RESOLVE(CreateFeature);
+      |     ^~~~~~~
+/home/suraj/Projects/Nier-Automata-Rendering/analysis/checks/fsr_inference_probe.cpp:200:18: warning: cast between incompatible function types from ‘FARPROC’ {aka ‘long long int (*)()’} to ‘int (*)(ID3D11DeviceContext*, const void*, const void*, void*)’ [-Wcast-function-type]
+  200 |     api.member = reinterpret_cast<decltype(api.member)>(GetProcAddress(module, "NVSDK_NGX_D3D11_" #member)); \
+      |                  ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/suraj/Projects/Nier-Automata-Rendering/analysis/checks/fsr_inference_probe.cpp:206:5: note: in expansion of macro ‘RESOLVE’
+  206 |     RESOLVE(EvaluateFeature);
+      |     ^~~~~~~
+/home/suraj/Projects/Nier-Automata-Rendering/analysis/checks/fsr_inference_probe.cpp:200:18: warning: cast between incompatible function types from ‘FARPROC’ {aka ‘long long int (*)()’} to ‘int (*)(void*)’ [-Wcast-function-type]
+  200 |     api.member = reinterpret_cast<decltype(api.member)>(GetProcAddress(module, "NVSDK_NGX_D3D11_" #member)); \
+      |                  ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/suraj/Projects/Nier-Automata-Rendering/analysis/checks/fsr_inference_probe.cpp:207:5: note: in expansion of macro ‘RESOLVE’
+  207 |     RESOLVE(ReleaseFeature);
+      |     ^~~~~~~
+/home/suraj/Projects/Nier-Automata-Rendering/analysis/checks/fsr_inference_probe.cpp:200:18: warning: cast between incompatible function types from ‘FARPROC’ {aka ‘long long int (*)()’} to ‘int (*)()’ [-Wcast-function-type]
+  200 |     api.member = reinterpret_cast<decltype(api.member)>(GetProcAddress(module, "NVSDK_NGX_D3D11_" #member)); \
+      |                  ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/suraj/Projects/Nier-Automata-Rendering/analysis/checks/fsr_inference_probe.cpp:208:5: note: in expansion of macro ‘RESOLVE’
+  208 |     RESOLVE(Shutdown);
+      |     ^~~~~~~

@@ -1,0 +1,69 @@
+{
+  "created_utc": "20261018T201659Z",
+  "game_directory": "/mnt/second/SteamLibrary/steamapps/common/NieRAutomata",
+  "game_exe_sha256": "042e9fef839eb1c7722cee971d5f50c132b018ec02aa0d4ae38dbc62d5a9daa8",
+  "original_launch_options": "mangohud gamemoderun %command%",
+  "original_runner_last_observed": "GE-Proton11-1",
+  "files": [
+    {
+      "source": "/mnt/second/SteamLibrary/steamapps/compatdata/524220/pfx/drive_c/users/steamuser/Documents/My Games/NieR_Automata/SlotData_0.dat",
+      "backup": "saves/SlotData_0.dat",
+      "bytes": 235980,
+      "sha256": "ffab41c4cc25458521f41e66588bb81993472e819bdc7a9d87dfc2d111326ffe"
+    },
+    {
+      "source": "/mnt/second/SteamLibrary/steamapps/compatdata/524220/pfx/drive_c/users/steamuser/Documents/My Games/NieR_Automata/SystemData.dat",
+      "backup": "saves/SystemData.dat",
+      "bytes": 72,
+      "sha256": "fabe19d44fb88c0fece66d629ba907d0b003079199ecafb84a892114d4dbbac5"
+    },
+    {
+      "source": "/mnt/second/SteamLibrary/steamapps/compatdata/524220/pfx/drive_c/users/steamuser/Documents/My Games/NieR_Automata/steam_autocloud.vdf",
+      "backup": "saves/steam_autocloud.vdf",
+      "bytes": 53,
+      "sha256": "49198067aed0ed6ab5b12a878571ee754b606566830ebf846795f5ca138b9a5d"
+    },
+    {
+      "source": "/mnt/second/SteamLibrary/steamapps/compatdata/524220/pfx/drive_c/users/steamuser/Documents/My Games/NieR_Automata/Graphic.ini",
+      "backup": "saves/Graphic.ini",
+      "bytes": 804,
+      "sha256": "c40c18176ad81fd9c9e9947d7ed653d53bcff3fdb9f62ce1d0f1b8b682a6e6c3"
+    },
+    {
+      "source": "/mnt/second/SteamLibrary/steamapps/compatdata/524220/pfx/drive_c/users/steamuser/Documents/My Games/NieR_Automata/GameData.dat",
+      "backup": "saves/GameData.dat",
+      "bytes": 1128,
+      "sha256": "192875a2923604936e7484578c268df96b3d37804839f0b7d3b81482add325ca"
+    },
+    {
+      "source": "/mnt/second/SteamLibrary/steamapps/common/NieRAutomata/FAR.ini",
+      "backup": "game-config/FAR.ini",
+      "bytes": 549,
+      "sha256": "db8624ce554822e5da7382ad0a229bbc3dfe3e653147cbde9b4e63b5a750f87e"
+    },
+    {
+      "source": "/mnt/second/SteamLibrary/steamapps/common/NieRAutomata/d3d11.ini",
+      "backup": "game-config/d3d11.ini",
+      "bytes": 10513,
+      "sha256": "b8f5a221e9984db50db39e8f303fd4f65084ff4a41a9e58e712cd1c3d49cfa7d"
+    },
+    {
+      "source": "/home/suraj/.local/share/Steam/userdata/1013935791/524220/remotecache.vdf",
+      "backup": "steam-app-userdata/1013935791/524220/remotecache.vdf",
+      "bytes": 878,
+      "sha256": "0e5fffbd977267a33592565267f8b546ef9dc81ed9daadb64c8c4c5f83b41974"
+    }
+  ],
+  "planned_added_files": [
+    "d3d11.dll",
+    "NIER_DLAA.ini",
+    "NIER_FSR4.dll",
+    "NIER_FSR4.ini",
+    "amd_fidelityfx_loader_dx12.dll",
+    "amd_fidelityfx_upscaler_dx12.dll",
+    "AMD_FidelityFX_LICENSE.md",
+    "NIER_FSR4_README.md"
+  ],
+  "planned_runner_link": "/home/suraj/.local/share/Steam/compatibilitytools.d/GE-Proton11-7-x86_64",
+  "runner_source": "/home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64"
+}

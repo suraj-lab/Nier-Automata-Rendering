@@ -1,0 +1,8 @@
+{
+  "exit": 0,
+  "timed_out": false,
+  "seconds": 6.2,
+  "stop": 0,
+  "result": "WINDOW OK\nCREATE 0x00000000\nPRESENTED 302\nRESULT PASS",
+  "sk_log_tail": null
+}

@@ -1,0 +1,38 @@
+NIER_FSR4 log, 2026-10-18
+21:09:38.135 NIER_FSR4 32667ad-local-check loaded from Z:\home\suraj\Projects\Nier-Automata-Rendering\analysis\fsr-test-ge11-7\NIER_FSR4.dll (FSR SDK 2.3.0 / FSR 4.1.1 API)
+21:09:38.136 process Z:\home\suraj\Projects\Nier-Automata-Rendering\analysis\fsr-test-ge11-7\fsr_inference_probe.exe, Windows 10.0 build 19045
+21:09:38.137 config: Version=4.1.1 Sharpening=0 Sharpness=0.00 JitterSign=+1/+1 MVScale=1.000/1.000 DepthInverted=-1 DepthInfinite=0 AutoExposure=-1 HDR=-1 DebugView=0 ReadFromMod=0 Near=0.1000 Far=1000.0 Fov=50.0
+21:09:38.181 NVSDK_NGX_D3D11_Init_ProjectID: project synthetic-fsr-probe, sdk 0x15
+21:09:38.181 NVSDK_NGX_D3D11_Init_ProjectID: device 0000000000d8ec08
+21:09:38.181 env: NGX caller module Z:\home\suraj\Projects\Nier-Automata-Rendering\analysis\fsr-test-ge11-7\fsr_inference_probe.exe (timestamp 0x6AD5262C, size of image 0xC0000)
+21:09:38.181 env: caller is not the NIER_DLAA 1.1 d3d11.dll
+21:09:38.181 env: running under Wine/Proton 11.0
+21:09:38.181 mod camera data: not found, using [Camera] values
+21:09:38.182 bridge: game adapter AMD Radeon RX 9070 XT (RADV GFX1201) (vendor 0x1002 device 0x7550), driver 35.0.65535.65535, 16304 MB dedicated VRAM
+21:09:38.222 bridge: D3D12 device ready
+21:09:38.224 CreateFeature: 640x360 -> 640x360, quality 5, DLSS flags 0x43
+21:09:38.231 FSR: provider available: 4.1.1 (id 0xF5A5CA1E01001001)
+21:09:38.231 FSR: provider available: 4.1.1 (id 0xF5A5CA1E01001001)
+21:09:38.231 FSR: provider available: 3.1.5 (id 0xF5A5CA1E00C01005)
+21:09:38.231 FSR: provider available: 2.3.4 (id 0xF5A5CA1E00803004)
+21:09:38.234 FSR: context created, render 640x360 -> 640x360, flags 0xA1 (DLSS flags 0x43), provider 4.1.1
+21:09:38.235 bridge: the shared colour texture needed the fallback flags 0x21 on this driver
+21:09:38.235 bridge: shared colour texture 640x360, game format 10, shared format 10, flags 0x21
+21:09:38.235 bridge: the shared depth texture needed the fallback flags 0x21 on this driver
+21:09:38.235 bridge: shared depth texture 640x360, game format 41, shared format 41, flags 0x21
+21:09:38.236 bridge: the shared motion vector texture needed the fallback flags 0x21 on this driver
+21:09:38.236 bridge: shared motion vector texture 640x360, game format 34, shared format 34, flags 0x21
+21:09:38.236 bridge: the shared output texture needed the fallback flags 0x25 on this driver
+21:09:38.236 bridge: shared output texture 640x360, game format 10, shared format 10, flags 0x25
+21:09:38.858 evaluate: frame 0, render 640x360 -> 640x360, jitter 0.000 0.000, mv scale 1.00 1.00, reset 1, near 0.1000 far 1000.0 fov 50.0 deg, dt 16.67 ms
+21:09:38.866 ReleaseFeature: 1
+21:09:38.866 summary (feature destroyed): 16 frames evaluated, 0 evaluate failures, 0 context rebuilds since start
+21:09:38.868 CreateFeature: 320x180 -> 640x360, quality 0, DLSS flags 0x43
+21:09:38.871 FSR: context created, render 320x180 -> 640x360, flags 0xA1 (DLSS flags 0x43), provider 4.1.1
+21:09:38.871 bridge: shared colour texture 320x180, game format 10, shared format 10, flags 0x21
+21:09:38.871 bridge: shared depth texture 320x180, game format 41, shared format 41, flags 0x21
+21:09:38.871 bridge: shared motion vector texture 320x180, game format 34, shared format 34, flags 0x21
+21:09:38.873 evaluate: frame 0, render 320x180 -> 640x360, jitter 0.000 0.000, mv scale 1.00 1.00, reset 1, near 0.1000 far 1000.0 fov 50.0 deg, dt 16.67 ms
+21:09:38.881 ReleaseFeature: 2
+21:09:38.881 summary (feature destroyed): 32 frames evaluated, 0 evaluate failures, 0 context rebuilds since start
+21:09:38.882 shutdown

@@ -1,0 +1,21 @@
+{
+  "origin": "https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK.git",
+  "tag": "v2.3.0",
+  "commit": "60f4ea81909200d8542eca14dccb2628b763a9a3",
+  "files": [
+    {
+      "file": "amd_fidelityfx_loader_dx12.dll",
+      "bytes": 26376,
+      "sha256": "e2d85aa05a9bd9ed8b38935fdf5199372cca6f74c12015143bb6f945ee1608aa",
+      "matches_bridge_pin": true
+    },
+    {
+      "file": "amd_fidelityfx_upscaler_dx12.dll",
+      "bytes": 28761864,
+      "sha256": "d0dcccc74a43c44ba435b7a369b456e0970d8a4464e4bd683119b374f2c9fb46",
+      "matches_bridge_pin": true
+    }
+  ],
+  "license_sha256": "6757f2fec461238da6f84f83536ec195e8c036b1773a06f6f34301b9ed8c0963",
+  "authenticode_verified": false
+}

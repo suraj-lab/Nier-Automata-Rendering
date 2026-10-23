@@ -1,0 +1,11 @@
+{
+  "lod_files_verified": 2,
+  "latest_backups_verified": 9,
+  "staged_textures_verified": 292,
+  "specialk_installed": false,
+  "textures_active": false,
+  "fsr4_and_f8_unchanged": true,
+  "game_specific_lod_patches_runtime_tested": false,
+  "specialk_synthetic_test_blocked": true,
+  "planned_order": "visual stack -> engine upscaling -> profiling/FPS cap assessment -> frame generation"
+}

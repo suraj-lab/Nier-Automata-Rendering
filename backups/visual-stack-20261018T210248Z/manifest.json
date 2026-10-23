@@ -1,0 +1,66 @@
+{
+  "files": [
+    {
+      "source": "/mnt/second/SteamLibrary/steamapps/common/NieRAutomata/FAR.ini",
+      "backup": "game-config/FAR.ini",
+      "sha256": "db8624ce554822e5da7382ad0a229bbc3dfe3e653147cbde9b4e63b5a750f87e",
+      "bytes": 549
+    },
+    {
+      "source": "/mnt/second/SteamLibrary/steamapps/common/NieRAutomata/d3d11.ini",
+      "backup": "game-config/d3d11.ini",
+      "sha256": "b8f5a221e9984db50db39e8f303fd4f65084ff4a41a9e58e712cd1c3d49cfa7d",
+      "bytes": 10513
+    },
+    {
+      "source": "/mnt/second/SteamLibrary/steamapps/common/NieRAutomata/NIER_DLAA.ini",
+      "backup": "game-config/NIER_DLAA.ini",
+      "sha256": "3163360d28e7f12c04013b54a82900c160ac5a65cfc395d9272f293624fa8a64",
+      "bytes": 1602
+    },
+    {
+      "source": "/mnt/second/SteamLibrary/steamapps/common/NieRAutomata/NIER_FSR4.ini",
+      "backup": "game-config/NIER_FSR4.ini",
+      "sha256": "e87fe977d8df2f1634c09997ed837b923dc65dcc53bb571e973b3657bf08fe50",
+      "bytes": 1611
+    },
+    {
+      "source": "/mnt/second/SteamLibrary/steamapps/compatdata/524220/pfx/drive_c/users/steamuser/Documents/My Games/NieR_Automata/SlotData_0.dat",
+      "backup": "saves/SlotData_0.dat",
+      "sha256": "6c41c703dfe325e38e2c1caf15e5e193ab5593d0507f7f2367b898e4b683ab1a",
+      "bytes": 235980
+    },
+    {
+      "source": "/mnt/second/SteamLibrary/steamapps/compatdata/524220/pfx/drive_c/users/steamuser/Documents/My Games/NieR_Automata/SystemData.dat",
+      "backup": "saves/SystemData.dat",
+      "sha256": "75bbaab7922acb1adabc7e4cc06c2e167331ca4363069e753218c4d3990828ea",
+      "bytes": 72
+    },
+    {
+      "source": "/mnt/second/SteamLibrary/steamapps/compatdata/524220/pfx/drive_c/users/steamuser/Documents/My Games/NieR_Automata/steam_autocloud.vdf",
+      "backup": "saves/steam_autocloud.vdf",
+      "sha256": "49198067aed0ed6ab5b12a878571ee754b606566830ebf846795f5ca138b9a5d",
+      "bytes": 53
+    },
+    {
+      "source": "/mnt/second/SteamLibrary/steamapps/compatdata/524220/pfx/drive_c/users/steamuser/Documents/My Games/NieR_Automata/Graphic.ini",
+      "backup": "saves/Graphic.ini",
+      "sha256": "c40c18176ad81fd9c9e9947d7ed653d53bcff3fdb9f62ce1d0f1b8b682a6e6c3",
+      "bytes": 804
+    },
+    {
+      "source": "/mnt/second/SteamLibrary/steamapps/compatdata/524220/pfx/drive_c/users/steamuser/Documents/My Games/NieR_Automata/GameData.dat",
+      "backup": "saves/GameData.dat",
+      "sha256": "c9286d67a9d2f0ef479d5b06824532a2f78b1642e8fc5b15d9f8a43c5e8b2c43",
+      "bytes": 1128
+    }
+  ],
+  "baseline_game_hashes": {
+    "NieRAutomata.exe": "042e9fef839eb1c7722cee971d5f50c132b018ec02aa0d4ae38dbc62d5a9daa8",
+    "d3d11.dll": "3d628eb576b505180206653d72e4e4da6a4345334f19863256ab5b10e06b6915",
+    "NIER_DLAA.ini": "3163360d28e7f12c04013b54a82900c160ac5a65cfc395d9272f293624fa8a64",
+    "NIER_FSR4.dll": "236511e11b0e4f516d1d6c475bcf2ffccbf05f662a7b468d9e0597cf1afb87c9",
+    "NIER_FSR4.ini": "e87fe977d8df2f1634c09997ed837b923dc65dcc53bb571e973b3657bf08fe50"
+  },
+  "note": "Current saves backed up after the user game session."
+}

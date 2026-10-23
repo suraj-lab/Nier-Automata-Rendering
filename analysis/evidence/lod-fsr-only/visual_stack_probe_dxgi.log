@@ -1,0 +1,22 @@
+info:  Game: visual_stack_probe.exe
+info:  DXVK: v3.1-19-g601930949d111ed0
+info:  Build: x86_64 gcc 14.0.0
+info:  Vulkan: Found vkGetInstanceProcAddr in winevulkan.dll @ 0x6ffffc548a80
+info:  Extension providers:
+info:    Platform WSI
+info:    OpenVR
+info:    OpenXR
+warn:  OpenXR: Unable to get required Vulkan instance extensions size
+info:  Enabled instance extensions:
+info:    VK_KHR_get_surface_capabilities2
+info:    VK_KHR_surface
+info:    VK_KHR_surface_maintenance1
+info:    VK_KHR_win32_surface
+info:  Found device: AMD Radeon RX 9070 XT (RADV GFX1201) (radv 26.2.4)
+info:  Found device: Radeon RX 6800/6800 XT / 6900 XT (radv 26.2.4)
+info:  Found device: AMD Radeon(TM) Graphics (radv 26.2.4)
+warn:  OpenXR: Unable to get required Vulkan Device extensions size
+warn:  DxgiAdapter::QueryInterface: Unknown interface query
+warn:  f0db4c7f-fe5a-42a2-bd62-f2a6cf6fc83e
+warn:  CreateDXGIFactory2: Ignoring flags
+warn:  CreateDXGIFactory2: Ignoring flags

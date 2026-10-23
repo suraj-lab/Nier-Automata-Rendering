@@ -1,0 +1,23 @@
+{
+  "quarantine": "/home/suraj/Projects/Nier-Automata-Rendering/quarantine/specialk-crash-20261018T215003Z",
+  "moved": [
+    {
+      "name": "dxgi.dll",
+      "sha256": "8a7d7e42fecf0035ab26d57b46c78a02219e4e92c0239d76ac3827093fdeb9dd"
+    },
+    {
+      "name": "dxgi.ini",
+      "sha256": "110c3b479748c452a1b30a57eb21e7ddf5c4877af639850f5f33af170820bd41"
+    }
+  ],
+  "cause": "Special K (dxgi.dll) and NIER_DLAA/FSR4 d3d11 proxy both MinHook D3D11/DXGI; proxy hooked SK dummy swapchain; game exited ~2 s after launch before FSR init",
+  "left_in_place": [
+    "SK_Res/inject textures (inert without an injector)",
+    "FAR.ini with UncapFPS=false (inert without SK)"
+  ],
+  "working_setup_restored": [
+    "d3d11.dll FSR4 proxy",
+    "dinput8.dll LodMod"
+  ],
+  "launch_options": "WINEDLLOVERRIDES=\"d3d11=n,b;dinput8=n,b\" mangohud gamemoderun %command%"
+}

@@ -1,0 +1,261 @@
+{
+  "passed": true,
+  "binary_sha256": "f5c779862e5b4155595ac6ff36fdf13eb533b8bcb235e7f200af05abf64eb7a7",
+  "exports": [
+    {
+      "ordinal": 1,
+      "name": "D3D11CreateDeviceForD3D12",
+      "forwarder": "d3d11_dlaa.D3D11CreateDeviceForD3D12"
+    },
+    {
+      "ordinal": 2,
+      "name": "D3DKMTCloseAdapter",
+      "forwarder": "d3d11_dlaa.D3DKMTCloseAdapter"
+    },
+    {
+      "ordinal": 3,
+      "name": "D3DKMTDestroyAllocation",
+      "forwarder": "d3d11_dlaa.D3DKMTDestroyAllocation"
+    },
+    {
+      "ordinal": 4,
+      "name": "D3DKMTDestroyContext",
+      "forwarder": "d3d11_dlaa.D3DKMTDestroyContext"
+    },
+    {
+      "ordinal": 5,
+      "name": "D3DKMTDestroyDevice",
+      "forwarder": "d3d11_dlaa.D3DKMTDestroyDevice"
+    },
+    {
+      "ordinal": 6,
+      "name": "D3DKMTDestroySynchronizationObject",
+      "forwarder": "d3d11_dlaa.D3DKMTDestroySynchronizationObject"
+    },
+    {
+      "ordinal": 7,
+      "name": "D3DKMTPresent",
+      "forwarder": "d3d11_dlaa.D3DKMTPresent"
+    },
+    {
+      "ordinal": 8,
+      "name": "D3DKMTQueryAdapterInfo",
+      "forwarder": "d3d11_dlaa.D3DKMTQueryAdapterInfo"
+    },
+    {
+      "ordinal": 9,
+      "name": "D3DKMTSetDisplayPrivateDriverFormat",
+      "forwarder": "d3d11_dlaa.D3DKMTSetDisplayPrivateDriverFormat"
+    },
+    {
+      "ordinal": 10,
+      "name": "D3DKMTSignalSynchronizationObject",
+      "forwarder": "d3d11_dlaa.D3DKMTSignalSynchronizationObject"
+    },
+    {
+      "ordinal": 11,
+      "name": "D3DKMTUnlock",
+      "forwarder": "d3d11_dlaa.D3DKMTUnlock"
+    },
+    {
+      "ordinal": 12,
+      "name": "D3DKMTWaitForSynchronizationObject",
+      "forwarder": "d3d11_dlaa.D3DKMTWaitForSynchronizationObject"
+    },
+    {
+      "ordinal": 13,
+      "name": "EnableFeatureLevelUpgrade",
+      "forwarder": "d3d11_dlaa.EnableFeatureLevelUpgrade"
+    },
+    {
+      "ordinal": 14,
+      "name": "OpenAdapter10",
+      "forwarder": "d3d11_dlaa.OpenAdapter10"
+    },
+    {
+      "ordinal": 15,
+      "name": "OpenAdapter10_2",
+      "forwarder": "d3d11_dlaa.OpenAdapter10_2"
+    },
+    {
+      "ordinal": 16,
+      "name": "CreateDirect3D11DeviceFromDXGIDevice",
+      "forwarder": "d3d11_dlaa.CreateDirect3D11DeviceFromDXGIDevice"
+    },
+    {
+      "ordinal": 17,
+      "name": "CreateDirect3D11SurfaceFromDXGISurface",
+      "forwarder": "d3d11_dlaa.CreateDirect3D11SurfaceFromDXGISurface"
+    },
+    {
+      "ordinal": 18,
+      "name": "D3D11CoreCreateDevice",
+      "forwarder": "d3d11_dlaa.D3D11CoreCreateDevice"
+    },
+    {
+      "ordinal": 19,
+      "name": "D3D11CoreCreateLayeredDevice",
+      "forwarder": "d3d11_dlaa.D3D11CoreCreateLayeredDevice"
+    },
+    {
+      "ordinal": 20,
+      "name": "D3D11CoreGetLayeredDeviceSize",
+      "forwarder": "d3d11_dlaa.D3D11CoreGetLayeredDeviceSize"
+    },
+    {
+      "ordinal": 21,
+      "name": "D3D11CoreRegisterLayers",
+      "forwarder": "d3d11_dlaa.D3D11CoreRegisterLayers"
+    },
+    {
+      "ordinal": 22,
+      "name": "D3D11CreateDevice",
+      "forwarder": null
+    },
+    {
+      "ordinal": 23,
+      "name": "D3D11CreateDeviceAndSwapChain",
+      "forwarder": null
+    },
+    {
+      "ordinal": 24,
+      "name": "D3D11On12CreateDevice",
+      "forwarder": "d3d11_dlaa.D3D11On12CreateDevice"
+    },
+    {
+      "ordinal": 25,
+      "name": "D3DKMTCreateAllocation",
+      "forwarder": "d3d11_dlaa.D3DKMTCreateAllocation"
+    },
+    {
+      "ordinal": 26,
+      "name": "D3DKMTCreateContext",
+      "forwarder": "d3d11_dlaa.D3DKMTCreateContext"
+    },
+    {
+      "ordinal": 27,
+      "name": "D3DKMTCreateDevice",
+      "forwarder": "d3d11_dlaa.D3DKMTCreateDevice"
+    },
+    {
+      "ordinal": 28,
+      "name": "D3DKMTCreateSynchronizationObject",
+      "forwarder": "d3d11_dlaa.D3DKMTCreateSynchronizationObject"
+    },
+    {
+      "ordinal": 29,
+      "name": "D3DKMTEscape",
+      "forwarder": "d3d11_dlaa.D3DKMTEscape"
+    },
+    {
+      "ordinal": 30,
+      "name": "D3DKMTGetContextSchedulingPriority",
+      "forwarder": "d3d11_dlaa.D3DKMTGetContextSchedulingPriority"
+    },
+    {
+      "ordinal": 31,
+      "name": "D3DKMTGetDeviceState",
+      "forwarder": "d3d11_dlaa.D3DKMTGetDeviceState"
+    },
+    {
+      "ordinal": 32,
+      "name": "D3DKMTGetDisplayModeList",
+      "forwarder": "d3d11_dlaa.D3DKMTGetDisplayModeList"
+    },
+    {
+      "ordinal": 33,
+      "name": "D3DKMTGetMultisampleMethodList",
+      "forwarder": "d3d11_dlaa.D3DKMTGetMultisampleMethodList"
+    },
+    {
+      "ordinal": 34,
+      "name": "D3DKMTGetRuntimeData",
+      "forwarder": "d3d11_dlaa.D3DKMTGetRuntimeData"
+    },
+    {
+      "ordinal": 35,
+      "name": "D3DKMTGetSharedPrimaryHandle",
+      "forwarder": "d3d11_dlaa.D3DKMTGetSharedPrimaryHandle"
+    },
+    {
+      "ordinal": 36,
+      "name": "D3DKMTLock",
+      "forwarder": "d3d11_dlaa.D3DKMTLock"
+    },
+    {
+      "ordinal": 37,
+      "name": "D3DKMTOpenAdapterFromHdc",
+      "forwarder": "d3d11_dlaa.D3DKMTOpenAdapterFromHdc"
+    },
+    {
+      "ordinal": 38,
+      "name": "D3DKMTOpenResource",
+      "forwarder": "d3d11_dlaa.D3DKMTOpenResource"
+    },
+    {
+      "ordinal": 39,
+      "name": "D3DKMTQueryAllocationResidency",
+      "forwarder": "d3d11_dlaa.D3DKMTQueryAllocationResidency"
+    },
+    {
+      "ordinal": 40,
+      "name": "D3DKMTQueryResourceInfo",
+      "forwarder": "d3d11_dlaa.D3DKMTQueryResourceInfo"
+    },
+    {
+      "ordinal": 41,
+      "name": "D3DKMTRender",
+      "forwarder": "d3d11_dlaa.D3DKMTRender"
+    },
+    {
+      "ordinal": 42,
+      "name": "D3DKMTSetAllocationPriority",
+      "forwarder": "d3d11_dlaa.D3DKMTSetAllocationPriority"
+    },
+    {
+      "ordinal": 43,
+      "name": "D3DKMTSetContextSchedulingPriority",
+      "forwarder": "d3d11_dlaa.D3DKMTSetContextSchedulingPriority"
+    },
+    {
+      "ordinal": 44,
+      "name": "D3DKMTSetDisplayMode",
+      "forwarder": "d3d11_dlaa.D3DKMTSetDisplayMode"
+    },
+    {
+      "ordinal": 45,
+      "name": "D3DKMTSetGammaRamp",
+      "forwarder": "d3d11_dlaa.D3DKMTSetGammaRamp"
+    },
+    {
+      "ordinal": 46,
+      "name": "D3DKMTSetVidPnSourceOwner",
+      "forwarder": "d3d11_dlaa.D3DKMTSetVidPnSourceOwner"
+    },
+    {
+      "ordinal": 47,
+      "name": "D3DKMTWaitForVerticalBlankEvent",
+      "forwarder": "d3d11_dlaa.D3DKMTWaitForVerticalBlankEvent"
+    },
+    {
+      "ordinal": 48,
+      "name": "D3DPerformance_BeginEvent",
+      "forwarder": "d3d11_dlaa.D3DPerformance_BeginEvent"
+    },
+    {
+      "ordinal": 49,
+      "name": "D3DPerformance_EndEvent",
+      "forwarder": "d3d11_dlaa.D3DPerformance_EndEvent"
+    },
+    {
+      "ordinal": 50,
+      "name": "D3DPerformance_GetStatus",
+      "forwarder": "d3d11_dlaa.D3DPerformance_GetStatus"
+    },
+    {
+      "ordinal": 51,
+      "name": "D3DPerformance_SetMarker",
+      "forwarder": "d3d11_dlaa.D3DPerformance_SetMarker"
+    }
+  ]
+}

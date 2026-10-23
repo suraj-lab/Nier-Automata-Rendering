@@ -1,0 +1,131 @@
+{
+  "captured_utc": "20261018T203937Z",
+  "game_pid": 629278,
+  "gpu_device_id": "0x7550",
+  "pci_device": "0000:03:00.0",
+  "sysfs_device": "/sys/class/drm/card1/device",
+  "sample_duration_s": 30.0,
+  "sample_count": 61,
+  "sample_interval_s": 0.5,
+  "metrics": {
+    "gpu_busy_pct": {
+      "mean": 49.689,
+      "median": 51.0,
+      "p95": 72.0,
+      "min": 4.0,
+      "max": 88.0,
+      "samples": 61
+    },
+    "memory_controller_busy_pct": {
+      "mean": 17.885,
+      "median": 20.0,
+      "p95": 27.0,
+      "min": 0.0,
+      "max": 32.0,
+      "samples": 61
+    },
+    "gpu_clock_mhz": {
+      "mean": 2053.902,
+      "median": 2134.0,
+      "p95": 2445.0,
+      "min": 201.0,
+      "max": 2560.0,
+      "samples": 61
+    },
+    "memory_clock_mhz": {
+      "mean": 1258.0,
+      "median": 1258.0,
+      "p95": 1258.0,
+      "min": 1258.0,
+      "max": 1258.0,
+      "samples": 61
+    },
+    "reported_gpu_power_w": {
+      "mean": 99.098,
+      "median": 103.0,
+      "p95": 130.0,
+      "min": 39.0,
+      "max": 146.0,
+      "samples": 61
+    },
+    "power_cap_w": {
+      "mean": 360.0,
+      "median": 360.0,
+      "p95": 360.0,
+      "min": 360.0,
+      "max": 360.0,
+      "samples": 61
+    },
+    "edge_c": {
+      "mean": 51.377,
+      "median": 51.0,
+      "p95": 53.0,
+      "min": 50.0,
+      "max": 54.0,
+      "samples": 61
+    },
+    "junction_c": {
+      "mean": 55.918,
+      "median": 56.0,
+      "p95": 58.0,
+      "min": 54.0,
+      "max": 58.0,
+      "samples": 61
+    },
+    "memory_c": {
+      "mean": 74.869,
+      "median": 74.0,
+      "p95": 76.0,
+      "min": 74.0,
+      "max": 76.0,
+      "samples": 61
+    },
+    "fan_rpm": {
+      "mean": 747.836,
+      "median": 806.0,
+      "p95": 841.0,
+      "min": 550.0,
+      "max": 842.0,
+      "samples": 61
+    },
+    "vram_used_gib": {
+      "mean": 5.48,
+      "median": 5.48,
+      "p95": 5.48,
+      "min": 5.48,
+      "max": 5.48,
+      "samples": 61
+    },
+    "vram_total_gib": {
+      "mean": 15.922,
+      "median": 15.922,
+      "p95": 15.922,
+      "min": 15.922,
+      "max": 15.922,
+      "samples": 61
+    },
+    "game_gfx_engine_pct": {
+      "mean": 34.62,
+      "median": 36.598,
+      "p95": 38.511,
+      "min": 18.943,
+      "max": 39.442,
+      "samples": 60
+    },
+    "game_compute_engine_pct": {
+      "mean": 3.662,
+      "median": 3.648,
+      "p95": 3.898,
+      "min": 3.471,
+      "max": 4.186,
+      "samples": 60
+    }
+  },
+  "notes": [
+    "Whole-device busy includes compositor/other processes.",
+    "DRM gfx and compute engine rates can overlap and must not be added as GPU wall time.",
+    "Utilization at dynamically changing clocks is not an uncapped-FPS prediction.",
+    "No per-frame GPU duration or frame-pacing capture was taken.",
+    "No game, driver, clock, power-limit, or fan setting was changed."
+  ]
+}

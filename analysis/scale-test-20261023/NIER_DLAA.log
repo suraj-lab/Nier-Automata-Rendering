@@ -1,0 +1,197 @@
+12:51:01.613  NIER_DLAA proxy attached
+12:51:01.615  config: ObjectMotion=1 HideMotionBlur=1
+12:51:01.615  config: Enabled=1 Debug=1 DumpFrameKey=0x79 DumpFrameAt=0 DumpShaders=0 Jitter=0 JitterDebugScale=1.00
+12:51:01.615  config: DLSS=1 Preset=0 JitterSign=+1 ToggleKey=0x77 MipBias=-0.50 MipBiasKey=0x23 DebugView=0
+12:51:01.615  warning: real d3d11 has no export D3D11CreateDeviceForD3D12
+12:51:01.615  warning: real d3d11 has no export D3DKMTCloseAdapter
+12:51:01.615  warning: real d3d11 has no export D3DKMTDestroyAllocation
+12:51:01.615  warning: real d3d11 has no export D3DKMTDestroyContext
+12:51:01.615  warning: real d3d11 has no export D3DKMTDestroyDevice
+12:51:01.615  warning: real d3d11 has no export D3DKMTDestroySynchronizationObject
+12:51:01.615  warning: real d3d11 has no export D3DKMTPresent
+12:51:01.615  warning: real d3d11 has no export D3DKMTQueryAdapterInfo
+12:51:01.615  warning: real d3d11 has no export D3DKMTSetDisplayPrivateDriverFormat
+12:51:01.615  warning: real d3d11 has no export D3DKMTSignalSynchronizationObject
+12:51:01.615  warning: real d3d11 has no export D3DKMTUnlock
+12:51:01.615  warning: real d3d11 has no export D3DKMTWaitForSynchronizationObject
+12:51:01.615  warning: real d3d11 has no export EnableFeatureLevelUpgrade
+12:51:01.615  warning: real d3d11 has no export OpenAdapter10
+12:51:01.615  warning: real d3d11 has no export OpenAdapter10_2
+12:51:01.615  warning: real d3d11 has no export CreateDirect3D11DeviceFromDXGIDevice
+12:51:01.615  warning: real d3d11 has no export CreateDirect3D11SurfaceFromDXGISurface
+12:51:01.615  warning: real d3d11 has no export D3D11CoreCreateLayeredDevice
+12:51:01.615  warning: real d3d11 has no export D3D11CoreGetLayeredDeviceSize
+12:51:01.615  warning: real d3d11 has no export D3D11CoreRegisterLayers
+12:51:01.615  warning: real d3d11 has no export D3DKMTCreateAllocation
+12:51:01.615  warning: real d3d11 has no export D3DKMTCreateContext
+12:51:01.615  warning: real d3d11 has no export D3DKMTCreateDevice
+12:51:01.615  warning: real d3d11 has no export D3DKMTCreateSynchronizationObject
+12:51:01.615  warning: real d3d11 has no export D3DKMTEscape
+12:51:01.615  warning: real d3d11 has no export D3DKMTGetContextSchedulingPriority
+12:51:01.615  warning: real d3d11 has no export D3DKMTGetDeviceState
+12:51:01.615  warning: real d3d11 has no export D3DKMTGetDisplayModeList
+12:51:01.615  warning: real d3d11 has no export D3DKMTGetMultisampleMethodList
+12:51:01.615  warning: real d3d11 has no export D3DKMTGetRuntimeData
+12:51:01.615  warning: real d3d11 has no export D3DKMTGetSharedPrimaryHandle
+12:51:01.615  warning: real d3d11 has no export D3DKMTLock
+12:51:01.615  warning: real d3d11 has no export D3DKMTOpenAdapterFromHdc
+12:51:01.615  warning: real d3d11 has no export D3DKMTOpenResource
+12:51:01.615  warning: real d3d11 has no export D3DKMTQueryAllocationResidency
+12:51:01.615  warning: real d3d11 has no export D3DKMTQueryResourceInfo
+12:51:01.615  warning: real d3d11 has no export D3DKMTRender
+12:51:01.615  warning: real d3d11 has no export D3DKMTSetAllocationPriority
+12:51:01.615  warning: real d3d11 has no export D3DKMTSetContextSchedulingPriority
+12:51:01.615  warning: real d3d11 has no export D3DKMTSetDisplayMode
+12:51:01.615  warning: real d3d11 has no export D3DKMTSetGammaRamp
+12:51:01.615  warning: real d3d11 has no export D3DKMTSetVidPnSourceOwner
+12:51:01.615  warning: real d3d11 has no export D3DKMTWaitForVerticalBlankEvent
+12:51:01.615  warning: real d3d11 has no export D3DPerformance_BeginEvent
+12:51:01.615  warning: real d3d11 has no export D3DPerformance_EndEvent
+12:51:01.615  warning: real d3d11 has no export D3DPerformance_GetStatus
+12:51:01.615  warning: real d3d11 has no export D3DPerformance_SetMarker
+12:51:01.615  loaded real d3d11: C:\windows\system32\d3d11.dll
+12:51:01.953  D3D11CreateDevice(flags=0x0) -> 0x00000000
+12:51:01.953  device 0000000001F2D3F8 feature level 0xB100: installing hooks
+12:51:01.953  hook Device::CreateVertexShader           slot 12 at 00006FFFF7D85840: MH_OK
+12:51:01.953  hook Device::CreatePixelShader            slot 15 at 00006FFFF7D82300: MH_OK
+12:51:01.953  hook Device::CreateComputeShader          slot 18 at 00006FFFF7D87040: MH_OK
+12:51:01.953  hook Device::CreateSamplerState           slot 23 at 00006FFFF7D82F80: MH_OK
+12:51:01.953  hook Device::CreateBuffer                 slot  3 at 00006FFFF7D80440: MH_OK
+12:51:01.953  hook Device::CreateDeferredContext        slot 27 at 00006FFFF7D88B10: MH_OK
+12:51:01.953  hook Immediate::VSSetShader               slot 11 at 00006FFFF7E70F60: MH_OK
+12:51:01.953  hook Immediate::PSSetShader               slot  9 at 00006FFFF7E70390: MH_OK
+12:51:01.953  hook Immediate::PSSetSamplers             slot 10 at 00006FFFF7E73670: MH_OK
+12:51:01.953  hook Immediate::OMSetRenderTargets        slot 33 at 00006FFFF7E7E940: MH_OK
+12:51:01.953  hook Immediate::OMSetRenderTargetsAndUnorderedAccessViews slot 34 at 00006FFFF7E8BBE0: MH_OK
+12:51:01.953  hook Immediate::OMSetBlendState           slot 35 at 00006FFFF7E76B20: MH_OK
+12:51:01.953  hook Immediate::OMSetDepthStencilState    slot 36 at 00006FFFF7E87CA0: MH_OK
+12:51:01.953  hook Immediate::ClearState                slot 110 at 00006FFFF7E6EA70: MH_OK
+12:51:01.953  hook Immediate::Draw                      slot 13 at 00006FFFF7E8BC90: MH_OK
+12:51:01.953  hook Immediate::DrawIndexed               slot 12 at 00006FFFF7E6FA00: MH_OK
+12:51:01.953  hook Immediate::DrawInstanced             slot 21 at 00006FFFF7E72B10: MH_OK
+12:51:01.953  hook Immediate::DrawIndexedInstanced      slot 20 at 00006FFFF7E848E0: MH_OK
+12:51:01.953  hook Immediate::Dispatch                  slot 41 at 00006FFFF7E8BD70: MH_OK
+12:51:01.953  hook Immediate::CopyResource              slot 47 at 00006FFFF7E710A0: MH_OK
+12:51:01.953  hook Immediate::CopySubresourceRegion     slot 46 at 00006FFFF7E85FE0: MH_OK
+12:51:01.953  hook Immediate::ResolveSubresource        slot 57 at 00006FFFF7E7EA90: MH_OK
+12:51:01.953  hook Immediate::ClearRenderTargetView     slot 50 at 00006FFFF7E85D20: MH_OK
+12:51:01.953  hook Immediate::ClearDepthStencilView     slot 53 at 00006FFFF7E85A50: MH_OK
+12:51:01.953  hook Immediate::ExecuteCommandList        slot 58 at 00006FFFF7EE81B0: MH_OK
+12:51:01.953  hook Immediate::FinishCommandList         slot 114 at 00006FFFF7EE8120: MH_OK
+12:51:01.953  hook Immediate::Map                       slot 14 at 00006FFFF7EEA0F0: MH_OK
+12:51:01.953  hook Immediate::Unmap                     slot 15 at 00006FFFF7EEA660: MH_OK
+12:51:01.953  hook Immediate::UpdateSubresource         slot 48 at 00006FFFF7E7BAE0: MH_OK
+12:51:01.953  hook Immediate::UpdateSubresource1        slot 116 at 00006FFFF7E81980: MH_OK
+12:51:01.953  hook IDXGIFactory::CreateSwapChain        slot 10 at 00006FFFFA4B8E80: MH_OK
+12:51:01.953  hook IDXGIFactory2::CreateSwapChainForHwnd slot 15 at 00006FFFFA4B9F30: MH_OK
+12:51:01.957  hooks enabled: MH_OK
+12:51:01.958  IDXGIFactory::CreateSwapChain -> 0x00000000
+12:51:01.958  hook SwapChain::Present                   slot  8 at 00006FFFFA59AFF0: MH_OK
+12:51:01.958  hook SwapChain::ResizeBuffers             slot 13 at 00006FFFFA599560: MH_OK
+12:51:01.961  hooks enabled: MH_OK
+12:51:02.357  D3D11CreateDevice(flags=0x0) -> 0x00000000
+12:51:02.358  IDXGIFactory2::CreateSwapChainForHwnd -> 0x00000000
+12:51:02.359  ResizeBuffers(3, 1600x900, fmt=28) -> 0x00000000
+12:51:02.382  mip bias: 1 samplers with a biased twin (latest filter=0x15 bias -0.50)
+12:51:03.518  mip bias: 2 samplers with a biased twin (latest filter=0x14 bias -0.50)
+12:51:03.546  mip bias: 3 samplers with a biased twin (latest filter=0x55 bias -0.50)
+12:51:03.546  first Present: 1600x900 fmt=28 buffers=3 windowed=1 swap_effect=3
+12:51:03.546  mip bias: 3 samplers have a biased twin
+12:51:03.569  camera: depth constants near 0.1000, far - near 9999.9
+12:51:03.569  camera: main camera found: P00 1.20628 P11 2.14451 P22 -1.000010 P23 -0.100001, position 0.00 0.00 0.00, depth constants near 0.1000 range 9999.9
+12:51:03.571  camera: uploads on thread 332, Present on thread 332
+12:51:03.723  object motion: velocity VS created (1 so far)
+12:51:03.724  object motion: motion blur PS created
+12:51:04.055  ResizeBuffers(3, 720x480, fmt=28) -> 0x00000000
+12:51:13.590  object motion: last 600 presents: 0 character draws repeated, 0 motion blur draws skipped (is the in-game Motion Blur option on?)
+12:51:13.590  camera: last 600 presents: 2 main-camera uploads; rejected: size 0, projection row 4, inverse-view row 0, aspect 192; candidate buffers: 32 slots used, 2 freed, 0 rebuilds
+12:51:13.590  camera: 0 accepted uploads were not exact; P30 +0..+0 P31 +0..+0 P32 +0..+0 P33 +0..+0 I30 +0..+0 I31 +0..+0 I32 +0..+0 I33 +0..+0
+12:51:23.593  object motion: last 600 presents: 0 character draws repeated, 7 motion blur draws skipped (is the in-game Motion Blur option on?)
+12:51:23.593  camera: last 600 presents: 13 main-camera uploads; rejected: size 0, projection row 0, inverse-view row 0, aspect 600; candidate buffers: 32 slots used, 0 freed, 0 rebuilds
+12:51:23.593  camera: 0 accepted uploads were not exact; P30 +0..+0 P31 +0..+0 P32 +0..+0 P33 +0..+0 I30 +0..+0 I31 +0..+0 I32 +0..+0 I33 +0..+0
+12:51:33.573  object motion: last 600 presents: 0 character draws repeated, 600 motion blur draws skipped (is the in-game Motion Blur option on?)
+12:51:33.573  camera: last 600 presents: 600 main-camera uploads; rejected: size 0, projection row 0, inverse-view row 0, aspect 600; candidate buffers: 32 slots used, 0 freed, 0 rebuilds
+12:51:33.573  camera: 0 accepted uploads were not exact; P30 +0..+0 P31 +0..+0 P32 +0..+0 P33 +0..+0 I30 +0..+0 I31 +0..+0 I32 +0..+0 I33 +0..+0
+12:51:43.606  object motion: last 600 presents: 0 character draws repeated, 600 motion blur draws skipped (is the in-game Motion Blur option on?)
+12:51:43.606  camera: last 600 presents: 529 main-camera uploads; rejected: size 0, projection row 0, inverse-view row 0, aspect 601; candidate buffers: 118 slots used, 0 freed, 0 rebuilds
+12:51:43.606  camera: 0 accepted uploads were not exact; P30 +0..+0 P31 +0..+0 P32 +0..+0 P33 +0..+0 I30 +0..+0 I31 +0..+0 I32 +0..+0 I33 +0..+0
+12:51:53.573  object motion: last 600 presents: 0 character draws repeated, 600 motion blur draws skipped (is the in-game Motion Blur option on?)
+12:51:53.573  camera: last 600 presents: 1 main-camera uploads; rejected: size 0, projection row 0, inverse-view row 0, aspect 600; candidate buffers: 147 slots used, 0 freed, 0 rebuilds
+12:51:53.573  camera: 0 accepted uploads were not exact; P30 +0..+0 P31 +0..+0 P32 +0..+0 P33 +0..+0 I30 +0..+0 I31 +0..+0 I32 +0..+0 I33 +0..+0
+12:51:56.905  camera: inexact fixed rows: projection (0 0 -1 0), inverse view (0 0 0 0.999999881)
+12:51:56.988  camera: inexact fixed rows: projection (0 0 -1 0), inverse view (0 -0 0 0.999999881)
+12:51:57.055  camera: inexact fixed rows: projection (0 0 -1 0), inverse view (0 -0 0 0.999999881)
+12:51:57.071  camera: inexact fixed rows: projection (0 0 -1 0), inverse view (0 -0 0 0.999999881)
+12:51:57.287  camera: inexact fixed rows: projection (0 0 -1 0), inverse view (0 -0 0 1.00000012)
+12:51:57.336  camera: inexact fixed rows: projection (0 0 -1 0), inverse view (0 0 0 0.999999881)
+12:51:57.370  camera: inexact fixed rows: projection (0 0 -1 0), inverse view (0 0 0 0.999999881)
+12:51:57.419  camera: inexact fixed rows: projection (0 0 -1 0), inverse view (0 0 0 0.999999881)
+12:51:57.469  camera: inexact fixed rows: projection (0 0 -1 0), inverse view (0 -0 0 0.99999994)
+12:51:57.486  camera: inexact fixed rows: projection (0 0 -1 0), inverse view (0 0 0 0.99999994)
+12:52:03.575  object motion: last 600 presents: 0 character draws repeated, 600 motion blur draws skipped (is the in-game Motion Blur option on?)
+12:52:03.575  camera: last 600 presents: 408 main-camera uploads; rejected: size 1, projection row 2, inverse-view row 0, aspect 600; candidate buffers: 154 slots used, 0 freed, 0 rebuilds
+12:52:03.575  camera: 104 accepted uploads were not exact; P30 +0..+0 P31 +0..+0 P32 +0..+0 P33 +0..+0 I30 +0..+0 I31 +0..+0 I32 +0..+0 I33 -1.19e-07..+2.38e-07
+12:52:03.592  mip bias: 18 samplers have a biased twin
+12:52:13.574  object motion: last 600 presents: 0 character draws repeated, 139 motion blur draws skipped (is the in-game Motion Blur option on?)
+12:52:13.574  camera: last 600 presents: 513 main-camera uploads; rejected: size 0, projection row 0, inverse-view row 0, aspect 600; candidate buffers: 154 slots used, 0 freed, 0 rebuilds
+12:52:13.574  camera: 17 accepted uploads were not exact; P30 +0..+0 P31 +0..+0 P32 +0..+0 P33 +0..+0 I30 +0..+0 I31 +0..+0 I32 +0..+0 I33 -1.19e-07..+1.19e-07
+12:52:23.574  object motion: last 600 presents: 0 character draws repeated, 0 motion blur draws skipped (is the in-game Motion Blur option on?)
+12:52:23.574  camera: last 600 presents: 600 main-camera uploads; rejected: size 0, projection row 0, inverse-view row 0, aspect 600; candidate buffers: 154 slots used, 0 freed, 0 rebuilds
+12:52:23.574  camera: 0 accepted uploads were not exact; P30 +0..+0 P31 +0..+0 P32 +0..+0 P33 +0..+0 I30 +0..+0 I31 +0..+0 I32 +0..+0 I33 +0..+0
+12:52:33.574  object motion: last 600 presents: 0 character draws repeated, 0 motion blur draws skipped (is the in-game Motion Blur option on?)
+12:52:33.574  camera: last 600 presents: 600 main-camera uploads; rejected: size 0, projection row 0, inverse-view row 0, aspect 600; candidate buffers: 154 slots used, 0 freed, 0 rebuilds
+12:52:33.574  camera: 0 accepted uploads were not exact; P30 +0..+0 P31 +0..+0 P32 +0..+0 P33 +0..+0 I30 +0..+0 I31 +0..+0 I32 +0..+0 I33 +0..+0
+12:52:43.574  object motion: last 600 presents: 0 character draws repeated, 0 motion blur draws skipped (is the in-game Motion Blur option on?)
+12:52:43.574  camera: last 600 presents: 600 main-camera uploads; rejected: size 0, projection row 0, inverse-view row 0, aspect 600; candidate buffers: 154 slots used, 0 freed, 0 rebuilds
+12:52:43.574  camera: 0 accepted uploads were not exact; P30 +0..+0 P31 +0..+0 P32 +0..+0 P33 +0..+0 I30 +0..+0 I31 +0..+0 I32 +0..+0 I33 +0..+0
+12:52:53.574  object motion: last 600 presents: 0 character draws repeated, 0 motion blur draws skipped (is the in-game Motion Blur option on?)
+12:52:53.574  camera: last 600 presents: 600 main-camera uploads; rejected: size 0, projection row 0, inverse-view row 0, aspect 600; candidate buffers: 154 slots used, 0 freed, 0 rebuilds
+12:52:53.574  camera: 0 accepted uploads were not exact; P30 +0..+0 P31 +0..+0 P32 +0..+0 P33 +0..+0 I30 +0..+0 I31 +0..+0 I32 +0..+0 I33 +0..+0
+12:53:03.574  object motion: last 600 presents: 0 character draws repeated, 0 motion blur draws skipped (is the in-game Motion Blur option on?)
+12:53:03.574  camera: last 600 presents: 600 main-camera uploads; rejected: size 0, projection row 0, inverse-view row 0, aspect 600; candidate buffers: 154 slots used, 0 freed, 0 rebuilds
+12:53:03.574  camera: 0 accepted uploads were not exact; P30 +0..+0 P31 +0..+0 P32 +0..+0 P33 +0..+0 I30 +0..+0 I31 +0..+0 I32 +0..+0 I33 +0..+0
+12:53:03.591  mip bias: 18 samplers have a biased twin
+12:53:13.574  object motion: last 600 presents: 0 character draws repeated, 0 motion blur draws skipped (is the in-game Motion Blur option on?)
+12:53:13.574  camera: last 600 presents: 600 main-camera uploads; rejected: size 0, projection row 0, inverse-view row 0, aspect 600; candidate buffers: 154 slots used, 0 freed, 0 rebuilds
+12:53:13.574  camera: 0 accepted uploads were not exact; P30 +0..+0 P31 +0..+0 P32 +0..+0 P33 +0..+0 I30 +0..+0 I31 +0..+0 I32 +0..+0 I33 +0..+0
+12:53:23.574  object motion: last 600 presents: 0 character draws repeated, 198 motion blur draws skipped (is the in-game Motion Blur option on?)
+12:53:23.574  camera: last 600 presents: 396 main-camera uploads; rejected: size 0, projection row 0, inverse-view row 0, aspect 600; candidate buffers: 154 slots used, 0 freed, 0 rebuilds
+12:53:23.574  camera: 0 accepted uploads were not exact; P30 +0..+0 P31 +0..+0 P32 +0..+0 P33 +0..+0 I30 +0..+0 I31 +0..+0 I32 +0..+0 I33 +0..+0
+12:53:33.574  object motion: last 600 presents: 0 character draws repeated, 600 motion blur draws skipped (is the in-game Motion Blur option on?)
+12:53:33.574  camera: last 600 presents: 0 main-camera uploads; rejected: size 0, projection row 0, inverse-view row 0, aspect 600; candidate buffers: 154 slots used, 0 freed, 0 rebuilds
+12:53:33.574  camera: 0 accepted uploads were not exact; P30 +0..+0 P31 +0..+0 P32 +0..+0 P33 +0..+0 I30 +0..+0 I31 +0..+0 I32 +0..+0 I33 +0..+0
+12:53:43.574  object motion: last 600 presents: 0 character draws repeated, 600 motion blur draws skipped (is the in-game Motion Blur option on?)
+12:53:43.574  camera: last 600 presents: 0 main-camera uploads; rejected: size 0, projection row 0, inverse-view row 0, aspect 600; candidate buffers: 154 slots used, 0 freed, 0 rebuilds
+12:53:43.574  camera: 0 accepted uploads were not exact; P30 +0..+0 P31 +0..+0 P32 +0..+0 P33 +0..+0 I30 +0..+0 I31 +0..+0 I32 +0..+0 I33 +0..+0
+12:53:50.842  ResizeBuffers(3, 1920x1080, fmt=28) -> 0x00000000
+12:53:53.609  object motion: last 600 presents: 0 character draws repeated, 600 motion blur draws skipped (is the in-game Motion Blur option on?)
+12:53:53.609  camera: last 600 presents: 1 main-camera uploads; rejected: size 0, projection row 2, inverse-view row 0, aspect 600; candidate buffers: 156 slots used, 2 freed, 0 rebuilds
+12:53:53.609  camera: 0 accepted uploads were not exact; P30 +0..+0 P31 +0..+0 P32 +0..+0 P33 +0..+0 I30 +0..+0 I31 +0..+0 I32 +0..+0 I33 +0..+0
+12:54:03.592  object motion: last 600 presents: 0 character draws repeated, 600 motion blur draws skipped (is the in-game Motion Blur option on?)
+12:54:03.592  camera: last 600 presents: 365 main-camera uploads; rejected: size 0, projection row 1, inverse-view row 0, aspect 600; candidate buffers: 156 slots used, 0 freed, 0 rebuilds
+12:54:03.592  camera: 94 accepted uploads were not exact; P30 +0..+0 P31 +0..+0 P32 +0..+0 P33 +0..+0 I30 +0..+0 I31 +0..+0 I32 +0..+0 I33 -1.19e-07..+1.19e-07
+12:54:03.609  mip bias: 18 samplers have a biased twin
+12:54:13.592  object motion: last 600 presents: 0 character draws repeated, 600 motion blur draws skipped (is the in-game Motion Blur option on?)
+12:54:13.592  camera: last 600 presents: 600 main-camera uploads; rejected: size 0, projection row 0, inverse-view row 0, aspect 600; candidate buffers: 156 slots used, 0 freed, 0 rebuilds
+12:54:13.592  camera: 216 accepted uploads were not exact; P30 +0..+0 P31 +0..+0 P32 +0..+0 P33 +0..+0 I30 +0..+0 I31 +0..+0 I32 +0..+0 I33 -1.19e-07..+1.19e-07
+12:54:21.726  frame dump: capturing (deferred lists this frame, full frame next)
+12:54:21.839  frame dump written: S:\steamapps\common\NieRAutomata\NIER_DLAA_frame_20261023_125421_835.txt (2899 entries, 2683 resources, 0 lists, 0 unrecorded)
+12:54:23.652  object motion: last 600 presents: 0 character draws repeated, 600 motion blur draws skipped (is the in-game Motion Blur option on?)
+12:54:23.652  camera: last 600 presents: 600 main-camera uploads; rejected: size 0, projection row 0, inverse-view row 0, aspect 600; candidate buffers: 156 slots used, 0 freed, 0 rebuilds
+12:54:23.652  camera: 491 accepted uploads were not exact; P30 +0..+0 P31 +0..+0 P32 +0..+0 P33 +0..+0 I30 +0..+0 I31 +0..+0 I32 +0..+0 I33 -1.19e-07..+0
+12:54:33.625  object motion: last 600 presents: 0 character draws repeated, 600 motion blur draws skipped (is the in-game Motion Blur option on?)
+12:54:33.625  camera: last 600 presents: 600 main-camera uploads; rejected: size 0, projection row 0, inverse-view row 0, aspect 600; candidate buffers: 156 slots used, 0 freed, 0 rebuilds
+12:54:33.625  camera: 0 accepted uploads were not exact; P30 +0..+0 P31 +0..+0 P32 +0..+0 P33 +0..+0 I30 +0..+0 I31 +0..+0 I32 +0..+0 I33 +0..+0
+12:54:43.625  object motion: last 600 presents: 0 character draws repeated, 600 motion blur draws skipped (is the in-game Motion Blur option on?)
+12:54:43.625  camera: last 600 presents: 600 main-camera uploads; rejected: size 0, projection row 0, inverse-view row 0, aspect 600; candidate buffers: 156 slots used, 0 freed, 0 rebuilds
+12:54:43.625  camera: 0 accepted uploads were not exact; P30 +0..+0 P31 +0..+0 P32 +0..+0 P33 +0..+0 I30 +0..+0 I31 +0..+0 I32 +0..+0 I33 +0..+0
+12:54:53.625  object motion: last 600 presents: 0 character draws repeated, 600 motion blur draws skipped (is the in-game Motion Blur option on?)
+12:54:53.625  camera: last 600 presents: 600 main-camera uploads; rejected: size 0, projection row 0, inverse-view row 0, aspect 600; candidate buffers: 156 slots used, 0 freed, 0 rebuilds
+12:54:53.625  camera: 0 accepted uploads were not exact; P30 +0..+0 P31 +0..+0 P32 +0..+0 P33 +0..+0 I30 +0..+0 I31 +0..+0 I32 +0..+0 I33 +0..+0
+12:55:03.626  object motion: last 600 presents: 0 character draws repeated, 600 motion blur draws skipped (is the in-game Motion Blur option on?)
+12:55:03.626  camera: last 600 presents: 600 main-camera uploads; rejected: size 0, projection row 0, inverse-view row 0, aspect 600; candidate buffers: 156 slots used, 0 freed, 0 rebuilds
+12:55:03.626  camera: 0 accepted uploads were not exact; P30 +0..+0 P31 +0..+0 P32 +0..+0 P33 +0..+0 I30 +0..+0 I31 +0..+0 I32 +0..+0 I33 +0..+0
+12:55:03.642  mip bias: 18 samplers have a biased twin
+12:55:10.961  ResizeBuffers(3, 1920x1080, fmt=28) -> 0x00000000
+12:55:10.979  camera: more than one main-camera upload in frame 14840 (the last one is used)
+12:55:11.738  camera: more than one main-camera upload in frame 14884 (the last one is used)

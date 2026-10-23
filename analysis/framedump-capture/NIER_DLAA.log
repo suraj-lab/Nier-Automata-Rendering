@@ -1,0 +1,178 @@
+22:42:04.834  NIER_DLAA proxy attached
+22:42:04.835  config: ObjectMotion=1 HideMotionBlur=1
+22:42:04.835  config: Enabled=1 Debug=1 DumpFrameKey=0x79 DumpFrameAt=0 DumpShaders=0 Jitter=0 JitterDebugScale=1.00
+22:42:04.835  config: DLSS=1 Preset=0 JitterSign=+1 ToggleKey=0x77 MipBias=-0.50 MipBiasKey=0x23 DebugView=0
+22:42:04.838  warning: real d3d11 has no export D3D11CreateDeviceForD3D12
+22:42:04.838  warning: real d3d11 has no export D3DKMTCloseAdapter
+22:42:04.838  warning: real d3d11 has no export D3DKMTDestroyAllocation
+22:42:04.838  warning: real d3d11 has no export D3DKMTDestroyContext
+22:42:04.838  warning: real d3d11 has no export D3DKMTDestroyDevice
+22:42:04.838  warning: real d3d11 has no export D3DKMTDestroySynchronizationObject
+22:42:04.838  warning: real d3d11 has no export D3DKMTPresent
+22:42:04.838  warning: real d3d11 has no export D3DKMTQueryAdapterInfo
+22:42:04.838  warning: real d3d11 has no export D3DKMTSetDisplayPrivateDriverFormat
+22:42:04.838  warning: real d3d11 has no export D3DKMTSignalSynchronizationObject
+22:42:04.838  warning: real d3d11 has no export D3DKMTUnlock
+22:42:04.838  warning: real d3d11 has no export D3DKMTWaitForSynchronizationObject
+22:42:04.838  warning: real d3d11 has no export EnableFeatureLevelUpgrade
+22:42:04.838  warning: real d3d11 has no export OpenAdapter10
+22:42:04.838  warning: real d3d11 has no export OpenAdapter10_2
+22:42:04.838  warning: real d3d11 has no export CreateDirect3D11DeviceFromDXGIDevice
+22:42:04.838  warning: real d3d11 has no export CreateDirect3D11SurfaceFromDXGISurface
+22:42:04.838  warning: real d3d11 has no export D3D11CoreCreateLayeredDevice
+22:42:04.838  warning: real d3d11 has no export D3D11CoreGetLayeredDeviceSize
+22:42:04.838  warning: real d3d11 has no export D3D11CoreRegisterLayers
+22:42:04.838  warning: real d3d11 has no export D3DKMTCreateAllocation
+22:42:04.838  warning: real d3d11 has no export D3DKMTCreateContext
+22:42:04.838  warning: real d3d11 has no export D3DKMTCreateDevice
+22:42:04.838  warning: real d3d11 has no export D3DKMTCreateSynchronizationObject
+22:42:04.838  warning: real d3d11 has no export D3DKMTEscape
+22:42:04.838  warning: real d3d11 has no export D3DKMTGetContextSchedulingPriority
+22:42:04.838  warning: real d3d11 has no export D3DKMTGetDeviceState
+22:42:04.838  warning: real d3d11 has no export D3DKMTGetDisplayModeList
+22:42:04.838  warning: real d3d11 has no export D3DKMTGetMultisampleMethodList
+22:42:04.838  warning: real d3d11 has no export D3DKMTGetRuntimeData
+22:42:04.838  warning: real d3d11 has no export D3DKMTGetSharedPrimaryHandle
+22:42:04.838  warning: real d3d11 has no export D3DKMTLock
+22:42:04.838  warning: real d3d11 has no export D3DKMTOpenAdapterFromHdc
+22:42:04.838  warning: real d3d11 has no export D3DKMTOpenResource
+22:42:04.838  warning: real d3d11 has no export D3DKMTQueryAllocationResidency
+22:42:04.838  warning: real d3d11 has no export D3DKMTQueryResourceInfo
+22:42:04.838  warning: real d3d11 has no export D3DKMTRender
+22:42:04.838  warning: real d3d11 has no export D3DKMTSetAllocationPriority
+22:42:04.838  warning: real d3d11 has no export D3DKMTSetContextSchedulingPriority
+22:42:04.838  warning: real d3d11 has no export D3DKMTSetDisplayMode
+22:42:04.838  warning: real d3d11 has no export D3DKMTSetGammaRamp
+22:42:04.838  warning: real d3d11 has no export D3DKMTSetVidPnSourceOwner
+22:42:04.838  warning: real d3d11 has no export D3DKMTWaitForVerticalBlankEvent
+22:42:04.838  warning: real d3d11 has no export D3DPerformance_BeginEvent
+22:42:04.838  warning: real d3d11 has no export D3DPerformance_EndEvent
+22:42:04.838  warning: real d3d11 has no export D3DPerformance_GetStatus
+22:42:04.838  warning: real d3d11 has no export D3DPerformance_SetMarker
+22:42:04.838  loaded real d3d11: C:\windows\system32\d3d11.dll
+22:42:05.548  D3D11CreateDevice(flags=0x0) -> 0x00000000
+22:42:05.548  device 0000000000FAE668 feature level 0xB100: installing hooks
+22:42:05.548  hook Device::CreateVertexShader           slot 12 at 00006FFFF9F85840: MH_OK
+22:42:05.548  hook Device::CreatePixelShader            slot 15 at 00006FFFF9F82300: MH_OK
+22:42:05.548  hook Device::CreateComputeShader          slot 18 at 00006FFFF9F87040: MH_OK
+22:42:05.548  hook Device::CreateSamplerState           slot 23 at 00006FFFF9F82F80: MH_OK
+22:42:05.548  hook Device::CreateBuffer                 slot  3 at 00006FFFF9F80440: MH_OK
+22:42:05.548  hook Device::CreateDeferredContext        slot 27 at 00006FFFF9F88B10: MH_OK
+22:42:05.548  hook Immediate::VSSetShader               slot 11 at 00006FFFFA070F60: MH_OK
+22:42:05.548  hook Immediate::PSSetShader               slot  9 at 00006FFFFA070390: MH_OK
+22:42:05.548  hook Immediate::PSSetSamplers             slot 10 at 00006FFFFA073670: MH_OK
+22:42:05.548  hook Immediate::OMSetRenderTargets        slot 33 at 00006FFFFA07E940: MH_OK
+22:42:05.548  hook Immediate::OMSetRenderTargetsAndUnorderedAccessViews slot 34 at 00006FFFFA08BBE0: MH_OK
+22:42:05.548  hook Immediate::OMSetBlendState           slot 35 at 00006FFFFA076B20: MH_OK
+22:42:05.548  hook Immediate::OMSetDepthStencilState    slot 36 at 00006FFFFA087CA0: MH_OK
+22:42:05.548  hook Immediate::ClearState                slot 110 at 00006FFFFA06EA70: MH_OK
+22:42:05.548  hook Immediate::Draw                      slot 13 at 00006FFFFA08BC90: MH_OK
+22:42:05.548  hook Immediate::DrawIndexed               slot 12 at 00006FFFFA06FA00: MH_OK
+22:42:05.548  hook Immediate::DrawInstanced             slot 21 at 00006FFFFA072B10: MH_OK
+22:42:05.548  hook Immediate::DrawIndexedInstanced      slot 20 at 00006FFFFA0848E0: MH_OK
+22:42:05.548  hook Immediate::Dispatch                  slot 41 at 00006FFFFA08BD70: MH_OK
+22:42:05.548  hook Immediate::CopyResource              slot 47 at 00006FFFFA0710A0: MH_OK
+22:42:05.548  hook Immediate::CopySubresourceRegion     slot 46 at 00006FFFFA085FE0: MH_OK
+22:42:05.548  hook Immediate::ResolveSubresource        slot 57 at 00006FFFFA07EA90: MH_OK
+22:42:05.548  hook Immediate::ClearRenderTargetView     slot 50 at 00006FFFFA085D20: MH_OK
+22:42:05.548  hook Immediate::ClearDepthStencilView     slot 53 at 00006FFFFA085A50: MH_OK
+22:42:05.548  hook Immediate::ExecuteCommandList        slot 58 at 00006FFFFA0E81B0: MH_OK
+22:42:05.548  hook Immediate::FinishCommandList         slot 114 at 00006FFFFA0E8120: MH_OK
+22:42:05.548  hook Immediate::Map                       slot 14 at 00006FFFFA0EA0F0: MH_OK
+22:42:05.548  hook Immediate::Unmap                     slot 15 at 00006FFFFA0EA660: MH_OK
+22:42:05.548  hook Immediate::UpdateSubresource         slot 48 at 00006FFFFA07BAE0: MH_OK
+22:42:05.548  hook Immediate::UpdateSubresource1        slot 116 at 00006FFFFA081980: MH_OK
+22:42:05.548  hook IDXGIFactory::CreateSwapChain        slot 10 at 00006FFFFA698E80: MH_OK
+22:42:05.548  hook IDXGIFactory2::CreateSwapChainForHwnd slot 15 at 00006FFFFA699F30: MH_OK
+22:42:05.553  hooks enabled: MH_OK
+22:42:05.553  IDXGIFactory::CreateSwapChain -> 0x00000000
+22:42:05.553  hook SwapChain::Present                   slot  8 at 00006FFFFA77AFF0: MH_OK
+22:42:05.553  hook SwapChain::ResizeBuffers             slot 13 at 00006FFFFA779560: MH_OK
+22:42:05.557  hooks enabled: MH_OK
+22:42:05.698  D3D11CreateDevice(flags=0x0) -> 0x00000000
+22:42:05.698  IDXGIFactory2::CreateSwapChainForHwnd -> 0x00000000
+22:42:05.699  ResizeBuffers(3, 1600x900, fmt=28) -> 0x00000000
+22:42:05.718  mip bias: 1 samplers with a biased twin (latest filter=0x15 bias -0.50)
+22:42:06.919  mip bias: 2 samplers with a biased twin (latest filter=0x14 bias -0.50)
+22:42:06.951  mip bias: 3 samplers with a biased twin (latest filter=0x55 bias -0.50)
+22:42:06.951  first Present: 1600x900 fmt=28 buffers=3 windowed=1 swap_effect=3
+22:42:06.951  mip bias: 3 samplers have a biased twin
+22:42:06.966  camera: depth constants near 0.1000, far - near 9999.9
+22:42:06.966  camera: main camera found: P00 1.20628 P11 2.14451 P22 -1.000010 P23 -0.100001, position 0.00 0.00 0.00, depth constants near 0.1000 range 9999.9
+22:42:06.968  camera: uploads on thread 368, Present on thread 368
+22:42:07.102  object motion: velocity VS created (1 so far)
+22:42:07.102  object motion: motion blur PS created
+22:42:07.305  ResizeBuffers(3, 3440x1440, fmt=28) -> 0x00000000
+22:42:13.641  DLAA: linear depth target is 000000006D921380 (3440x1440 fmt=41 bind=0x28)
+22:42:13.642  NGX: [2026-10-19 22:42:13] [util::setLogFilename:284] Logging to requested file (S:\steamapps\common\NieRAutomata\/nvsdk_ngx.log) enabled successfully
+22:42:13.642  NGX: [2026-10-19 22:42:13] [NGXSafeInitializeLog:150] App logging hooks successfully initialized
+22:42:13.847  DLAA: NGX ready
+22:42:13.847  DLAA: matrix self-check: view (3.00 -1.50 -20.00) -> world (1078.00 451.50 -980.00) -> view (3.000 -1.500 -20.000)
+22:42:13.848  DLAA: targets created for 3440x1440, scene format 26
+22:42:13.848  object motion: target created for 3440x1440
+22:42:13.856  DLAA: DLSS feature created, 3440x1440, preset 0
+22:42:13.860  DLAA: frame 397, 3440x1440, jitter 0.250 -0.389 px, near 0.1000 range 9999.9, camera 1075.00 450.00 -1000.00, reset 1, 0 of the last 1800 frames reused the previous camera
+22:42:14.212  DLAA: 1 history resets in the last 60 presents (requested 1, size 0, camera jump 0, camera cut 0), 23 frames evaluated, 22 with a repeated camera, 0 after two camera uploads
+22:42:17.203  object motion: last 600 presents: 0 character draws repeated, 0 motion blur draws skipped (is the in-game Motion Blur option on?)
+22:42:17.203  camera: last 600 presents: 2 main-camera uploads; rejected: size 0, projection row 4, inverse-view row 0, aspect 203; candidate buffers: 33 slots used, 2 freed, 0 rebuilds
+22:42:17.203  camera: 0 accepted uploads were not exact; P30 +0..+0 P31 +0..+0 P32 +0..+0 P33 +0..+0 I30 +0..+0 I31 +0..+0 I32 +0..+0 I33 +0..+0
+22:42:27.181  object motion: last 600 presents: 0 character draws repeated, 17 motion blur draws skipped (is the in-game Motion Blur option on?)
+22:42:27.181  DLAA: 2 history resets in the last 60 presents (requested 0, size 0, camera jump 1, camera cut 1), 60 frames evaluated, 37 with a repeated camera, 0 after two camera uploads
+22:42:27.181  camera: last 600 presents: 23 main-camera uploads; rejected: size 0, projection row 0, inverse-view row 0, aspect 600; candidate buffers: 33 slots used, 0 freed, 0 rebuilds
+22:42:27.181  camera: 0 accepted uploads were not exact; P30 +0..+0 P31 +0..+0 P32 +0..+0 P33 +0..+0 I30 +0..+0 I31 +0..+0 I32 +0..+0 I33 +0..+0
+22:42:37.133  object motion: last 600 presents: 0 character draws repeated, 600 motion blur draws skipped (is the in-game Motion Blur option on?)
+22:42:37.133  camera: last 600 presents: 600 main-camera uploads; rejected: size 0, projection row 0, inverse-view row 0, aspect 600; candidate buffers: 33 slots used, 0 freed, 0 rebuilds
+22:42:37.133  camera: 0 accepted uploads were not exact; P30 +0..+0 P31 +0..+0 P32 +0..+0 P33 +0..+0 I30 +0..+0 I31 +0..+0 I32 +0..+0 I33 +0..+0
+22:42:43.797  DLAA: frame 2142, 3440x1440, jitter 0.062 -0.463 px, near 0.1000 range 9999.9, camera 0.77 7.48 3.26, reset 0, 834 of the last 1800 frames reused the previous camera
+22:42:46.154  DLAA: 2 history resets in the last 60 presents (requested 0, size 0, camera jump 1, camera cut 1), 60 frames evaluated, 59 with a repeated camera, 0 after two camera uploads
+22:42:47.151  object motion: last 600 presents: 0 character draws repeated, 600 motion blur draws skipped (is the in-game Motion Blur option on?)
+22:42:47.151  camera: last 600 presents: 344 main-camera uploads; rejected: size 0, projection row 0, inverse-view row 0, aspect 601; candidate buffers: 148 slots used, 0 freed, 0 rebuilds
+22:42:47.151  camera: 0 accepted uploads were not exact; P30 +0..+0 P31 +0..+0 P32 +0..+0 P33 +0..+0 I30 +0..+0 I31 +0..+0 I32 +0..+0 I33 +0..+0
+22:42:57.103  object motion: last 600 presents: 0 character draws repeated, 600 motion blur draws skipped (is the in-game Motion Blur option on?)
+22:42:57.103  camera: last 600 presents: 0 main-camera uploads; rejected: size 0, projection row 0, inverse-view row 0, aspect 600; candidate buffers: 148 slots used, 0 freed, 0 rebuilds
+22:42:57.103  camera: 0 accepted uploads were not exact; P30 +0..+0 P31 +0..+0 P32 +0..+0 P33 +0..+0 I30 +0..+0 I31 +0..+0 I32 +0..+0 I33 +0..+0
+22:42:57.384  camera: inexact fixed rows: projection (0 0 -1 0), inverse view (0 0 0 1.00000012)
+22:42:57.517  camera: inexact fixed rows: projection (0 0 -1 0), inverse view (0 -0 0 1.00000012)
+22:42:57.584  camera: inexact fixed rows: projection (0 0 -1 0), inverse view (0 0 0 0.999999881)
+22:42:57.617  camera: inexact fixed rows: projection (0 0 -1 0), inverse view (0 0 0 1.00000012)
+22:42:57.650  camera: inexact fixed rows: projection (0 0 -1 0), inverse view (0 0 0 0.999999881)
+22:42:57.666  camera: inexact fixed rows: projection (0 0 -1 0), inverse view (0 0 0 0.999999881)
+22:42:57.766  camera: inexact fixed rows: projection (0 0 -1 0), inverse view (0 0 0 0.999999881)
+22:42:57.816  camera: inexact fixed rows: projection (0 0 -1 0), inverse view (0 0 0 1.00000012)
+22:42:57.849  camera: inexact fixed rows: projection (0 0 -1 0), inverse view (0 -0 0 1.00000012)
+22:42:57.915  camera: inexact fixed rows: projection (0 0 -1 0), inverse view (0 0 0 1.00000012)
+22:42:58.118  DLAA: 1 history resets in the last 60 presents (requested 0, size 0, camera jump 0, camera cut 1), 60 frames evaluated, 9 with a repeated camera, 0 after two camera uploads
+22:43:07.075  object motion: last 600 presents: 31459 character draws repeated, 600 motion blur draws skipped
+22:43:07.075  camera: last 600 presents: 591 main-camera uploads; rejected: size 9, projection row 10, inverse-view row 0, aspect 600; candidate buffers: 155 slots used, 0 freed, 0 rebuilds
+22:43:07.075  camera: 183 accepted uploads were not exact; P30 +0..+0 P31 +0..+0 P32 +0..+0 P33 +0..+0 I30 +0..+0 I31 +0..+0 I32 +0..+0 I33 -1.19e-07..+2.38e-07
+22:43:07.092  mip bias: 18 samplers have a biased twin
+22:43:09.613  frame dump: capturing (deferred lists this frame, full frame next)
+22:43:09.818  frame dump written: S:\steamapps\common\NieRAutomata\NIER_DLAA_frame_20261019_224309_810.txt (5876 entries, 5277 resources, 0 lists, 0 unrecorded)
+22:43:13.836  DLAA: frame 3997, 3440x1440, jitter 0.375 0.056 px, near 0.1000 range 9999.9, camera 249.93 11.53 662.59, reset 0, 810 of the last 1800 frames reused the previous camera
+22:43:17.189  object motion: last 600 presents: 73772 character draws repeated, 600 motion blur draws skipped
+22:43:17.189  camera: last 600 presents: 600 main-camera uploads; rejected: size 0, projection row 0, inverse-view row 0, aspect 600; candidate buffers: 155 slots used, 0 freed, 0 rebuilds
+22:43:17.189  camera: 194 accepted uploads were not exact; P30 +0..+0 P31 +0..+0 P32 +0..+0 P33 +0..+0 I30 +0..+0 I31 +0..+0 I32 +0..+0 I33 -1.19e-07..+2.38e-07
+22:43:27.141  object motion: last 600 presents: 60697 character draws repeated, 600 motion blur draws skipped
+22:43:27.141  camera: last 600 presents: 600 main-camera uploads; rejected: size 0, projection row 0, inverse-view row 0, aspect 600; candidate buffers: 155 slots used, 0 freed, 0 rebuilds
+22:43:27.141  camera: 175 accepted uploads were not exact; P30 +0..+0 P31 +0..+0 P32 +0..+0 P33 +0..+0 I30 +0..+0 I31 +0..+0 I32 +0..+0 I33 -1.19e-07..+1.19e-07
+22:43:37.093  object motion: last 600 presents: 34955 character draws repeated, 600 motion blur draws skipped
+22:43:37.093  camera: last 600 presents: 600 main-camera uploads; rejected: size 10, projection row 7, inverse-view row 0, aspect 601; candidate buffers: 201 slots used, 27 freed, 0 rebuilds
+22:43:37.093  camera: 175 accepted uploads were not exact; P30 +0..+0 P31 +0..+0 P32 +0..+0 P33 +0..+0 I30 +0..+0 I31 +0..+0 I32 +0..+0 I33 -1.19e-07..+1.19e-07
+22:43:39.382  frame dump: capturing (deferred lists this frame, full frame next)
+22:43:39.513  frame dump written: S:\steamapps\common\NieRAutomata\NIER_DLAA_frame_20261019_224339_508.txt (4472 entries, 4266 resources, 0 lists, 0 unrecorded)
+22:43:42.780  ResizeBuffers(3, 3440x1440, fmt=28) -> 0x00000000
+22:43:42.783  DLAA: linear depth target is 000000007AC29320 (3440x1440 fmt=41 bind=0x28)
+22:43:42.799  camera: more than one main-camera upload in frame 5738 (the last one is used)
+22:43:43.163  ResizeBuffers(3, 3440x1440, fmt=28) -> 0x00000000
+22:43:43.166  DLAA: linear depth target is 000000006D921740 (3440x1440 fmt=41 bind=0x28)
+22:43:43.172  DLAA: 2 history resets in the last 60 presents (requested 2, size 0, camera jump 0, camera cut 0), 58 frames evaluated, 0 with a repeated camera, 1 after two camera uploads
+22:43:43.187  camera: more than one main-camera upload in frame 5760 (the last one is used)
+22:43:43.836  DLAA: frame 5799, 3440x1440, jitter 0.031 0.426 px, near 0.1000 range 9999.9, camera 220.09 12.57 588.35, reset 0, 0 of the last 1800 frames reused the previous camera
+22:43:47.156  object motion: last 600 presents: 41433 character draws repeated, 598 motion blur draws skipped
+22:43:47.156  camera: last 600 presents: 600 main-camera uploads; rejected: size 0, projection row 4, inverse-view row 0, aspect 598; candidate buffers: 205 slots used, 4 freed, 0 rebuilds
+22:43:47.156  camera: 280 accepted uploads were not exact; P30 +0..+0 P31 +0..+0 P32 +0..+0 P33 +0..+0 I30 +0..+0 I31 +0..+0 I32 +0..+0 I33 -1.19e-07..+1.19e-07
+22:43:48.046  ResizeBuffers(3, 3440x1440, fmt=28) -> 0x00000000
+22:43:48.048  DLAA: linear depth target is 000000007ABE38F0 (3440x1440 fmt=41 bind=0x28)
+22:43:48.064  camera: more than one main-camera upload in frame 6054 (the last one is used)
+22:43:48.150  DLAA: 1 history resets in the last 60 presents (requested 1, size 0, camera jump 0, camera cut 0), 59 frames evaluated, 0 with a repeated camera, 1 after two camera uploads
+22:43:48.399  camera: more than one main-camera upload in frame 6074 (the last one is used)

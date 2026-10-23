@@ -1,0 +1,24 @@
+{
+  "observed_utc": "2026-10-18T21:19:22.337485+00:00",
+  "pid": 649647,
+  "mapped_graphics_input_modules": [
+    "/home/suraj/Projects/Nier-Automata-Rendering/analysis/runners/GE-Proton11-7-x86_64/files/lib/wine/x86_64-windows/dinput8.dll",
+    "/mnt/second/SteamLibrary/steamapps/common/NieRAutomata/NIER_FSR4.dll",
+    "/mnt/second/SteamLibrary/steamapps/common/NieRAutomata/d3d11.dll",
+    "/mnt/second/SteamLibrary/steamapps/common/NieRAutomata/dinput8.dll",
+    "/mnt/second/SteamLibrary/steamapps/compatdata/524220/pfx/drive_c/windows/system32/d3d11.dll",
+    "/mnt/second/SteamLibrary/steamapps/compatdata/524220/pfx/drive_c/windows/system32/dxgi.dll"
+  ],
+  "lodmod_dll_loaded": true,
+  "lodmod_debug_log_enabled": false,
+  "lodmod_game_patch_effects_independently_verified": false,
+  "fsr_contexts": [
+    "22:17:44.188 FSR: context created, render 3440x1440 -> 3440x1440, flags 0x21 (DLSS flags 0x43), provider 4.1.1"
+  ],
+  "latest_fsr_evaluation": "22:18:37.282 evaluate: frame 3600, render 3440x1440 -> 3440x1440, jitter 0.156 -0.315, mv scale 1.00 1.00, reset 0, near 0.1000 far 10000.0 fov 48.7 deg, dt 16.73 ms",
+  "latest_character_motion_counter": "22:19:20.537  object motion: last 600 presents: 48365 character draws repeated, 599 motion blur draws skipped",
+  "specialk_observed": false,
+  "texture_pack_active": false,
+  "game_modified_during_observation": false,
+  "next_validation": "Move around outdoors and assess geometry/shadows/frame pacing; use next-launch debug logging only if effects are unclear."
+}

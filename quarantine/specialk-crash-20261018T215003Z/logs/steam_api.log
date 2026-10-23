@@ -1,0 +1,25 @@
+﻿10/18/2026 21:48:02.971: S:\steamapps\common\NieRAutomata\steam_api64.dll was loaded, hooking...
+10/18/2026 21:48:04.128:  * (NieRAutomata.exe            ) Installed Overlay Activation Callback
+10/18/2026 21:48:04.128: Initializing SteamWorks Backend  << NieRAutomata.exe >>
+10/18/2026 21:48:04.128: -------------------------------
+
+10/18/2026 21:48:04.129:  * (steam_api64.dll             ) Installed Async. SteamAPI Completion Callback
+10/18/2026 21:48:04.129:  * (steam_api64.dll             ) Installed Async. SteamAPI Completion Callback
+10/18/2026 21:48:04.132: SteamAPI DLL Implements User v023
+10/18/2026 21:48:04.132:  >> Newer than Special K knows about.
+10/18/2026 21:48:04.132: SteamAPI DLL Implements Input v007
+10/18/2026 21:48:04.132:  >> Newer than Special K knows about.
+10/18/2026 21:48:04.132: SteamAPI DLL Implements Utils v011
+10/18/2026 21:48:04.132:  >> Newer than Special K knows about.
+10/18/2026 21:48:04.133: SteamAPI DLL Implements Remote Storage v014
+10/18/2026 21:48:04.133:  >> Newer than Special K knows about.
+10/18/2026 21:48:04.133: SteamAPI DLL Implements UGC v010
+10/18/2026 21:48:04.136: --- Initialization Finished (1 tries [AppId: 524220]) ---
+
+
+10/18/2026 21:48:04.136:  Steam UI Language.....: english
+10/18/2026 21:48:04.136:  Current Game Language.: english
+10/18/2026 21:48:04.136:  Supported Languages...: english,french,german,italian,japanese,koreana,schinese,spanish,tchinese
+10/18/2026 21:48:04.137:  Creating Achievement Manager...
+10/18/2026 21:48:04.137:   * Loading Built-In Achievement Unlock Sound: ''
+

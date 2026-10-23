@@ -1,0 +1,18 @@
+﻿10/18/2026 21:24:08.455: dxgi.log created		(Special K  26.10.10,  Oct 10 2026)
+-------------------------------------------------------------------------------------------
+10/18/2026 21:24:08.456: >> (fsr_inference_probe.exe) [dxgi.dll] <<
+10/18/2026 21:24:08.456: Loading user preferences from dxgi.ini... done! ( 27.24 ms)
+-------------------------------------------------------------------------------------------
+10/18/2026 21:24:08.483:  Working Directory:          Z:\home\*****\Projects\Nier-Automata-Rendering\analysis\visual-stack\sk-wait-debug
+10/18/2026 21:24:08.483:  System Directory:           C:\windows\system32
+10/18/2026 21:24:08.483:  Loading default dxgi.dll:  (C:\windows\system32\dxgi.dll)
+-------------------------------------------------------------------------------------------
+10/18/2026 21:24:08.543: [ Min Hook ] Failed to Install Hook for 'NvAPI_Disp_ColorControl' [Address: 0000000000000000h]!  (Status: "MH_ERROR_NOT_EXECUTABLE")
+10/18/2026 21:24:08.546: [   DXGI   ]  # DXGI QuickHook disabled because a local dxgi.dll or d3d11.dll is present...
+10/18/2026 21:24:08.549: [ThreadUtil] [!] > First Call:      SetThreadPriorityBoost_Detour
+10/18/2026 21:24:08.549: [DebugUtils] [!] > First Call:      ZwSetInformationThread_Detour
+10/18/2026 21:24:08.549: [ThreadUtil] [!] > First Call:       SetThreadAffinityMask_Detour
+10/18/2026 21:24:08.550: [ThreadUtil] [!] > First Call:           SetThreadPriority_Detour
+10/18/2026 21:24:08.550: [DebugUtils] [!] > First Call:            ZwCreateThreadEx_Detour
+10/18/2026 21:24:08.562: [ThreadUtil] [!] > First Call:        SetThreadDescription_Detour
+10/18/2026 21:24:08.562: [ COM Util ] [!] > First Call:            CoCreateInstance_Detour

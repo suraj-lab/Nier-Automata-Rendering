@@ -1,0 +1,4 @@
+ProtonFixes[607727] WARN: Skipping fix execution. We are probably running a unit test.
+ProtonFixes[607727] WARN: Skipping fix execution. We are probably running a unit test.
+ntsync: up and running.
+WARNING: radv is not a conformant Vulkan implementation, testing use only.
