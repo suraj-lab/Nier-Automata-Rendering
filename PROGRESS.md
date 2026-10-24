@@ -1,6 +1,31 @@
 # NieR:Automata Rendering — Progress & Resume
 
-Last updated: 2026-10-23 (depth-scale investigation and corrected test evidence).
+Last updated: 2026-10-24 (depth fix live-verified; upscale patch scoped — 4 parts, parts 1–2 built but inert on the gate).
+
+## Session 2026-10-24 resume (start here)
+
+**Depth fix is DONE and live-verified.** The depth-patch code cave (in `checks/depth_patch.h`) was
+reviewed by a cloud reviewer (caught + fixed a P0 EFLAGS bug) and confirmed in-game: scene depth
+now `2580x1080 D24S8 array=1` matching the 0.75× colour. The game renders colours correctly at
+reduced scale; the residual "shaking" is the DLSS camera jitter (expected — FSR4 skips at reduced
+scale, see below).
+
+**Upscale patch is fully scoped but not working yet.** See `analysis/UPSCALING_PATCH.md` for the
+4-part plan with exact addresses. Summary: parts 1+2 (OutWidth/OutHeight + Output → native) are
+BUILT in `checks/proxy_patch.h` + integrated into the setter, but a reviewer found they are INERT
+because of a pre-dispatch size gate (`FUN_1800173c0`) that skips FSR4 when scene != native. The
+remaining work is: **part 0 (relax the gate: scene == camera × 0.75)** and **part 3 (redirect
+bloom/tone-map to the FSR Output)**.
+
+**New tools:** `checks/analyze_framedump.py` (delegated to local-worker; gate
+`test_analyze_framedump.py` passes) auto-checks depth/colour size + array-count invariants on a
+`NIER_DLAA_frame_*.txt` dump. `checks/proxy_patch_test.cpp` is the native test for parts 1+2.
+
+**Current installed game state:** restored to the safe native-AA state at checkpoint (see below).
+To re-test the depth fix or upscale patch, re-run the install flow (rename `d3d11.dll` →
+`d3d11_dlaa.dll`, install `analysis/build/scale-setter/d3d11.dll` as `d3d11.dll`, set
+`NIER_DLAA.ini` `[Debug] Enabled=1` for F10 dumps), and use the backup in `backups/` to restore.
+
 The user-approved scale-only game test ran on 2026-10-23 and was restored; the
 current continuation is offline only. Historical sections below retain their
 original scope unless explicitly superseded.
