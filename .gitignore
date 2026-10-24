@@ -25,3 +25,8 @@ upstream/
 # Large dumps and archives
 *.dis
 *.tar.gz
+
+# Original closed mod files (never commit: not ours to redistribute)
+backups/native-aa-baseline/
+# Copies of the closed NIER_DLAA mod inside test backups (kept on disk, never tracked)
+backups/*/game/d3d11.dll

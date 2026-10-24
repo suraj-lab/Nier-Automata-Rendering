@@ -37,14 +37,21 @@ Game state: **v3 test DLL installed** (`d3d11.dll` = setter, `d3d11_dlaa.dll` = 
 `backups/upscale-test-20261024T132205Z/restore.sh` (hash-verified). Test logs and dumps are there
 too; that folder's `install.sh` installs v1, so install v3/v4 manually as done in test 3.
 
-**Next:** decide whether to keep the upscale installed, measure GPU headroom (A/B on GPU
-usage/power at the 60 FPS cap), then frame generation (afmf-linux) or DLSS 5 NR.
+**Permanent install (2026-10-24): setter v4 INSTALLED via `analysis/deploy/nier_upscale.sh`**
+(status/install/restore, hash-pinned, refuses while the game runs; tested by
+`analysis/deploy/test_nier_upscale.sh`). Debug keys off. The scale applies at launch, so no
+resolution re-apply is needed. The original mod files are in `backups/native-aa-baseline/` (gitignored).
+v4's failure-path fixes get their first real run in the next play session.
+
+**Next:** measure GPU headroom (A/B on GPU usage/power at the 60 FPS cap), then frame generation
+(afmf-linux). DLSS 5 NR is parked (see findings below).
 
 **New tools:** `checks/analyze_framedump.py` (delegated to local-worker; gate
 `test_analyze_framedump.py` passes) auto-checks depth/colour size + array-count invariants on a
 `NIER_DLAA_frame_*.txt` dump. `checks/proxy_patch_test.cpp` is the native test for parts 1+2.
 
-**Current installed game state:** restored to the safe native-AA state at checkpoint (see below).
+*(Superseded on 2026-10-24: the current game state is described at the top of this section.)*
+**Older installed game state:** restored to the safe native-AA state at checkpoint (see below).
 To re-test the depth fix or upscale patch, re-run the install flow (rename `d3d11.dll` →
 `d3d11_dlaa.dll`, install `analysis/build/scale-setter/d3d11.dll` as `d3d11.dll`, set
 `NIER_DLAA.ini` `[Debug] Enabled=1` for F10 dumps), and use the backup in `backups/` to restore.
@@ -61,9 +68,35 @@ continuation. The next game test is deferred until they are at the desktop.
 ## Goal and order
 
 1. **FSR4 native AA** — DONE, working.
-2. **Resolution upscaling** — IN PROGRESS. In-game frame dumps show a clean post-AA handoff (two scene readers; HUD already native). Scene-domain scaling is the remaining hard part.
-3. **DLSS 5 NR** — BLOCKED on `nvngx_dlssnr.dll` (only ships with NBA 2K27; user doesn't own it).
+2. **Resolution upscaling** — DONE (2026-10-24): FSR4 2580x1080 -> 3440x1440 with native post-processing (test 3).
+3. **DLSS 5 NR** — UNBLOCKED, parked by choice (see "DLSS 5 NR findings" below). The old blocker was wrong twice: the DLL is available, and the real limit is hardware.
 4. **Frame generation** — afmf-linux installed & verified, not yet tested in-game.
+
+## DLSS 5 NR findings (2026-10-24, parked; pick up later)
+
+- **Desktop has no NVIDIA GPU** (`lspci`: RX 9070 XT, RX 6800 XT, Raphael iGPU; amdgpu only). Native
+  DLSS (any version) cannot run here; the FSR4 bridge replaces DLSS, it does not run it.
+- **Laptop `spaghetti` is an NVIDIA RTX Spark N1X** (Blackwell, 6144 cores, driver 617.69, `nvidia-smi`
+  reports 49152 MiB unified; plus NVIDIA NPU). RTX Spark is on NVIDIA's DLSS 5 support list.
+- **DLL source (user-owned):** Portal with RTX (app 2012840; official DLSS 5 NR since its 21 Oct 2026
+  RTX Remix update) on the laptop ships `nvngx_dlssnr.dll` **v310.9.16**:
+  `C:\Program Files (x86)\Steam\steamapps\common\PortalRTX\bin\.trex\nvngx_dlssnr.dll` (x64, 266,424,944 B)
+  and `...\bin\.trex_arm64\nvngx_dlssnr.dll` (ARM64, 266,392,688 B). Also being downloaded on the desktop
+  (`/mnt/second/SteamLibrary`). Never redistribute it; NVIDIA's licence does not address reuse outside the
+  shipping game (grey area, personal use only).
+- **NieR is also installed on the laptop** (`steamapps\common\NieRAutomata`, with `nvngx_dlss.dll` v310.9.16).
+- **Route A (recommended first): laptop + NVIDIA runtime.** Verify Portal with RTX's NR mode runs on the
+  laptop, then try NieR (x64 under Windows-on-ARM emulation) + NIER_DLAA + an NR injector on its DLSS
+  calls (OptiScaler "DLSS 5 one click" is the obvious candidate; DX11 support unverified). Unknowns:
+  NieR frame rate under emulation, injector DX11 support.
+- **Route B: desktop + open-source AMD port** `github.com/lmxxf/dlss5-on-amd-9070xt-porting`: from-scratch
+  HIP reimplementation of the 71-block DLSSNR network for gfx1201 (= RX 9070 XT), weights from the user's
+  own DLL, runs pre-upscale (network on render-res frame, then FSR). Windows-only today (`amdhip64_7.dll`,
+  D3D12<->HIP shared buffers); NieR here runs on Proton, so it would need a Linux ROCm port plus a
+  Proton<->native-HIP bridge: research-grade, weeks. Not bit-exact; per-frame history reset.
+  **Caution:** the repo tree appears to contain an `nvngx...dlssnr.dll` in a dev folder; do not clone it
+  wholesale (fetch source folders only). A second project, Daniel Blonk's "DLSS NR on AMD" / NeuralHub,
+  is closed-source (installer only, unauditable): avoid.
 
 No FPS uncap anywhere. Game runs at its native 60 FPS cap. Resolution upscaling = lower GPU load for headroom (not more FPS). Frame gen later = 60→120 via interpolation, still no uncap.
 
