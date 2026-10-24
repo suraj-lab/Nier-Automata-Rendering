@@ -1,6 +1,6 @@
 # NieR:Automata Rendering — Progress & Resume
 
-Last updated: 2026-10-24 (depth fix live-verified; upscale patch scoped — 4 parts, parts 1–2 built but inert on the gate).
+Last updated: 2026-10-24 (**resolution upscaling DONE**: FSR4 2580x1080 -> 3440x1440 with native post-processing, live-verified in test 3).
 
 ## Session 2026-10-24 resume (start here)
 
@@ -10,12 +10,35 @@ now `2580x1080 D24S8 array=1` matching the 0.75× colour. The game renders colou
 reduced scale; the residual "shaking" is the DLSS camera jitter (expected — FSR4 skips at reduced
 scale, see below).
 
-**Upscale patch is fully scoped but not working yet.** See `analysis/UPSCALING_PATCH.md` for the
-4-part plan with exact addresses. Summary: parts 1+2 (OutWidth/OutHeight + Output → native) are
-BUILT in `checks/proxy_patch.h` + integrated into the setter, but a reviewer found they are INERT
-because of a pre-dispatch size gate (`FUN_1800173c0`) that skips FSR4 when scene != native. The
-remaining work is: **part 0 (relax the gate: scene == camera × 0.75)** and **part 3 (redirect
-bloom/tone-map to the FSR Output)**.
+**FSR4 upscaling runs in-game (2026-10-24, test 2).** `CreateFeature: 2580x1080 -> 3440x1440`,
+6613 frames evaluated, 0 evaluate failures; a mid-game resolution change (2560x1080 -> back)
+rebuilt cleanly. Jitter shake is gone. Built in `checks/proxy_patch.h` (5 sites, 320-byte cave):
+parts 1-2 (native OutWidth/OutHeight + Output, fixed float->int with `cvttss2si`), Part 0
+(dispatch size gate) and **Part 0b** (identical size gate in the linear-depth capture at
+`0x18001a6a4`; test 1 failed on it with "linear depth target not found yet, skipping").
+Setter DLL `3aaf52fa…`. Details: `analysis/UPSCALING_PATCH.md`.
+
+**Part 3 DONE (test 3, 2026-10-24): correct image, user-confirmed "looks good".** Test 2's
+offset/zoomed image came from the mod's copy-back cropping the native FSR output. Part 3 adds an
+exit hook in `FUN_1800173c0` that calls the setter's `on_dispatch_exit`, which rebinds PS SRV
+slot 0 to an SRV of the FSR Output for the draws that read the scene after dispatch, and skips
+the copy-back. Frame dump: bloom `#5266` and tone-map `#5286` read Output `T4803` (3440x1440,
+bind 0x88) at slot 0, the pre-AA reader is untouched, and there is no `CopyResource`. The tone-map
+samples with plain UVs, so no shader constant patch was needed. FSR: 0 evaluate failures, clean
+rebuilds across two resolution changes. Design: `analysis/PART3_REDIRECT.md`.
+
+Builds: v3 `936602b3…` (tested, currently INSTALLED in the game). v4 `3afafb60…` (=
+`analysis/build/scale-setter/d3d11.dll`) adds the reviewer P1/P2 fixes: retry a failed Output
+SRV, assign only on SUCCEEDED, log when the copy-back is skipped without a redirect. v4 is
+gated (29/29) and only changes failure paths; it has not been run in-game yet.
+
+Game state: **v3 test DLL installed** (`d3d11.dll` = setter, `d3d11_dlaa.dll` = mod,
+`NIER_DLAA.ini [Debug] Enabled=1`). Restore native AA with
+`backups/upscale-test-20261024T132205Z/restore.sh` (hash-verified). Test logs and dumps are there
+too; that folder's `install.sh` installs v1, so install v3/v4 manually as done in test 3.
+
+**Next:** decide whether to keep the upscale installed, measure GPU headroom (A/B on GPU
+usage/power at the 60 FPS cap), then frame generation (afmf-linux) or DLSS 5 NR.
 
 **New tools:** `checks/analyze_framedump.py` (delegated to local-worker; gate
 `test_analyze_framedump.py` passes) auto-checks depth/colour size + array-count invariants on a

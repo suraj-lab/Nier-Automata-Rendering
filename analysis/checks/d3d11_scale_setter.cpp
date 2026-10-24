@@ -11,6 +11,7 @@
 #include "scale_patch.h"
 #include "depth_patch.h"
 #include "proxy_patch.h"
+#include "redirect_logic.h"
 
 static constexpr float kScale = 0.75f;
 static constexpr int kPollMs = 250, kPollTries = 480;  // ~120 s for the renderer to appear
@@ -26,6 +27,10 @@ static PFN_CreateDeviceAndSwapChain real_CreateDeviceAndSwapChain = nullptr;
 static std::wstring module_dir;
 static volatile LONG setter_started = 0;
 static HMODULE proxy_module = nullptr;
+static std::uint8_t* proxy_cave = nullptr;
+static redirect_logic::State redirect_state;
+static ID3D11Texture2D* out_tex = nullptr;
+static ID3D11ShaderResourceView* out_srv = nullptr;
 
 static void logf_line(const char* fmt, ...)
 {
@@ -48,7 +53,7 @@ static bool readable(const void* p, std::size_t n)
 }
 
 // Allocate an executable cave within +-2 GB of the image (so the E9 rel32 jump reaches).
-static void* alloc_cave_near(const void* image)
+static void* alloc_cave_near(const void* image, std::size_t size)
 {
     const std::uintptr_t img = reinterpret_cast<std::uintptr_t>(image);
     const std::uintptr_t deltas[] = {
@@ -56,12 +61,12 @@ static void* alloc_cave_near(const void* image)
         0x06000000ULL, 0x07000000ULL, 0x08000000ULL, 0x09000000ULL,
     };
     for (auto d : deltas) {
-        void* p = VirtualAlloc(reinterpret_cast<void*>(img + d), depth_patch::kCaveSize,
+        void* p = VirtualAlloc(reinterpret_cast<void*>(img + d), size,
                                MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
         if (p) return p;
     }
     for (auto d : deltas) {
-        void* p = VirtualAlloc(reinterpret_cast<void*>(img - d), depth_patch::kCaveSize,
+        void* p = VirtualAlloc(reinterpret_cast<void*>(img - d), size,
                                MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
         if (p) return p;
     }
@@ -73,7 +78,7 @@ static depth_patch::Result apply_depth_patch(unsigned char* image, std::size_t s
     if (!depth_patch::check_signatures(image, size))
         return depth_patch::Result::SigMismatch;
 
-    void* cave = alloc_cave_near(image);
+    void* cave = alloc_cave_near(image, depth_patch::kCaveSize);
     if (!cave) { logf_line("depth patch: no cave memory"); return depth_patch::Result::NoMemory; }
 
     const std::uint64_t cave_va = reinterpret_cast<std::uint64_t>(cave);
@@ -108,6 +113,71 @@ static depth_patch::Result apply_depth_patch(unsigned char* image, std::size_t s
     return depth_patch::Result::Applied;
 }
 
+// Part 3: called from the proxy's dispatch-function exit hook (cave, MS x64 ABI). Rebinds
+// PS SRV slot 0 to the FSR Output for the draw that follows, so the scene is consumed
+// natively and the size-invalid copy-back can be skipped.
+static void on_dispatch_exit(ID3D11DeviceContext* ctx)
+{
+    auto* base = reinterpret_cast<unsigned char*>(proxy_module);
+    if (!base) return;
+
+    // Cheap early-outs before any COM call.
+    ID3D11DeviceContext* imm = *reinterpret_cast<ID3D11DeviceContext* volatile*>(base + proxy_patch::kImmediateCtxRva);
+    if (imm != ctx) return;
+    const std::uint32_t cur = *reinterpret_cast<std::uint32_t volatile*>(base + proxy_patch::kCurFrameRva);
+    const std::uint32_t disp = *reinterpret_cast<std::uint32_t volatile*>(base + proxy_patch::kDispatchFrameRva);
+    if (cur != disp) return;
+    ID3D11Texture2D* out = *reinterpret_cast<ID3D11Texture2D* volatile*>(base + proxy_patch::kOutputTexRva);
+    if (!out) return;
+
+    ID3D11ShaderResourceView* srv = nullptr;
+    ctx->PSGetShaderResources(0, 1, &srv);
+    if (!srv) return;
+    ID3D11Resource* res = nullptr;
+    srv->GetResource(&res);
+    srv->Release();
+    if (res) res->Release();
+
+    if (!redirect_logic::should_redirect(redirect_state, true, cur, disp, res, out)) return;
+
+    // (Re)create on a new Output texture, and retry while a previous attempt left no SRV.
+    if (out_tex != out || !out_srv) {
+        if (out_srv) { out_srv->Release(); out_srv = nullptr; }
+        out_tex = out;
+        ID3D11Device* dev = nullptr;
+        ctx->GetDevice(&dev);
+        if (dev) {
+            ID3D11ShaderResourceView* view = nullptr;
+            const HRESULT hr = dev->CreateShaderResourceView(out, nullptr, &view);
+            dev->Release();
+            if (SUCCEEDED(hr)) out_srv = view;
+            else if (view) view->Release();  // don't trust the out-param on failure
+            static int create_logs = 0;  // a persistent failure retries every frame; cap the log
+            if (SUCCEEDED(hr) || create_logs < 5) {
+                if (!SUCCEEDED(hr)) ++create_logs;
+                logf_line("part3 redirect: output SRV %p for tex %p hr=0x%08lx", out_srv, out,
+                    static_cast<unsigned long>(hr));
+            }
+        }
+    }
+
+    if (!out_srv) {
+        // The cave always skips the copy-back, so this frame shows the un-upscaled scene.
+        static int skip_logs = 0;
+        if (skip_logs < 5) {
+            ++skip_logs;
+            logf_line("part3 redirect: no Output SRV, copy-back skipped without redirect frame=%u", cur);
+        }
+    } else {
+        ctx->PSSetShaderResources(0, 1, &out_srv);
+        static bool first = true;
+        if (first) {
+            first = false;
+            logf_line("part3 redirect: first slot-0 redirect frame=%u", cur);
+        }
+    }
+}
+
 static proxy_patch::Result apply_proxy_patch()
 {
     auto* image = reinterpret_cast<unsigned char*>(proxy_module);
@@ -119,24 +189,19 @@ static proxy_patch::Result apply_proxy_patch()
     if (!proxy_patch::check_signatures(image, size))
         return proxy_patch::Result::SigMismatch;
 
-    void* cave = alloc_cave_near(image);
+    void* cave = alloc_cave_near(image, proxy_patch::kCaveSize);
     if (!cave) { logf_line("proxy patch: no cave memory"); return proxy_patch::Result::NoMemory; }
 
     const std::uint64_t cave_va = reinterpret_cast<std::uint64_t>(cave);
     const std::uint64_t image_va = reinterpret_cast<std::uint64_t>(image);
 
     std::uint8_t cave_bytes[proxy_patch::kCaveSize];
-    const std::size_t n = proxy_patch::emit_cave(cave_bytes, sizeof(cave_bytes), cave_va, image_va);
-    if (n == 0) return proxy_patch::Result::BadRange;
+    const std::size_t n = proxy_patch::emit_cave(cave_bytes, sizeof(cave_bytes), cave_va, image_va,
+        reinterpret_cast<std::uint64_t>(&on_dispatch_exit));
+    if (n != proxy_patch::kCaveSize) { logf_line("proxy patch: cave emit failed"); return proxy_patch::Result::BadRange; }
     std::memcpy(cave, cave_bytes, n);
 
-    struct Patch { std::size_t rva; std::size_t len; std::size_t cave_off; };
-    const Patch patches[] = {
-        { proxy_patch::kOutWidthPatchRva,  10, 0  },
-        { proxy_patch::kOutHeightPatchRva, 10, 19 },
-        { proxy_patch::kOutputPatchRva,     5, 38 },
-    };
-    for (const auto& p : patches) {
+    for (const auto& p : proxy_patch::kSites) {
         const std::uint64_t patch_va = image_va + p.rva;
         std::uint8_t jmp[10] = { 0 };
         proxy_patch::emit_jump(jmp, patch_va, cave_va + p.cave_off);
@@ -155,7 +220,9 @@ static proxy_patch::Result apply_proxy_patch()
         VirtualProtect(reinterpret_cast<void*>(patch_va), p.len, old, &ignore);
     }
 
-    logf_line("proxy patch: applied cave=%p (3 patches, cave %zu bytes)", cave, n);
+    proxy_cave = static_cast<std::uint8_t*>(cave);
+    logf_line("proxy patch: applied cave=%p (%zu patches, cave %zu bytes)", cave,
+        sizeof(proxy_patch::kSites) / sizeof(proxy_patch::kSites[0]), n);
     return proxy_patch::Result::Applied;
 }
 
@@ -200,6 +267,11 @@ static DWORD WINAPI setter_thread(void*)
     else
         logf_line("no write: %s (first=%s) renderer=%p screen=%ux%u scale=%.3f", scale_patch::name(r),
             scale_patch::name(first), info.renderer, info.width, info.height, info.before);
+
+    if (r == scale_patch::Result::Applied && pr == proxy_patch::Result::Applied && proxy_cave) {
+        std::memcpy(proxy_cave + proxy_patch::kScaleOff, &kScale, sizeof(kScale));
+        logf_line("proxy gate scale set to %.3f", kScale);
+    }
     return 0;
 }
 
