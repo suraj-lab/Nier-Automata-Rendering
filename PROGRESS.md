@@ -48,6 +48,17 @@ gone from a standalone triangle to path-traced captures of real NieR scenes.
 2. Sky as Remix sky (instead of skipping), sun direction from the game's constants (likely `cb10`).
 3. Then Goal 2 feasibility: load the Remix runtime inside a DXVK D3D11 process (NieR) under Proton.
 
+**Delegation plan for the next session (user request: use the spare local models):**
+- Converter v3 (albedo texture per draw): write the frozen gate first, then brief the SAME gate to two
+  candidates in parallel: laptop **`gemma-4-31b-it`** (via PAIR; only while no Remix render runs on the
+  laptop) and desktop **`qwen/qwen3.8-27b:low`**, each writing its own `*_cand_<model>.py`. Lead reruns
+  gate + hidden cases for every candidate, keeps the best, records both in the ledger.
+- Give desktop **`google/gemma-4-12b`** one small mechanical task (extraction/scaffolding into a new file)
+  to see whether it is a useful fast helper.
+- Neither Gemma model has any ledger records yet. Model guidance and the benchmark protocol:
+  `~/.pi/agent/skills/local-delegation/MODEL_EVALUATION.md`. Brief template (with write-first block):
+  `~/.pi/agent/skills/local-delegation/templates/brief.md`. Unload models afterwards.
+
 **Delegation this session:** desktop `local-worker` built `capture_to_mesh.py`, `scene_from_frame.py` v1/v2
 against frozen gates (one thinking runaway; `:low` + write-first fixed it). Cloud reviewer found real
 malformed-input bugs twice. Ledger: `~/Documents/Local-Model-Delegation-Outcomes.jsonl`.
