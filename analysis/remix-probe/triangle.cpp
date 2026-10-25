@@ -56,16 +56,17 @@ Fit fit_captured() {
 // scene.bin from scene_from_frame.py: NieR's camera + world-space triangles (layout: parse() in
 // test_scene_from_frame.py). Validated fully before any of it reaches Remix.
 struct SceneDraw { std::uint32_t source, first, count, skinned; };
-struct Scene { float camera[14]; std::vector<SceneDraw> draws; std::vector<float> tris; };  // 12 floats per triangle
+constexpr std::size_t kTriFloats = 24;  // v2: 3 vertices x (position[3], normal[3], uv[2])
+struct Scene { float camera[14]; std::vector<SceneDraw> draws; std::vector<float> tris; };
 bool parse_scene(const std::vector<unsigned char>& b, Scene& s) {
     if (b.size() < 72 || std::memcmp(b.data(), "NSCN", 4)) return false;
     std::uint32_t h[3]; std::memcpy(h, b.data() + 4, 12);
-    if (h[0] != 1 || b.size() != 72ull + 16ull * h[1] + 48ull * h[2]) return false;
+    if (h[0] != 2 || b.size() != 72ull + 16ull * h[1] + 4ull * kTriFloats * h[2]) return false;
     std::memcpy(s.camera, b.data() + 16, 56);
     s.draws.resize(h[1]);
     if (h[1]) std::memcpy(s.draws.data(), b.data() + 72, 16ull * h[1]);
-    s.tris.resize(12ull * h[2]);
-    if (h[2]) std::memcpy(s.tris.data(), b.data() + 72 + 16ull * h[1], 48ull * h[2]);
+    s.tris.resize(kTriFloats * h[2]);
+    if (h[2]) std::memcpy(s.tris.data(), b.data() + 72 + 16ull * h[1], 4ull * kTriFloats * h[2]);
     for (const auto& d : s.draws) if (d.first > h[2] || d.count > h[2] - d.first) return false;
     for (float v : s.camera) if (!std::isfinite(v)) return false;
     for (float v : s.tris) if (!std::isfinite(v)) return false;
@@ -84,14 +85,17 @@ bool parse_scene(const std::vector<unsigned char>& b, Scene& s) {
 void selfcheck() {
 #ifdef SCENE_FILE
     {
-        std::vector<unsigned char> b(72 + 16 + 48);
+        std::vector<unsigned char> b(72 + 16 + 4 * kTriFloats);
         std::memcpy(b.data(), "NSCN", 4);
-        const std::uint32_t h[3] = {1, 1, 1}; std::memcpy(b.data() + 4, h, 12);
+        const std::uint32_t h[3] = {2, 1, 1}; std::memcpy(b.data() + 4, h, 12);
         float cam[14] = {0,0,0, 0,0,1, 0,1,0, 1,0,0, 50, 2.4f}; std::memcpy(b.data() + 16, cam, 56);
         const std::uint32_t row[4] = {7, 0, 1, 0}; std::memcpy(b.data() + 72, row, 16);
-        const float tri[12] = {0,0,1, 1,0,1, 0,1,1, 0,0,-1}; std::memcpy(b.data() + 88, tri, 48);
+        const float tri[kTriFloats] = {0,0,1, 0,0,-1, 0,0,  1,0,1, 0,0,-1, 1,0,  0,1,1, 0,0,-1, 0,1};
+        std::memcpy(b.data() + 88, tri, sizeof tri);
         Scene sc;
-        require(parse_scene(b, sc) && sc.draws.size() == 1 && sc.tris.size() == 12 && sc.draws[0].source == 7, "scene parse");
+        require(parse_scene(b, sc) && sc.draws.size() == 1 && sc.tris.size() == kTriFloats && sc.draws[0].source == 7, "scene parse");
+        auto v1 = b; const std::uint32_t one = 1; std::memcpy(v1.data() + 4, &one, 4);
+        require(!parse_scene(v1, sc), "v1 scene accepted");
         auto bad = b; bad.pop_back(); require(!parse_scene(bad, sc), "truncated scene accepted");
         bad = b; const std::uint32_t over[4] = {7, 1, 1, 0}; std::memcpy(bad.data() + 72, over, 16);
         require(!parse_scene(bad, sc), "draw range past triangles accepted");
@@ -312,11 +316,13 @@ int render(const wchar_t* dll, bool hold) {
     surface.indices_values=nullptr; surface.indices_count=0; surface.material=nullptr;
     std::printf("Captured mesh: %u vertices, %u indices, scale %.3f\n",captured_vertex_count,captured_index_count,fit.scale);
 #elif defined(SCENE_FILE)
-    const std::size_t triangles=scene.tris.size()/12;
+    const std::size_t triangles=scene.tris.size()/kTriFloats;
     std::vector<remixapi_HardcodedVertex> vertices(3*triangles);
     for (std::size_t t=0;t<triangles;++t) for (unsigned k=0;k<3;++k) {
         auto& v=vertices[3*t+k];
-        for (unsigned j=0;j<3;++j) { v.position[j]=scene.tris[12*t+3*k+j]; v.normal[j]=scene.tris[12*t+9+j]; }
+        const float* src=&scene.tris[kTriFloats*t+8*k];
+        for (unsigned j=0;j<3;++j) { v.position[j]=src[j]; v.normal[j]=src[3+j]; }
+        v.texcoord[0]=src[6]; v.texcoord[1]=src[7];
         v.color=0xffffffff;
     }
     std::vector<remixapi_MeshInfoSurfaceTriangles> surfaces;  // one per captured draw, default material
@@ -325,8 +331,8 @@ int render(const wchar_t* dll, bool hold) {
         // NieR's sky dome / cloud shells (10-19 km wide, camera inside) are solid to Remix and block the sun:
         // the first full-frame render came out black. Skip anything wider than 5 km.
         float lo[3]={1e30f,1e30f,1e30f}, hi[3]={-1e30f,-1e30f,-1e30f};
-        for (std::size_t t=d.first;t<std::size_t(d.first)+d.count;++t) for (unsigned k=0;k<9;++k) {
-            const float v=scene.tris[12*t+k]; lo[k%3]=std::fmin(lo[k%3],v); hi[k%3]=std::fmax(hi[k%3],v);
+        for (std::size_t t=d.first;t<std::size_t(d.first)+d.count;++t) for (unsigned k=0;k<3;++k) for (unsigned j=0;j<3;++j) {
+            const float v=scene.tris[kTriFloats*t+8*k+j]; lo[j]=std::fmin(lo[j],v); hi[j]=std::fmax(hi[j],v);
         }
         if (std::fmax(hi[0]-lo[0],std::fmax(hi[1]-lo[1],hi[2]-lo[2]))>5000.f) { ++sky_skipped; continue; }
         remixapi_MeshInfoSurfaceTriangles s{};

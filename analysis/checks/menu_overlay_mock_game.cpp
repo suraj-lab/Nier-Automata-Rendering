@@ -138,6 +138,25 @@ int wmain(int argc, wchar_t** argv) {
     D3D11_SUBRESOURCE_DATA mid = {mesh_ib, 0, 0}; ID3D11Buffer* mesh_ib_buf = nullptr; device->CreateBuffer(&mib, &mid, &mesh_ib_buf);
     D3D11_BUFFER_DESC mcb{}; mcb.ByteWidth = sizeof(mesh_cb); mcb.Usage = D3D11_USAGE_DEFAULT; mcb.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
     D3D11_SUBRESOURCE_DATA mcd = {mesh_cb, 0, 0}; ID3D11Buffer* mesh_cb_buf = nullptr; device->CreateBuffer(&mcb, &mcd, &mesh_cb_buf);
+    // PS material textures: slot 0 static RGBA 4x4, slot 1 a render target (must NOT be captured), slot 2 static
+    // BC1 8x8 (2x2 blocks of 8 bytes). Byte patterns are recomputed by test_menu_overlay.py.
+    unsigned char rgba[4 * 4 * 4], bc1[2 * 2 * 8];
+    for (unsigned i = 0; i < sizeof rgba; ++i) rgba[i] = static_cast<unsigned char>((i * 7 + 3) & 0xff);
+    for (unsigned i = 0; i < sizeof bc1; ++i) bc1[i] = static_cast<unsigned char>((i * 5 + 1) & 0xff);
+    const auto make_srv = [&](UINT w, UINT h, DXGI_FORMAT fmt, const void* data, UINT pitch, UINT bind) {
+        D3D11_TEXTURE2D_DESC td{}; td.Width = w; td.Height = h; td.MipLevels = 1; td.ArraySize = 1; td.Format = fmt;
+        td.SampleDesc.Count = 1; td.Usage = D3D11_USAGE_DEFAULT; td.BindFlags = D3D11_BIND_SHADER_RESOURCE | bind;
+        D3D11_SUBRESOURCE_DATA sd = {data, pitch, 0};
+        ID3D11Texture2D* t = nullptr; ID3D11ShaderResourceView* v = nullptr;
+        if (FAILED(device->CreateTexture2D(&td, data ? &sd : nullptr, &t)) || FAILED(device->CreateShaderResourceView(t, nullptr, &v))) return v;
+        t->Release();
+        return v;
+    };
+    ID3D11ShaderResourceView* mesh_srvs[3] = {
+        make_srv(4, 4, DXGI_FORMAT_R8G8B8A8_UNORM, rgba, 16, 0),
+        make_srv(16, 16, DXGI_FORMAT_R8G8B8A8_UNORM, nullptr, 0, D3D11_BIND_RENDER_TARGET),
+        make_srv(8, 8, DXGI_FORMAT_BC1_UNORM, bc1, 16, 0)};
+    if (!mesh_srvs[0] || !mesh_srvs[1] || !mesh_srvs[2]) { std::fprintf(out, "FAIL textures\n"); return 3; }
     const auto draw_mesh = [&]() {
         const UINT mstride = 16, moff = 0;
         context->OMSetRenderTargets(1, &mesh_rtv, nullptr);
@@ -149,6 +168,7 @@ int wmain(int argc, wchar_t** argv) {
         context->VSSetShader(mesh_vs, nullptr, 0);
         context->PSSetShader(mesh_ps, nullptr, 0);
         context->VSSetConstantBuffers(0, 1, &mesh_cb_buf);
+        context->PSSetShaderResources(0, 3, mesh_srvs);
         context->DrawIndexed(192, 0, 0);
     };
     unsigned presented = 0, cs_lost = 0;

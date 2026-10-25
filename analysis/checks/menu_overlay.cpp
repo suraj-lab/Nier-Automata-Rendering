@@ -242,6 +242,9 @@ bool write_capture(const draw_capture::Record& r, const std::wstring& dir, const
     std::fprintf(f, "],\"vs_cbs\":[");
     for (std::size_t i = 0; i < r.vs_cbs.size(); ++i)
         std::fprintf(f, "%s{\"slot\":%u,\"bytes\":%zu}", i ? "," : "", r.vs_cbs[i].slot, r.vs_cbs[i].bytes.size());
+    std::fprintf(f, "],\"ps_textures\":[");  // ids refer to <frame>\\textures\\tex_<id>.dds
+    for (std::size_t i = 0; i < r.ps_textures.size(); ++i)
+        std::fprintf(f, "%s{\"slot\":%u,\"id\":%u}", i ? "," : "", r.ps_textures[i].slot, r.ps_textures[i].id);
     std::fprintf(f, "]}\n");
     std::fclose(f);
     return true;
@@ -250,11 +253,13 @@ bool write_capture(const draw_capture::Record& r, const std::wstring& dir, const
 // Each capture gets its own NIER_CAPTURE\frame_<tick>\ so a later F9 never overwrites an earlier one.
 void write_frame() {
     std::vector<draw_capture::Record> draws;
+    std::vector<texture_capture::Texture> textures;
     unsigned skipped = 0;
     std::size_t bytes = 0;
     {
         std::lock_guard<std::mutex> lock(draw_capture::mutex);
         draws.swap(draw_capture::frame);
+        textures.swap(draw_capture::frame_textures);
         skipped = draw_capture::frame_skipped; bytes = draw_capture::frame_bytes;
     }
     const std::wstring root = host.module_dir + L"NIER_CAPTURE\\";
@@ -263,6 +268,19 @@ void write_frame() {
     const std::wstring dir = root + L"frame_" + std::to_wstring(tick) + L"\\";
     if (!CreateDirectoryW(dir.c_str(), nullptr)) { host.log("menu: frame capture dir failed (%lu)", GetLastError()); return; }
     CreateDirectoryW((dir + L"buffers\\").c_str(), nullptr);
+    CreateDirectoryW((dir + L"textures\\").c_str(), nullptr);
+    std::size_t texture_bytes = 0;
+    unsigned textures_written = 0;
+    FILE* index = _wfopen((dir + L"textures\\index.json").c_str(), L"w");
+    if (index) std::fputc('[', index);
+    for (std::size_t i = 0; i < textures.size(); ++i) {
+        const auto& t = textures[i];
+        const std::wstring path = dir + L"textures\\tex_" + std::to_wstring(t.id) + L".dds";
+        if (texture_capture::write_dds(path.c_str(), t)) { ++textures_written; texture_bytes += t.bytes.size(); }
+        if (index) std::fprintf(index, "%s{\"id\":%u,\"format\":%u,\"width\":%u,\"height\":%u}", i ? "," : "",
+                                t.id, static_cast<unsigned>(t.format), t.width, t.height);
+    }
+    if (index) { std::fputs("]\n", index); std::fclose(index); }
     link_fallbacks = 0;
     unsigned written = 0;
     for (std::size_t i = 0; i < draws.size(); ++i) {
@@ -272,12 +290,13 @@ void write_frame() {
     }
     if (FILE* f = _wfopen((dir + L"frame.json").c_str(), L"w")) {
         std::fprintf(f, "{\"draws\":%zu,\"written\":%u,\"skipped\":%u,\"bytes\":%zu,\"min_index_count\":%u,"
-                     "\"link_fallbacks\":%u}\n", draws.size(), written, skipped, bytes, draw_capture::min_index_count,
-                     link_fallbacks);
+                     "\"link_fallbacks\":%u,\"textures\":%zu,\"textures_written\":%u,\"texture_bytes\":%zu}\n",
+                     draws.size(), written, skipped, bytes, draw_capture::min_index_count, link_fallbacks,
+                     textures.size(), textures_written, texture_bytes);
         std::fclose(f);
     }
-    host.log("menu: frame captured frame_%llu draws=%zu written=%u skipped=%u bytes=%zu link_fallbacks=%u",
-             tick, draws.size(), written, skipped, bytes, link_fallbacks);
+    host.log("menu: frame captured frame_%llu draws=%zu written=%u skipped=%u bytes=%zu link_fallbacks=%u textures=%u",
+             tick, draws.size(), written, skipped, bytes, link_fallbacks, textures_written);
 }
 
 bool capture_armed = false;  // render thread only

@@ -166,6 +166,24 @@ cache existed) the probe path-traced NieR's own view: 2B, three machine lifeform
 - **Not yet:** UVs/textures/materials, smooth normals, lighting that matches the game, animation, anything
   live in the game.
 
+## Scene v2, instancing, texture capture, desktop Proton (2026-10-25, later)
+
+- **Scene v2** (`scene_from_frame.py`, desktop worker, gate + 7/7 hidden, full frame byte-identical to the
+  reference): duplicates across passes keep the richest draw (colour pass with NORMAL/TEXCOORD); per-vertex
+  world normals (98.9% agree with outward faces) and UVs; NieR front faces are clockwise, so the face-normal
+  fallback is (v2-v0)x(v1-v0) (v1 normals pointed inward).
+- **Instancing:** static `DrawIndexedInstanced` draws carry one 64-byte world matrix per instance in cb11
+  (256 B = 4 instances ... 1792 B = 28). v1 drew instance 0 only; the user-reported missing beds were these.
+  v2 renders 3,507,987 triangles (+55K): `runtime/remix-probe/captures-scene-v2-20261025T225509Z/*.png`.
+- **Texture capture** (`checks/texture_capture.h`, menu DLL `31fc0435…`): per draw, the PS-bound static 2D
+  textures (no render targets/depth/UAV), mip 0, once per frame, written as DDS with a DX10 header
+  (`frame_<tick>/textures/tex_<id>.dds` + `index.json`; `ps_textures` per draw). Mock: RGBA + BC1 byte-exact,
+  render target excluded. Not yet run in the game; albedo slot still to be identified from real data.
+- **Desktop Proton:** the standalone probe rendered the reference triangle on the user's Arch desktop under
+  proton-cachyos (CachyOS-11.0-100) via the Remix API with Portal RTX's runtime (`PortalRTX/bin/.trex/d3d9.dll`
+  exports `remixapi_InitializeLibrary`): `runtime/remix-probe/desktop-proton-triangle.png`. Slow first frame
+  (cold shader cache). Still unproven: Remix inside a process that already runs DXVK for D3D11 (NieR).
+
 ## Where the MCP helps
 
 After a usable Remix capture/project exists, the Toolkit MCP can inspect captured assets/layers and

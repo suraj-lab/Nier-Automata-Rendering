@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Convert a whole-frame D3D11 capture directory into a world-space NSCN scene binary."""
+"""Convert a whole-frame D3D11 capture directory into a world-space NSCN scene binary (v2)."""
 import hashlib
 import json
 import math
@@ -11,14 +11,18 @@ from pathlib import Path
 import numpy as np
 
 MAX_INDEX_COUNT = 1 << 24  # per draw; NieR's largest seen is 705K. Bounds memory on hostile captures.
+MAX_INSTANCES = 4096
 
 
 class Reject(Exception):
     pass
 
 
-def sha(p):
-    return hashlib.sha256(p.read_bytes()).hexdigest()
+ERR = (Reject, KeyError, OSError, ValueError, TypeError, IndexError, OverflowError)
+
+
+def sha(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def read_indices(d, c):
@@ -54,19 +58,50 @@ def positions(d, c, e, ids):
     raise Reject('position format')
 
 
+def normals(d, c, e, ids):  # NORMAL: 10 = float16 x4 (first 3), 2/6 = float32 x3+
+    if e['format'] == 10:
+        return element_bytes(d, c, e, ids, 6).copy().view('<f2').reshape(-1, 3).astype(np.float64)
+    return element_bytes(d, c, e, ids, 12).copy().view('<f4').reshape(-1, 3).astype(np.float64)
+
+
+def texcoords(d, c, e, ids):  # TEXCOORD: 34 = float16 x2, 16 = float32 x2
+    if e['format'] == 34:
+        return element_bytes(d, c, e, ids, 4).copy().view('<f2').reshape(-1, 2).astype(np.float64)
+    return element_bytes(d, c, e, ids, 8).copy().view('<f4').reshape(-1, 2).astype(np.float64)
+
+
 def mats(cb11, count):
     return np.frombuffer(cb11, dtype='<f4', count=count * 12).astype(np.float64).reshape(count, 3, 4)
 
 
-def world_positions(d, c, ids):
+def first(layout, semantic, formats):
+    """First element (layout order) with this semantic; None unless its format is one we decode."""
+    for e in layout:
+        if e['semantic'] == semantic:
+            return e if e['format'] in formats else None
+    return None
+
+
+def score(c):
+    """Duplicate draws (same geometry + transform in several passes): keep the one with the most attributes."""
+    lay = c['layout']
+    return (first(lay, 'NORMAL', (2, 6, 10)) is not None, first(lay, 'TEXCOORD', (16, 34)) is not None, len(lay))
+
+
+def world_attrs(d, c, ids):
+    """-> (list of (world positions, world normals or None) per instance, uv shared, skinned)."""
     lay = {e['semantic']: e for e in c['layout']}
     if 'POSITION' not in lay:
         raise Reject('no position')
     p = positions(d, c, lay['POSITION'], ids)
+    ne = first(c['layout'], 'NORMAL', (2, 6, 10))
+    n = normals(d, c, ne, ids) if ne else None
+    te = first(c['layout'], 'TEXCOORD', (16, 34))
+    uv = texcoords(d, c, te, ids) if te else np.zeros((len(p), 2))
     cb11 = (d / 'cb_11.bin').read_bytes() if (d / 'cb_11.bin').exists() else b''
     ph = np.concatenate([p, np.ones((len(p), 1))], axis=1)
     bi, bw = lay.get('BLENDINDICES'), lay.get('BLENDWEIGHT')
-    if bi and bw and bi['format'] == 30 and bw['format'] == 28:
+    if bi and bw and bi['format'] == 30 and bw['format'] == 28:  # skinned: one copy, instancing ignored
         idx = element_bytes(d, c, bi, ids, 4).astype(np.int64)
         w = element_bytes(d, c, bw, ids, 4).astype(np.float64) / 255.0
         used = idx[w > 0]
@@ -74,14 +109,23 @@ def world_positions(d, c, ids):
         if used.size and used.max() >= nb:
             raise Reject('bone index')
         bones = mats(cb11, nb) if nb else np.zeros((1, 3, 4))
-        out = np.zeros((len(p), 3))
+        out, nout = np.zeros((len(p), 3)), np.zeros((len(p), 3))
         for k in range(4):
             m = w[:, k] > 0
             out[m] += w[m, k, None] * np.einsum('nij,nj->ni', bones[idx[m, k]], ph[m])
-        return out, True
-    if len(cb11) < 48:
+            if n is not None:
+                nout[m] += w[m, k, None] * np.einsum('nij,nj->ni', bones[idx[m, k], :, :3], n[m])
+        return [(out, nout if n is not None else None)], uv, True
+    count = c.get('instance_count', 1) if c.get('instanced') == 1 else 1
+    if type(count) is not int or not 1 <= count <= MAX_INSTANCES:
+        raise Reject('instance_count')
+    if len(cb11) < 64 * (count - 1) + 48:  # one 3x4 world matrix per instance at a 64-byte stride
         raise Reject('cb11')
-    return ph @ mats(cb11, 1)[0].T, False
+    out = []
+    for i in range(count):
+        M = np.frombuffer(cb11, dtype='<f4', count=12, offset=64 * i).astype(np.float64).reshape(3, 4)
+        out.append((ph @ M.T, n @ M[:, :3].T if n is not None else None))
+    return out, uv, False
 
 
 def camera(d):
@@ -112,18 +156,16 @@ def build(frame):
     for d in draws:
         try:
             c = json.loads((d / 'capture.json').read_text())
-            if valid_meta(c):
-                metas[d] = c
         except Exception:
-            pass
+            continue
+        if valid_meta(c):
+            metas[d] = c
     vps = Counter((m['vp_width'], m['vp_height']) for m in metas.values())
     if not vps:
         raise Reject('no draws')
     main = max(vps, key=lambda k: (vps[k], k[0] * k[1]))
-    seen, table, tris = set(), [], []
-    stats = Counter()
-    first_kept = None
-    for d in draws:
+    groups, order, stats = {}, [], Counter()
+    for d in draws:  # group main-viewport draws by geometry + transform; groups keep first-appearance order
         c = metas.get(d)
         if c is None:
             stats['rejected'] += 1
@@ -137,38 +179,60 @@ def build(frame):
                 raise Reject('no position')
             pslot = lay['POSITION'].get('slot', 0)
             vb = {v['slot']: v for v in c['vertex_buffers']}[pslot]
-            key = (sha(d / f'vb_{pslot}.bin'), sha(d / 'ib.bin'), c['start_index'], c['index_count'],
-                   c['base_vertex'], sha(d / 'cb_11.bin') if (d / 'cb_11.bin').exists() else '',
-                   vb['offset'], vb['stride'])
-            if key in seen:
-                stats['duplicates'] += 1
-                continue
-            ids = read_indices(d, c)
-            n = len(ids) // 3 * 3
-            ids = ids[:n]
-            if ids.size and ids.min() < 0:
-                raise Reject('negative id')
-            uniq, inv = np.unique(ids, return_inverse=True)
-            w, skinned = world_positions(d, c, uniq)
-        except (Reject, KeyError, OSError, ValueError, TypeError, IndexError, OverflowError):
+            key = (sha(d / f'vb_{pslot}.bin'), sha(d / 'ib.bin'), c['start_index'], c['index_count'], c['base_vertex'],
+                   sha(d / 'cb_11.bin') if (d / 'cb_11.bin').exists() else '', vb['offset'], vb['stride'])
+        except ERR:
             stats['rejected'] += 1
             continue
-        seen.add(key)
-        if first_kept is None:
-            first_kept = d
-        v = w[inv].reshape(-1, 3, 3)
-        t3 = ids.reshape(-1, 3)
-        keep = (t3[:, 0] != t3[:, 1]) & (t3[:, 1] != t3[:, 2]) & (t3[:, 0] != t3[:, 2])
-        nrm = np.cross(v[:, 1] - v[:, 0], v[:, 2] - v[:, 0])
-        length = np.linalg.norm(nrm, axis=1)
-        keep &= (length > 0) & np.isfinite(v).all(axis=(1, 2)) & np.isfinite(length)  # NaN/inf world: drop
-        v, nrm = v[keep], nrm[keep] / length[keep, None]
-        table.append((int(d.name[5:]), sum(len(x) for x in tris), len(v), int(skinned)))
-        tris.append(np.concatenate([v.reshape(-1, 9), nrm], axis=1))
-        stats['kept'] += 1
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(d)
+    table, tris, first_kept = [], [], None
+    for key in order:
+        # richest first (score descending), draw name breaks ties; a failed decode falls back to the next
+        cands = sorted(groups[key], key=lambda d: tuple(-int(x) for x in score(metas[d])) + (d.name,))
+        for i, d in enumerate(cands):
+            c = metas[d]
+            try:
+                ids = read_indices(d, c)
+                ids = ids[:len(ids) // 3 * 3]
+                if ids.size and ids.min() < 0:
+                    raise Reject('negative id')
+                uniq, inv = np.unique(ids, return_inverse=True)
+                instances, uv, skinned = world_attrs(d, c, uniq)
+            except ERR:
+                stats['rejected'] += 1
+                continue
+            stats['duplicates'] += len(cands) - i - 1
+            if first_kept is None:
+                first_kept = d
+            t3 = ids.reshape(-1, 3)
+            distinct = (t3[:, 0] != t3[:, 1]) & (t3[:, 1] != t3[:, 2]) & (t3[:, 0] != t3[:, 2])
+            start = sum(len(x) for x in tris)
+            for wp, wn in instances:
+                v = wp[inv].reshape(-1, 3, 3)
+                face = np.cross(v[:, 2] - v[:, 0], v[:, 1] - v[:, 0])  # NieR/D3D front faces are clockwise
+                length = np.linalg.norm(face, axis=1)
+                keep = distinct & (length > 0) & np.isfinite(v).all(axis=(1, 2)) & np.isfinite(length)
+                face = face[keep] / length[keep, None]
+                v = v[keep]
+                if wn is not None:
+                    vn = wn[inv].reshape(-1, 3, 3)[keep]
+                    nl = np.linalg.norm(vn, axis=2, keepdims=True)
+                    ok = np.isfinite(vn).all(axis=2, keepdims=True) & np.isfinite(nl) & (nl > 0)
+                    vn = np.where(ok, vn / np.where(ok, nl, 1), face[:, None, :])
+                else:
+                    vn = np.broadcast_to(face[:, None, :], v.shape)
+                t = uv[inv].reshape(-1, 3, 2)[keep]
+                t = np.where(np.isfinite(t), t, 0.0)
+                tris.append(np.concatenate([v, vn, t], axis=2).reshape(-1, 24))
+            table.append((int(d.name[5:]), start, sum(len(x) for x in tris) - start, int(skinned)))
+            stats['kept'] += 1
+            break
     if first_kept is None:
         raise Reject('no usable draws')
-    allt = np.concatenate(tris) if tris else np.zeros((0, 12))
+    allt = np.concatenate(tris) if tris else np.zeros((0, 24))
     return camera(first_kept), table, allt, main, stats
 
 
@@ -181,11 +245,11 @@ def main():
         if not frame.is_dir():
             raise Reject('missing frame dir')
         cam, table, allt, main, stats = build(frame)
-    except (Reject, KeyError, OSError, ValueError) as e:
+    except Exception as e:
         print(f'error: {e}', file=sys.stderr)
         sys.exit(2)
     blob = bytearray()
-    blob += b'NSCN' + struct.pack('<3I', 1, len(table), len(allt))
+    blob += b'NSCN' + struct.pack('<3I', 2, len(table), len(allt))
     blob += struct.pack('<14f', *[float(x) for x in cam])
     for row in table:
         blob += struct.pack('<4I', *row)

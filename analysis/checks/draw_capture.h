@@ -8,6 +8,7 @@
 #include <vector>
 #include "vtable_hook.h"
 #include "geometry_capture.h"
+#include "texture_capture.h"
 
 namespace draw_capture {
 // 0-based ID3D11DeviceContext vtable slots (IUnknown 0..2, ID3D11DeviceChild 3..6, then VSSetConstantBuffers=7 ...).
@@ -29,6 +30,7 @@ struct Record {
     D3D11_VIEWPORT viewport{};
     geometry_capture::Capture geometry;
     std::vector<ConstantBuffer> vs_cbs;
+    std::vector<texture_capture::Ref> ps_textures;  // material textures bound to the pixel shader
 };
 
 // Skip draws smaller than this many indices (fullscreen/post-process quads and particles are 4-6; a
@@ -43,6 +45,9 @@ inline std::size_t max_frame_bytes = std::size_t(768) << 20;  // unique bytes re
 inline std::atomic<bool> frame_active{false};
 inline std::vector<Record> frame;  // guarded by mutex
 inline geometry_capture::Cache cache;  // guarded by mutex; holds buffer references only while recording
+inline texture_capture::Cache texture_cache;  // guarded by mutex; same lifetime as `cache`
+inline std::vector<texture_capture::Texture> frame_textures;  // guarded by mutex; filled by end_frame()
+inline std::size_t max_texture_bytes = std::size_t(1024) << 20;  // mip-0 bytes per frame; later ones get id 0
 inline std::size_t frame_bytes = 0;
 inline unsigned frame_skipped = 0;
 inline std::mutex mutex;
@@ -71,7 +76,7 @@ inline bool capture_state(ID3D11Device* device, ID3D11DeviceContext* context, ge
 
 inline void begin_frame() {
     std::lock_guard<std::mutex> lock(mutex);
-    frame.clear(); cache.clear(); frame_bytes = 0; frame_skipped = 0;
+    frame.clear(); cache.clear(); texture_cache.clear(); frame_textures.clear(); frame_bytes = 0; frame_skipped = 0;
     frame_active.store(true, std::memory_order_release);
 }
 // Stop recording; true if a frame was being recorded (its draws are then in `frame`). Records keep
@@ -79,6 +84,8 @@ inline void begin_frame() {
 inline bool end_frame() {
     std::lock_guard<std::mutex> lock(mutex);
     cache.clear();
+    frame_textures.swap(texture_cache.textures);  // keep the pixels, drop the resource references
+    texture_cache.clear();
     return frame_active.exchange(false, std::memory_order_acq_rel);
 }
 
@@ -96,6 +103,7 @@ inline void record_draw(ID3D11DeviceContext* self, bool instanced, UINT index_co
     const std::size_t before = cache.read_bytes;
     if (capture_state(device, self, r.geometry, r.vs_cbs, r.viewport, &cache)) {
         r.valid = true;
+        texture_capture::capture(device, self, texture_cache, r.ps_textures, max_texture_bytes);
         frame_bytes += cache.read_bytes - before;
         for (const auto& cb : r.vs_cbs) frame_bytes += cb.bytes.size();
         frame.push_back(std::move(r));

@@ -1,41 +1,57 @@
 # NieR:Automata Rendering — Progress & Resume
 
-Last updated: 2026-10-25. **Native and Custom75 startup smoke tests PASSED**, with user-confirmed
-good visuals and matching logs. Candidate remains installed with Custom75 selected; v4 deployment
-pins/build artifact remain unchanged. Resolution-change and long-session checks are still pending.
+Last updated: 2026-10-25 (late). **Checkpoint below is the place to resume.** Upscaling (Custom75,
+FSR4 2580x1080 -> 3440x1440) and the in-game menu are working and installed; the RTX Remix track has
+gone from a standalone triangle to path-traced captures of real NieR scenes.
 
-**RESUMED for offline settings-save/status work.** The user returned and authorized continuation.
-The isolated preview remains documented in `analysis/menu-preview/README.md`; the received Claude
-Design export and live installation are unchanged. Current checkpoint:
-`analysis/runtime/settings-writer/checkpoint.json`. No commit or remote push was made.
+## Checkpoint — 2026-10-25 late (start here)
 
-## Session checkpoint — 2026-10-25
+**Installed in the game** (`d3d11.dll` = menu + upscaler + capture, `31fc04351e2f…`; Custom75 selected,
+60 FPS cap unchanged). Rollback chain: `backups/ingame-menu-*` (newest
+`ingame-menu-textures-20261025T225826Z/`), each with a hash receipt.
+- **Menu:** Insert toggles; save-for-next-launch works both ways (live-tested). Mouse: WndProc
+  consumption + `SetCursorPos` IAT block + **DirectInput8 `GetDeviceState`/`GetDeviceData` blanking**
+  (slots 9/10) while the panel is open. User confirmed the camera stays still. NieR reads mouselook via
+  DINPUT8, which is why message consumption alone did not work.
+- **F9 = whole-frame capture** to `NIER_CAPTURE/frame_<tick>/draw_NNNN/` (+ `buffers/`, `textures/`).
+  Static VB/IB read once per frame (dynamic always fresh), hard-linked per draw; caps 4096 draws /
+  768 MB unique buffers / 1 GB textures. Real frame: 2995 draws, 0 skipped, 456 MB, ~7 s stall.
+  **Texture capture (PS-bound static textures, mip 0, DDS) is installed but not yet run in the game.**
 
-**In-game menu:** LIVE-TESTED successfully. Panel renders in NieR on Proton/DXVK/WAX; both
-save directions committed cleanly (`Native` then `Custom75`, both `outcome=0`). Cursor fix applied
-(release the game's capture while open) and installed as DLL `f1a43946…` — needs a re-test for the
-cursor feel. Prior DLL `ac58f09f…` backed up at `backups/ingame-menu-cursorfix-20261025T200532Z/`.
+**Verified NieR facts** (details `analysis/runtime/remix-probe/world-matrix-finding.json`,
+`analysis/REMIX_FEASIBILITY.md`):
+- VS `cb0` = per-frame camera (view 3x4 + projection); `cb11` = per-object world 3x4 (64-byte stride, one
+  per instance for `DrawIndexedInstanced`) or a skinned bone palette (48-byte 3x4s, BLENDINDICES UINT8 /
+  BLENDWEIGHT UNORM8). The earlier "cb0 = world" finding was wrong.
+- Colour-pass layouts declare NORMAL (half4, object space) and TEXCOORD (half2; first one is the UV).
+  Front faces are clockwise. Depth pre-pass draws carry only position (+skin).
+- vtable slots (checked against headers, then end-to-end mocks): context `DrawIndexed` 12,
+  `DrawIndexedInstanced` **20** (19 is `IASetIndexBuffer`), device `CreateInputLayout` 11; DInput device
+  `GetDeviceState` 9 / `GetDeviceData` 10.
+- Shadow maps are 2048x2048 draws; a half-res 1290x540 pass exists; sky dome/cloud shells are 10-19 km
+  meshes that enclose the camera.
 
-**Remix on Windows ARM:** triangle renders through the x64 runtime on Spaghetti. Shutdown "hang"
-was traced to launching over SSH (session 0), NOT a runtime bug — interactive run exits in ~7 s.
-Details: `analysis/remix-probe/` and `analysis/runtime/remix-probe/shutdown-debug/STATUS.md`.
+**Remix pipeline (offline, laptop + desktop):**
+- `analysis/remix-probe/scene_from_frame.py` (gated, scene v2): main-viewport draws, dedupe across passes
+  keeping the colour pass, instancing, world normals + UVs -> `scene.bin`. Camp frame: 880 draws,
+  3.51M triangles. `capture_to_mesh.py`: single draw -> header.
+- `triangle.cpp` probe: `build.py --scene` / `--mesh`; `run_remote.py --scene <bin> --hold --shot-frame 1500`
+  (laptop screenshot); `show_on_laptop.sh <label> scene <bin>` (live window in the user's session).
+  Skips draws wider than 5 km (sky shells block the sun). Large scenes need ~15 s before the first RTX
+  frame; the old 4 s default run never rendered them.
+- **Desktop Proton works:** the probe rendered via the Remix API with Portal RTX's runtime under
+  proton-cachyos 11 on this Arch desktop.
 
-**NieR frame dump captured** (`framedump-capture/NIER_DLAA_frame_20261025_195822_205.txt`): pass list
-only — confirms 2580×1080 Custom75 scale, but no vertex/index bytes. Geometry extraction needs a new
-buffer-capture hook (next build). `NIER_DLAA.ini [Debug]` was flipped on/off safely and restored.
+**Next (Goal 1 — good-looking snapshots, then decide on live play):**
+1. User F9 with the texture build -> identify the albedo SRV slot from real data -> converter v3 (per-draw
+   albedo texture) -> probe creates Remix materials from the DDS files.
+2. Sky as Remix sky (instead of skipping), sun direction from the game's constants (likely `cb10`).
+3. Then Goal 2 feasibility: load the Remix runtime inside a DXVK D3D11 process (NieR) under Proton.
 
-**Geometry-capture hook — offline foundation DONE (uncommitted):**
-- `geometry_capture.h`: raw VB/IB readback (CopyResource→staging→Map), byte-exact under Wine.
-- `input_layout_hook.h`: hooks `ID3D11Device::CreateInputLayout` (vtable slot 11) to recover the
-  vertex format (POSITION/NORMAL/TEXCOORD with formats+offsets) — D3D11 can't expose this otherwise.
-- `draw_capture.h`: hooks `DrawIndexed` (slot 12) + `DrawIndexedInstanced` (slot 19) on the immediate
-  context; on trigger captures draw args + geometry + format + VS constant buffers (raw transform bytes).
-- `test_geometry_capture.py`: Wine mock draws a known mesh; all bytes/args/format verified. Caveat:
-  Wine SIGKILLs the mock at device teardown AFTER capture (documented; output verified, exit not trusted).
-
-**Next (Remix object milestone):** map world/view/proj CB slot+offset per shader; build a keybind-
-triggered live capture probe; convert captured vertices → Remix `HardcodedVertex` and render in the
-standalone harness. Also re-test the in-game menu cursor fix (`f1a43946…`).
+**Delegation this session:** desktop `local-worker` built `capture_to_mesh.py`, `scene_from_frame.py` v1/v2
+against frozen gates (one thinking runaway; `:low` + write-first fixed it). Cloud reviewer found real
+malformed-input bugs twice. Ledger: `~/Documents/Local-Model-Delegation-Outcomes.jsonl`.
+Methodology for future projects: `~/.pi/agent/skills/gated-delegation-re/SKILL.md`.
 
 ---
 

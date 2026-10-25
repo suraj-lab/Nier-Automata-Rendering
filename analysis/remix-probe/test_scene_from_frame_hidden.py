@@ -36,16 +36,16 @@ def zero_weight_oob():
     vb = bytearray((d/'vb_0.bin').read_bytes())
     for i in range(4): vb[i*28+20:i*28+24] = bytes((0, 9, 9, 9))  # idx 9 only with weight 0
     (d/'vb_0.bin').write_bytes(vb)
-    s = t.expect_ok(cand, f, work, 'zero weight'); assert s['kept'] == 1, s
+    s = t.expect_ok(cand, f, work, 'zero weight')[0]; assert s['kept'] == 1, s
 def remainder():
     f = frame('rem'); t.draw(f, 0, cb11=t.mat34(0, (0, 0, 0)), indices=(0, 1, 2, 0, 2))
-    s = t.expect_ok(cand, f, work, 'remainder'); assert s['triangles'] == 1, s
+    s = t.expect_ok(cand, f, work, 'remainder')[0]; assert s['triangles'] == 1, s
 def vp_tie():
     f = frame('tie'); t.draw(f, 0, vp=(100, 100), cb11=t.mat34(0, (0, 0, 0))); t.draw(f, 1, vp=(200, 100), cb11=t.mat34(0, (1, 0, 0)))
-    s = t.expect_ok(cand, f, work, 'tie'); assert s['other_viewport'] == 1, s
+    s = t.expect_ok(cand, f, work, 'tie')[0]; assert s['other_viewport'] == 1, s
 def ib_range():
     f = frame('ibr'); d = t.draw(f, 0, cb11=t.mat34(0, (0, 0, 0))); t.draw(f, 1, cb11=t.mat34(0, (1, 0, 0)))
-    patch(d, index_count=99); s = t.expect_ok(cand, f, work, 'ib range'); assert s['rejected'] == 1, s
+    patch(d, index_count=99); s = t.expect_ok(cand, f, work, 'ib range')[0]; assert s['rejected'] == 1, s
 for n, fn in [('R32 + ib_offset/start/base', r32_base), ('POSITION half4', half_pos), ('blend elements in slot 1', blend_slot1),
               ('zero-weight out-of-range bone ignored', zero_weight_oob), ('index remainder ignored', remainder),
               ('viewport tie -> larger area', vp_tie), ('index buffer overrun -> reject draw', ib_range)]:

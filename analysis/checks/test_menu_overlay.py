@@ -92,12 +92,26 @@ def inside():
             summary = json.loads((fr / 'frame.json').read_text())
             assert summary['draws'] == 2 and summary['written'] == 2 and summary['skipped'] == 0, (fr, summary)
             assert summary['link_fallbacks'] == 0, summary
-            assert sorted(p.name for p in fr.iterdir() if p.is_dir()) == ['buffers', 'draw_0000', 'draw_0001'], list(fr.iterdir())
+            assert sorted(p.name for p in fr.iterdir() if p.is_dir()) == ['buffers', 'draw_0000', 'draw_0001', 'textures'], list(fr.iterdir())
             # shared static VB/IB: one file each under buffers/, hard-linked into both draws
             assert len(list((fr / 'buffers').iterdir())) == 2, list((fr / 'buffers').iterdir())
             for name in ('vb_0.bin', 'ib.bin'):
                 assert os.path.samefile(fr / 'draw_0000' / name, fr / 'draw_0001' / name), name
         assert log.count('menu: frame captured') == 2, log
+        # PS textures: static RGBA + BC1 written once each as DDS (DX10 header, 148 bytes); the render target is not.
+        rgba = bytes((i * 7 + 3) & 0xff for i in range(64)); bc1 = bytes((i * 5 + 1) & 0xff for i in range(32))
+        for fr in frames:
+            summary = json.loads((fr / 'frame.json').read_text())
+            assert summary['textures'] == 2 and summary['textures_written'] == 2, summary
+            index = json.loads((fr / 'textures' / 'index.json').read_text())
+            assert index == [{'id': 1, 'format': 28, 'width': 4, 'height': 4}, {'id': 2, 'format': 71, 'width': 8, 'height': 8}], index
+            for tid, payload, fmt in ((1, rgba, 28), (2, bc1, 71)):
+                dds = (fr / 'textures' / f'tex_{tid}.dds').read_bytes()
+                assert dds[:4] == b'DDS ' and dds[84:88] == b'DX10' and struct.unpack_from('<I', dds, 128)[0] == fmt, tid
+                assert dds[148:] == payload, (tid, dds[148:].hex(), payload.hex())
+            for dname in ('draw_0000', 'draw_0001'):
+                cap = json.loads((fr / dname / 'capture.json').read_text())
+                assert cap['ps_textures'] == [{'slot': 0, 'id': 1}, {'slot': 2, 'id': 2}], cap['ps_textures']
         cd = frames[0] / 'draw_0000'
         cap = json.loads((cd / 'capture.json').read_text())
         assert cap['index_count'] == 192 and cap['instanced'] == 0 and cap['has_index'] == 1 and cap['ib_format'] == 57
