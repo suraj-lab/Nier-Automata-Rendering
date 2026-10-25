@@ -87,13 +87,55 @@ int wmain() {
     context->PSSetShader(ps_sh, nullptr, 0);
     context->VSSetConstantBuffers(0, 1, &cb_buf);
 
-    draw_capture::capture_next.store(true);
+    draw_capture::min_index_count = 1;  // this test exercises the capture mechanics, not the filter
+    context->DrawIndexed(3, 0, 0);  // before the frame: must not be recorded
+    draw_capture::begin_frame();
     context->DrawIndexed(3, 0, 0);
+    context->DrawIndexed(3, 0, 0);  // same static buffers again: must share the first read
+    if (!draw_capture::end_frame()) { std::fprintf(stderr, "FAIL frame not active\n"); return 1; }
+    context->DrawIndexed(3, 0, 0);  // after the frame: must not be recorded
+    if (draw_capture::frame.size() != 2) { std::fprintf(stderr, "FAIL frame draws %zu\n", draw_capture::frame.size()); return 1; }
+    {
+        const auto& a = draw_capture::frame[0].geometry; const auto& b = draw_capture::frame[1].geometry;
+        if (!a.vertex[0].shared_id || a.vertex[0].bytes != b.vertex[0].bytes || a.vertex[0].shared_id != b.vertex[0].shared_id ||
+            !a.index.shared_id || a.index.bytes != b.index.bytes) { std::fprintf(stderr, "FAIL static buffers not shared\n"); return 1; }
+        if (draw_capture::frame_bytes != sizeof(vertices) + sizeof(indices) + 2 * sizeof(cb_bytes)) {
+            std::fprintf(stderr, "FAIL frame_bytes %zu counts shared buffers twice\n", draw_capture::frame_bytes); return 1;
+        }
+        if (!draw_capture::cache.entries.empty()) { std::fprintf(stderr, "FAIL cache kept buffer references\n"); return 1; }
+    }
+    // A DYNAMIC vertex buffer rewritten between two draws (same pointer) must be read fresh both times.
+    D3D11_BUFFER_DESC dvb = vb; dvb.Usage = D3D11_USAGE_DYNAMIC; dvb.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+    ID3D11Buffer* dyn = nullptr;
+    if (FAILED(device->CreateBuffer(&dvb, nullptr, &dyn)) || !dyn) { std::fprintf(stderr, "FAIL dynamic buffer\n"); return 1; }
+    const auto fill = [&](unsigned char value) {
+        D3D11_MAPPED_SUBRESOURCE m{};
+        context->Map(dyn, 0, D3D11_MAP_WRITE_DISCARD, 0, &m);
+        std::memset(m.pData, value, sizeof(vertices));
+        context->Unmap(dyn, 0);
+    };
+    context->IASetVertexBuffers(0, 1, &dyn, &stride, &offset);
+    draw_capture::begin_frame();
+    fill(0x11); context->DrawIndexed(3, 0, 0);
+    fill(0x22); context->DrawIndexed(3, 0, 0);
+    draw_capture::end_frame();
+    if (draw_capture::frame.size() != 2) { std::fprintf(stderr, "FAIL dynamic frame draws %zu\n", draw_capture::frame.size()); return 1; }
+    {
+        const auto& a = draw_capture::frame[0].geometry.vertex[0]; const auto& b = draw_capture::frame[1].geometry.vertex[0];
+        if (a.shared_id || b.shared_id || !a.bytes || !b.bytes || (*a.bytes)[0] != 0x11 || (*b.bytes)[0] != 0x22) {
+            std::fprintf(stderr, "FAIL dynamic buffer shared or stale\n"); return 1;
+        }
+    }
+    std::puts("cache checks passed");
+    context->IASetVertexBuffers(0, 1, &vb_buf, &stride, &offset);
+    draw_capture::begin_frame();
+    context->DrawIndexed(3, 0, 0);
+    draw_capture::end_frame();
 
-    const draw_capture::Record& r = draw_capture::record;
+    const draw_capture::Record& r = draw_capture::frame[0];
     if (!r.valid) { std::fprintf(stderr, "FAIL draw capture\n"); return 3; }
-    write_file("capture_vb.bin", r.geometry.vertex[0].bytes.data(), r.geometry.vertex[0].bytes.size());
-    write_file("capture_ib.bin", r.geometry.index.bytes.data(), r.geometry.index.bytes.size());
+    write_file("capture_vb.bin", r.geometry.vertex[0].bytes->data(), r.geometry.vertex[0].bytes->size());
+    write_file("capture_ib.bin", r.geometry.index.bytes->data(), r.geometry.index.bytes->size());
     if (!r.vs_cbs.empty())
         write_file("capture_cb.bin", r.vs_cbs[0].bytes.data(), r.vs_cbs[0].bytes.size());
 
@@ -105,7 +147,7 @@ int wmain() {
                    "\"vb_bytes\":%zu,\"ib_bytes\":%zu,\"vs_cbs\":%zu,\"cb_bytes\":%zu,"
                    "\"layout_found\":%d,\"layout_elements\":%zu,\"layout\":[",
                  r.index_count, r.start_index, r.base_vertex, r.instanced ? 1 : 0,
-                 r.geometry.vertex[0].bytes.size(), r.geometry.index.bytes.size(),
+                 r.geometry.vertex[0].bytes->size(), r.geometry.index.bytes->size(),
                  r.vs_cbs.size(), r.vs_cbs.empty() ? 0 : r.vs_cbs[0].bytes.size(),
                  have_layout ? 1 : 0, els.elements.size());
     for (std::size_t i = 0; i < els.elements.size(); ++i) {

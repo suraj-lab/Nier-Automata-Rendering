@@ -25,6 +25,7 @@ def inside():
     # The mock game writes its files and prints the marker before ExitProcess. This Wine/wined3d build
     # SIGKILLs the process (exit 137) during device teardown AFTER the capture is complete, so the marker
     # + output files are the pass condition, not the exit code.
+    assert 'cache checks passed' in (p.stdout or ''), f'cache checks failed: {(p.stderr or "")[-500:]}'
     assert 'draw capture written' in (p.stdout or ''), f'capture did not complete (rc={p.returncode}): {(p.stderr or "")[-500:]}'
 
     assert (work / 'capture_vb.bin').read_bytes() == (work / 'expected_vb.bin').read_bytes(), 'VB readback mismatch'

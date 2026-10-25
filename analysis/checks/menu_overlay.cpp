@@ -9,6 +9,9 @@
 #include "vtable_hook.h"
 #include "menu_session.h"
 #include "menu_settings_io.h"
+#include "input_layout_hook.h"
+#include "draw_capture.h"
+#include "input_capture.h"
 #include "../menu-preview/panel.h"
 #include "backends/imgui_impl_dx11.h"
 #include "backends/imgui_impl_win32.h"
@@ -148,6 +151,8 @@ void initialize(IDXGISwapChain* swapchain) {
         return disable("fonts");
     }
     if (!ImGui_ImplWin32_Init(window)) { ImGui::DestroyContext(); return disable("win32 backend"); }
+    const bool dinput_hooked = input_capture::install(window);  // block the game's mouse while the panel is open
+    host.log("menu: dinput mouse hook=%d", dinput_hooked ? 1 : 0);
     // Create shaders/buffers now: with asserts compiled out, a later silent failure would draw nothing.
     if (!ImGui_ImplDX11_Init(device, context) || !ImGui_ImplDX11_CreateDeviceObjects()) {
         ImGui_ImplDX11_Shutdown(); ImGui_ImplWin32_Shutdown(); ImGui::DestroyContext(); return disable("dx11 backend");
@@ -168,6 +173,136 @@ bool ensure_state() {
     return true;
 }
 
+void write_bytes(const std::wstring& path, const std::vector<unsigned char>& b) {
+    if (b.empty()) return;
+    FILE* f = _wfopen(path.c_str(), L"wb");
+    if (f) { std::fwrite(b.data(), 1, b.size(), f); std::fclose(f); }
+}
+
+// Shared (static) buffers are written once to <frame>\buffers\buf_<id>.bin and hard-linked into each
+// draw folder, so the per-draw format stays vb_<slot>.bin/ib.bin. A failed link falls back to a copy.
+unsigned link_fallbacks = 0;
+void place_buffer(const std::wstring& path, const geometry_capture::Bytes& bytes, std::uint32_t shared_id,
+                  const std::wstring& frame_dir) {
+    if (!bytes) return;
+    if (shared_id) {
+        const std::wstring shared = frame_dir + L"buffers\\buf_" + std::to_wstring(shared_id) + L".bin";
+        if (GetFileAttributesW(shared.c_str()) == INVALID_FILE_ATTRIBUTES) write_bytes(shared, *bytes);
+        if (CreateHardLinkW(path.c_str(), shared.c_str(), nullptr)) return;
+        ++link_fallbacks;
+    }
+    write_bytes(path, *bytes);
+}
+
+// Write one draw into `dir` (which must end in a backslash). Returns false if capture.json could not be written.
+bool write_capture(const draw_capture::Record& r, const std::wstring& dir, const std::wstring& frame_dir) {
+    CreateDirectoryW(dir.c_str(), nullptr);
+    for (UINT i = 0; i < r.geometry.vertex_count; ++i) {
+        const auto& v = r.geometry.vertex[i];
+        place_buffer(dir + L"vb_" + std::to_wstring(v.slot) + L".bin", v.bytes, v.shared_id, frame_dir);
+    }
+    if (r.geometry.has_index) place_buffer(dir + L"ib.bin", r.geometry.index.bytes, r.geometry.index.shared_id, frame_dir);
+    for (const auto& cb : r.vs_cbs) write_bytes(dir + L"cb_" + std::to_wstring(cb.slot) + L".bin", cb.bytes);
+    input_layout_hook::Layout els;
+    const bool have_layout = input_layout_hook::lookup(r.geometry.layout, els);
+    FILE* f = _wfopen((dir + L"capture.json").c_str(), L"w");
+    if (!f) return false;
+    std::fprintf(f, "{\"index_count\":%u,\"start_index\":%u,\"base_vertex\":%d,\"instanced\":%d,"
+                 "\"instance_count\":%u,\"start_instance\":%u,\"has_index\":%d,\"ib_format\":%u,\"ib_offset\":%u,"
+                 "\"vp_width\":%u,\"vp_height\":%u,\"vertex_buffers\":[",
+                 r.index_count, r.start_index, r.base_vertex, r.instanced ? 1 : 0,
+                 r.instance_count, r.start_instance, r.geometry.has_index ? 1 : 0,
+                 static_cast<unsigned>(r.geometry.index.format), r.geometry.index.offset,
+                 static_cast<unsigned>(r.viewport.Width), static_cast<unsigned>(r.viewport.Height));
+    for (UINT i = 0; i < r.geometry.vertex_count; ++i) {
+        const auto& v = r.geometry.vertex[i];
+        std::fprintf(f, "%s{\"slot\":%u,\"stride\":%u,\"offset\":%u,\"bytes\":%zu}", i ? "," : "",
+                     v.slot, v.stride, v.offset, v.bytes ? v.bytes->size() : std::size_t(0));
+    }
+    std::fprintf(f, "],\"layout_found\":%d,\"layout\":[", have_layout ? 1 : 0);
+    for (std::size_t i = 0; i < els.elements.size(); ++i) {
+        const auto& e = els.elements[i];
+        std::fprintf(f, "%s{\"semantic\":", i ? "," : "");
+        std::fputc('"', f);
+        for (char c : e.semantic) {
+            switch (c) {
+            case '"': std::fputs("\\\"", f); break;
+            case '\\': std::fputs("\\\\", f); break;
+            case '\n': std::fputs("\\n", f); break;
+            case '\r': std::fputs("\\r", f); break;
+            case '\t': std::fputs("\\t", f); break;
+            default:
+                if (static_cast<unsigned char>(c) < 0x20) std::fprintf(f, "\\u%04x", c);
+                else std::fputc(c, f);
+            }
+        }
+        std::fputc('"', f);
+        std::fprintf(f, ",\"format\":%u,\"offset\":%u,\"slot\":%u}", static_cast<unsigned>(e.format), e.offset, e.slot);
+    }
+    std::fprintf(f, "],\"vs_cbs\":[");
+    for (std::size_t i = 0; i < r.vs_cbs.size(); ++i)
+        std::fprintf(f, "%s{\"slot\":%u,\"bytes\":%zu}", i ? "," : "", r.vs_cbs[i].slot, r.vs_cbs[i].bytes.size());
+    std::fprintf(f, "]}\n");
+    std::fclose(f);
+    return true;
+}
+
+// Each capture gets its own NIER_CAPTURE\frame_<tick>\ so a later F9 never overwrites an earlier one.
+void write_frame() {
+    std::vector<draw_capture::Record> draws;
+    unsigned skipped = 0;
+    std::size_t bytes = 0;
+    {
+        std::lock_guard<std::mutex> lock(draw_capture::mutex);
+        draws.swap(draw_capture::frame);
+        skipped = draw_capture::frame_skipped; bytes = draw_capture::frame_bytes;
+    }
+    const std::wstring root = host.module_dir + L"NIER_CAPTURE\\";
+    CreateDirectoryW(root.c_str(), nullptr);
+    const unsigned long long tick = GetTickCount64();
+    const std::wstring dir = root + L"frame_" + std::to_wstring(tick) + L"\\";
+    if (!CreateDirectoryW(dir.c_str(), nullptr)) { host.log("menu: frame capture dir failed (%lu)", GetLastError()); return; }
+    CreateDirectoryW((dir + L"buffers\\").c_str(), nullptr);
+    link_fallbacks = 0;
+    unsigned written = 0;
+    for (std::size_t i = 0; i < draws.size(); ++i) {
+        wchar_t name[16];
+        std::swprintf(name, 16, L"draw_%04u\\", static_cast<unsigned>(i));
+        if (draws[i].valid && write_capture(draws[i], dir + name, dir)) ++written;
+    }
+    if (FILE* f = _wfopen((dir + L"frame.json").c_str(), L"w")) {
+        std::fprintf(f, "{\"draws\":%zu,\"written\":%u,\"skipped\":%u,\"bytes\":%zu,\"min_index_count\":%u,"
+                     "\"link_fallbacks\":%u}\n", draws.size(), written, skipped, bytes, draw_capture::min_index_count,
+                     link_fallbacks);
+        std::fclose(f);
+    }
+    host.log("menu: frame captured frame_%llu draws=%zu written=%u skipped=%u bytes=%zu link_fallbacks=%u",
+             tick, draws.size(), written, skipped, bytes, link_fallbacks);
+}
+
+bool capture_armed = false;  // render thread only
+
+void poll_capture() {
+    const bool focused = GetForegroundWindow() == window;
+    const bool f9 = focused && (GetAsyncKeyState(VK_F9) & 0x8000);
+    static bool f9_was = false;
+    const bool f9_pressed = f9 && !f9_was;
+    f9_was = f9;
+    // The frame being recorded ends here, before the menu's own ImGui draws.
+    if (draw_capture::end_frame()) write_frame();
+    if (f9_pressed && !capture_armed) {
+        capture_armed = true;
+        host.log("menu: capture armed (next frame)");
+    }
+}
+
+// Called after the menu's drawing: the next game frame is recorded until the next poll_capture().
+void start_armed_capture() {
+    if (!capture_armed) return;
+    capture_armed = false;
+    draw_capture::begin_frame();
+}
+
 void render_panel(IDXGISwapChain* swapchain) {
     auto& io = ImGui::GetIO();
     const bool focused = GetForegroundWindow() == window;
@@ -184,6 +319,8 @@ void render_panel(IDXGISwapChain* swapchain) {
     if (escape_pressed) menu_preview::key_event(*state, ImGuiKey_Escape);
     // The game clips/hides the cursor each frame; free it while the panel is open and re-assert the
     // clip every frame so the game's next clip is undone. ShowCursor pairs across the open/close cycle.
+    // Block the game's mouse while open, so the OS cursor reaches the panel and the camera stops.
+    input_capture::enabled = state->open;
     if (state->open) {
         ClipCursor(nullptr);
         if (!cursor_released) {
@@ -259,7 +396,7 @@ HRESULT STDMETHODCALLTYPE present(IDXGISwapChain* self, UINT sync, UINT flags) {
     if (self == target.load(std::memory_order_acquire) && !(flags & DXGI_PRESENT_TEST) && phase != Phase::Disabled) {
         try {
             if (phase == Phase::Waiting) initialize(self);
-            if (phase == Phase::Ready) render_panel(self);
+            if (phase == Phase::Ready) { poll_capture(); render_panel(self); start_armed_capture(); }
         } catch (...) {
             disable("unexpected exception");
         }
@@ -272,6 +409,10 @@ void install(ID3D11Device* dev, IDXGISwapChain* swapchain, const Host& h) {
     if (!dev) return;
     if (!installed.exchange(true)) {
         host = h;
+        input_layout_hook::install(dev);
+        ID3D11DeviceContext* ctx = nullptr;
+        dev->GetImmediateContext(&ctx);
+        if (ctx) { draw_capture::install(ctx); ctx->Release(); host.log("menu: capture hooks installed (F9 = capture next frame)"); }
         IDXGIDevice* dxgi = nullptr;
         IDXGIAdapter* adapter = nullptr;
         IDXGIFactory* factory = nullptr;

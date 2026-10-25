@@ -503,6 +503,22 @@ native FSR output's SRV instead of copying it into a smaller scene. Remaining ha
 part: scaling the scene domain (~1000 draws, depth, pre-AA scene readers, camera
 W/H and jitter, motion grids).
 
+## Remix object milestone: first NieR mesh rendered (2026-10-25)
+
+- In-game F9 captured 2B's head (786 indices, 2580x1080 scene viewport) through the menu DLL; the
+  converter (`analysis/remix-probe/capture_to_mesh.py`, gated) turned it into a header, and the standalone
+  Remix probe path-traced it on the laptop. Details, evidence and limits: `analysis/REMIX_FEASIBILITY.md`.
+- Menu DLL now installed: `8506cea2…` (DirectInput mouse block, capture size filter >=128 indices,
+  viewport + layout slot in capture JSON, half-float decode). User live test of the mouse fix pending.
+  Rollback chain under `backups/ingame-menu-*`.
+
+## Remix scene milestone (2026-10-25, later)
+
+- F9 = whole-frame capture with a per-frame static buffer cache (menu DLL `947784e0…` installed); first
+  NieR frame rebuilt and path-traced in Remix on the laptop. Mouse fix confirmed live by the user.
+  Details: `analysis/REMIX_FEASIBILITY.md` "First NieR scene in Remix".
+- Next: user full-frame F9 with the cached build (expect ~3400 draws incl. colour pass), then UVs/textures.
+
 ## Next steps (pick up here)
 
 **Session ended 2026-10-19 late. User approved: finish option 1, then option 2.**

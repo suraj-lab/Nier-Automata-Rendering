@@ -43,7 +43,7 @@ def build(work):
     gpp = ['x86_64-w64-mingw32-g++', '-std=c++17', '-O2', '-Wall', '-Wextra', '-Werror', '-static', '-static-libgcc',
            '-static-libstdc++']
     subprocess.run([*gpp, '-shared', str(C / 'menu_overlay_stub_dlaa.cpp'), '-o', str(work / 'd3d11_dlaa.dll')], check=True)
-    subprocess.run([*gpp, '-municode', str(C / 'menu_overlay_mock_game.cpp'), '-o', str(work / 'mock.exe')], check=True)  # D3DCompile loaded at runtime
+    subprocess.run([*gpp, '-municode', str(C / 'menu_overlay_mock_game.cpp'), '-ldinput8', '-ldxguid', '-o', str(work / 'mock.exe')], check=True)  # D3DCompile loaded at runtime
 
 
 def scenario(work, name, ini, fonts, click):
@@ -76,11 +76,35 @@ def inside():
         assert r['cs_lost'] == '0', r  # game pipeline state survives the overlay draw
         assert 'menu: ready' in log and 'hook Present slot 8 -> 0' in log, log
         assert 'menu: cursor released (panel open)' in log, log  # cursor capture is freed on open
+        # DirectInput mouse (NieR's camera path): untouched while closed, blanked while open, keyboard never blanked.
+        assert 'menu: dinput mouse hook=1' in log, log
+        assert r['di_mouse_closed'] == '0' and r['di_mouse_open'] == '1', r
+        assert r['di_keyboard_open'] == '0' and r['di_slot9_in_proxy'] == '1', r
         closed, opened = (d / 'capture-closed.raw').read_bytes(), (d / 'capture-open.raw').read_bytes()
         assert near(pixel(closed, x0 + 10, y0 + 20), BACKGROUND), pixel(closed, x0 + 10, y0 + 20)
         assert near(pixel(opened, x0 + 10, y0 + 20), SURFACE), pixel(opened, x0 + 10, y0 + 20)
         assert (d / 'NIER_RENDER.ini').read_bytes() == b'[Rendering]\r\nPreset=Native\r\n'
         assert 'menu: save Native -> outcome=0' in log, log
+        # F9 frame capture: two frames (panel closed, then open), each with exactly the one mesh draw.
+        frames = sorted((d / 'NIER_CAPTURE').glob('frame_*'), key=lambda f: int(f.name[6:]))
+        assert len(frames) == 2, frames
+        for fr in frames:
+            summary = json.loads((fr / 'frame.json').read_text())
+            assert summary['draws'] == 2 and summary['written'] == 2 and summary['skipped'] == 0, (fr, summary)
+            assert summary['link_fallbacks'] == 0, summary
+            assert sorted(p.name for p in fr.iterdir() if p.is_dir()) == ['buffers', 'draw_0000', 'draw_0001'], list(fr.iterdir())
+            # shared static VB/IB: one file each under buffers/, hard-linked into both draws
+            assert len(list((fr / 'buffers').iterdir())) == 2, list((fr / 'buffers').iterdir())
+            for name in ('vb_0.bin', 'ib.bin'):
+                assert os.path.samefile(fr / 'draw_0000' / name, fr / 'draw_0001' / name), name
+        assert log.count('menu: frame captured') == 2, log
+        cd = frames[0] / 'draw_0000'
+        cap = json.loads((cd / 'capture.json').read_text())
+        assert cap['index_count'] == 192 and cap['instanced'] == 0 and cap['has_index'] == 1 and cap['ib_format'] == 57
+        assert cap['vp_width'] == 64 and cap['vp_height'] == 64
+        assert cap['layout_found'] == 1 and [(e['semantic'], e['offset'], e['slot']) for e in cap['layout']] == [('POSITION', 0, 0), ('COLOR', 12, 0)]
+        assert cap['vs_cbs'] == [{'slot': 0, 'bytes': 64}]
+        assert len((cd / 'vb_0.bin').read_bytes()) == 65 * 16 and len((cd / 'ib.bin').read_bytes()) == 192 * 2
         results['repair'] = {'passed': True, 'foreground': r['foreground'], 'dir': str(d.relative_to(A.parent))}
 
         d, r, log = scenario(work, 'no-fonts', b'[Rendering]\r\nPreset=Custom75\r\n', False, (0, 0))

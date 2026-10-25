@@ -34,7 +34,7 @@ def main():
            # ImGui asserts must never abort the game; no XInput DLL is loaded into the game for gamepads.
            '-DIM_ASSERT(_EXPR)=((void)0)', '-DIMGUI_IMPL_WIN32_DISABLE_GAMEPAD',
            '-I' + str(imgui), '-I' + str(preview_build.OUT), '-I' + str(PREVIEW), '-I' + str(C),
-           *map(str, sources), str(C / 'd3d11_log_proxy.def'), '-ldwmapi', '-lgdi32', '-limm32', '-o', str(dll)]
+           *map(str, sources), str(C / 'd3d11_log_proxy.def'), '-ldwmapi', '-lgdi32', '-limm32', '-ldxguid', '-o', str(dll)]
     p = subprocess.run(cmd, capture_output=True, text=True)
     (OUT / 'build.log').write_text(p.stdout + p.stderr)
     if p.returncode:

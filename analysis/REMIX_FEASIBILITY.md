@@ -112,6 +112,53 @@ world converter before these pass. If geometry requires blocking GPU readback pe
 measure it before expanding. Source/API inspection is a **GO** for this small prototype, not evidence
 of full-game correctness, real-time performance or a defensible multi-month schedule.
 
+## First NieR geometry in Remix (2026-10-25)
+
+A real NieR mesh captured in-game with F9 rendered in the standalone Remix probe on the laptop
+(x64 runtime on Windows ARM): `runtime/remix-probe/captures-2b-head-final-20261025T214755Z/*.png` (final `remix-mesh.exe` `17e5bfff…`).
+
+- **Capture:** `runtime/remix-probe/captures/2b-head-786idx/`: one `DrawIndexed` (786 indices,
+  757 vertices, R32 indices) into the full 2580x1080 scene viewport. Skinned (BLENDINDICES/WEIGHT), about
+  17 cm wide at 1.42-1.82 m model height: 2B's head and neck, probably a depth/shadow-pass LOD.
+- **Attributes:** the bound input layout has only POSITION + skin data. Normals and UVs are **inferred**
+  from vertex stream 1 (stride 16: uv half2 @0, normal half4 @8). Evidence: UVs equal an independent copy
+  in stream 0 @16 for 757/757 vertices, and all normals have length 0.9997-1.0003. Not proven for other draws.
+- **Converter:** `remix-probe/capture_to_mesh.py` (desktop local-worker, first-try pass) -> C++ header;
+  gate `test_capture_to_mesh.py` (exact float32 vs an independent decode) + `test_capture_to_mesh_hidden.py`.
+- **Probe:** `build.py --mesh <captured_mesh.h>` builds `remix-mesh.exe`; `run_remote.py --mesh` runs it.
+  The mesh is centred/scaled to the reference triangle's framing and drawn in its bind pose
+  (skinning ignored), non-indexed with the default material, under the probe's green sphere light.
+- **Intermittent no-render:** 2 of 8 head runs submitted all 16 frames with every API call returning
+  success, yet Remix never started an RTX frame (no `Test screenshot capture triggered` in its log, no
+  screenshot). The identical full mesh rendered on a later run, and a cut-down mesh rendered too, so
+  this is not data-dependent. Cause unknown; one Sentry event per run is normal and not the signal.
+- **Not yet:** world/camera transforms from the captured constant buffers, textures/materials,
+  skinning, more than one draw, and anything inside the running game.
+
+## First NieR scene in Remix (2026-10-25)
+
+F9 now records a whole frame (`NIER_CAPTURE/frame_<tick>/draw_NNNN/`, static buffers read once per frame
+and hard-linked). From the first frame capture (73 draws, depth pre-pass only, before the per-frame buffer
+cache existed) the probe path-traced NieR's own view: 2B, three machine lifeforms, terrain and rocks,
+`runtime/remix-probe/captures-scene-hold-20261025T222059Z/*.png` vs the CPU point-splat reference
+`runtime/remix-probe/scene-oracle/cpu-reference.png` (same composition, not mirrored).
+
+- **Transforms (verified, see `runtime/remix-probe/world-matrix-finding.json`):** VS `cb0` = per-frame view
+  (3x4) + projection; `cb11` = per-object world 3x4 (static) or bone palette of 3x4 matrices (skinned,
+  BLENDINDICES R8G8B8A8_UINT + BLENDWEIGHT UNORM). Skinned vertices project 97% on screen; static draws at
+  plausible depths, the misses just off-screen (conservative culling). The earlier "cb0 = world" was wrong.
+- **Converter:** `remix-probe/scene_from_frame.py` (desktop local-worker, second attempt) -> `scene.bin`
+  (camera + world-space triangles + flat normals, main-viewport draws only, deduplicated). Gate
+  `test_scene_from_frame.py` + `test_scene_from_frame_hidden.py`; real-frame output byte-identical to the
+  gate's reference.
+- **Probe:** `build.py --scene` -> `remix-scene.exe` (loads `scene.bin`, NieR camera, distant light);
+  `run_remote.py --scene <bin> --hold --shot-frame 900`; `show_on_laptop.sh <label> scene <bin>`.
+- **Start-up delay:** at 437K triangles Remix needs about 15 s before its first RTX frame. The default
+  16-frame/4 s run therefore never renders (2/2 failures); `--hold` with a late screenshot frame does.
+  This plausibly explains the earlier intermittent blank runs too (unproven).
+- **Not yet:** the main colour pass (needs the post-cache full-frame capture), UVs/textures/materials,
+  smooth normals, lighting that matches the game, animation, anything live in the game.
+
 ## Where the MCP helps
 
 After a usable Remix capture/project exists, the Toolkit MCP can inspect captured assets/layers and

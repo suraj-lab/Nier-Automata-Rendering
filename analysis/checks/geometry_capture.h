@@ -5,21 +5,26 @@
 // and needs a follow-up via CreateInputLayout hooking or shader reflection.
 #include <d3d11.h>
 #include <cstdint>
+#include <map>
+#include <memory>
 #include <vector>
 
 namespace geometry_capture {
+using Bytes = std::shared_ptr<const std::vector<unsigned char>>;
 struct VertexSlot {
     UINT slot = 0;
     UINT stride = 0;
     UINT offset = 0;
     UINT byte_width = 0;
-    std::vector<unsigned char> bytes;
+    Bytes bytes;
+    std::uint32_t shared_id = 0;  // != 0: a static buffer read once this frame and shared by other draws
 };
 struct IndexSnap {
     DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
     UINT offset = 0;
     UINT byte_width = 0;
-    std::vector<unsigned char> bytes;
+    Bytes bytes;
+    std::uint32_t shared_id = 0;
 };
 struct Capture {
     bool has_index = false;
@@ -54,26 +59,67 @@ inline bool read_buffer(ID3D11Device* device, ID3D11DeviceContext* context, ID3D
     return true;
 }
 
+// Per-frame cache: NieR packs many meshes into large shared buffers, so re-reading per draw multiplies
+// the readback (73 draws filled 768 MB in the first real frame capture). Static (DEFAULT/IMMUTABLE)
+// buffers are read once and shared; DYNAMIC buffers can change between draws under the same pointer,
+// so they are always read fresh. Each key holds a reference so its pointer cannot be reused until clear().
+struct Cache {
+    struct Entry { std::uint32_t id; Bytes bytes; };
+    std::map<ID3D11Buffer*, Entry> entries;
+    std::size_t read_bytes = 0;  // bytes actually read back (unique static + every dynamic read)
+    void clear() { for (auto& e : entries) e.first->Release(); entries.clear(); read_bytes = 0; }
+    Cache() = default;
+    Cache(const Cache&) = delete;
+    Cache& operator=(const Cache&) = delete;
+    ~Cache() { clear(); }
+};
+
+inline bool read_whole(ID3D11Device* device, ID3D11DeviceContext* context, ID3D11Buffer* buffer, Cache* cache,
+                       Bytes& out, std::uint32_t& shared_id) {
+    D3D11_BUFFER_DESC desc{};
+    buffer->GetDesc(&desc);
+    const bool shareable = cache && desc.Usage != D3D11_USAGE_DYNAMIC;
+    if (shareable) {
+        const auto it = cache->entries.find(buffer);
+        if (it != cache->entries.end()) { out = it->second.bytes; shared_id = it->second.id; return true; }
+    }
+    auto bytes = std::make_shared<std::vector<unsigned char>>();
+    if (!read_buffer(device, context, buffer, 0, desc.ByteWidth, *bytes)) return false;
+    out = bytes;
+    shared_id = 0;
+    if (cache) cache->read_bytes += bytes->size();
+    if (shareable) {
+        shared_id = static_cast<std::uint32_t>(cache->entries.size() + 1);
+        buffer->AddRef();
+        cache->entries.emplace(buffer, Cache::Entry{shared_id, out});
+    }
+    return true;
+}
+
 // Capture the current IA state. `vertex_slots` lists which vertex slots to try (default all 16).
 // The vertex buffers are read in their ENTIRETY (full desc.ByteWidth) because the object's range is
 // only knowable from the index values, which is a later offline step.
-inline bool capture(ID3D11Device* device, ID3D11DeviceContext* context, Capture& out) {
+inline bool capture(ID3D11Device* device, ID3D11DeviceContext* context, Capture& out, Cache* cache = nullptr) {
     out = Capture{};
     ID3D11Buffer* buffers[16] = {};
     UINT strides[16] = {}, offsets[16] = {};
     context->IAGetVertexBuffers(0, 16, buffers, strides, offsets);
+    bool ok = true;
     for (UINT slot = 0; slot < 16; ++slot) {
         if (!buffers[slot]) continue;
-        D3D11_BUFFER_DESC desc{};
-        buffers[slot]->GetDesc(&desc);
-        VertexSlot& v = out.vertex[out.vertex_count++];
-        v.slot = slot;
-        v.stride = strides[slot];
-        v.offset = offsets[slot];
-        v.byte_width = desc.ByteWidth;
-        if (!read_buffer(device, context, buffers[slot], 0, desc.ByteWidth, v.bytes)) return false;
+        if (ok) {  // keep releasing every bound buffer even after a failed read
+            D3D11_BUFFER_DESC desc{};
+            buffers[slot]->GetDesc(&desc);
+            VertexSlot& v = out.vertex[out.vertex_count++];
+            v.slot = slot;
+            v.stride = strides[slot];
+            v.offset = offsets[slot];
+            v.byte_width = desc.ByteWidth;
+            ok = read_whole(device, context, buffers[slot], cache, v.bytes, v.shared_id);
+        }
         buffers[slot]->Release();
     }
+    if (!ok) return false;
     ID3D11Buffer* ib = nullptr;
     DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
     UINT ib_offset = 0;
@@ -85,8 +131,9 @@ inline bool capture(ID3D11Device* device, ID3D11DeviceContext* context, Capture&
         out.index.format = format;
         out.index.offset = ib_offset;
         out.index.byte_width = desc.ByteWidth;
-        if (!read_buffer(device, context, ib, 0, desc.ByteWidth, out.index.bytes)) { ib->Release(); return false; }
+        ok = read_whole(device, context, ib, cache, out.index.bytes, out.index.shared_id);
         ib->Release();
+        if (!ok) return false;
     }
     context->IAGetInputLayout(&out.layout);
     return out.vertex_count > 0;

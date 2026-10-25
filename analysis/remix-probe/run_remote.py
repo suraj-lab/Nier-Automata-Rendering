@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Run the built probe once on spaghetti with a watchdog.
-Usage: run_remote.py <label> [--sample]   (--sample runs NVIDIA's RemixAPI_C control build for 16 frames)
+Usage: run_remote.py <label> [--sample | --mesh]   (--sample runs NVIDIA's RemixAPI_C control build for 16 frames;
+--mesh runs the captured-mesh build from `build.py --mesh`)
 Copies the exe into a fresh folder under the existing Downloads probe folder, runs --render with the
 Toolkit's x64 runtime, kills ONLY that process after 90s, records thread states if it hung, and copies
 back stdout/stderr and Remix's own screenshot (never a desktop capture). No game, no models."""
@@ -33,6 +34,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('label')
     ap.add_argument('--sample', action='store_true')
+    ap.add_argument('--mesh', action='store_true')
+    ap.add_argument('--hold', action='store_true', help='keep rendering until the 90 s watchdog (probe --hold mode)')
+    ap.add_argument('--shot-frame', type=int, default=10, help='DXVK_DUMP_SCREENSHOT_FRAME (default 10)')
+    ap.add_argument('--scene', type=Path, help='scene.bin for the remix-scene.exe build (copied next to it)')
     ap.add_argument('--conf', type=Path, help='copied into the run folder as rtx.conf (process working dir only)')
     a = ap.parse_args()
     label = a.label
@@ -41,9 +46,11 @@ def main():
         v = json.loads((OUT / 'sample/validation.json').read_text())
         local_exe, exe_name, argv = OUT / 'sample/remixapi_example_c.exe', 'remixapi_example_c.exe', "'16'"
     else:
-        v = json.loads((OUT / 'validation.json').read_text())
+        variant = 'mesh' if a.mesh else 'scene' if a.scene else None
+        v = json.loads((OUT / (f'validation-{variant}.json' if variant else 'validation.json')).read_text())
         assert v['passed']
-        local_exe, exe_name, argv = OUT / 'remix-triangle.exe', 'remix-triangle.exe', "('--render \"'+$dll+'\"')"
+        exe_name = f'remix-{variant}.exe' if variant else 'remix-triangle.exe'
+        local_exe, argv = OUT / exe_name, "('--render \"'+$dll+'\"" + (' --hold' if a.hold else '') + "')"
     proc_name = exe_name[:-4]
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')
     name = f'{label}-{stamp}'
@@ -56,6 +63,11 @@ $p | ConvertTo-Json -Compress'''))
                        capture_output=True, text=True)
     if p.returncode:
         raise RuntimeError('transfer failed: ' + p.stderr)
+    if a.scene:
+        p = subprocess.run(['scp', *OPTS, str(a.scene), 'spaghetti:' + remote.replace('\\', '/') + '/scene.bin'],
+                           capture_output=True, text=True)
+        if p.returncode:
+            raise RuntimeError('scene transfer failed: ' + p.stderr)
     if a.conf:
         p = subprocess.run(['scp', *OPTS, str(a.conf), 'spaghetti:' + remote.replace('\\', '/') + '/rtx.conf'],
                            capture_output=True, text=True)
@@ -66,7 +78,7 @@ $p | ConvertTo-Json -Compress'''))
 $run='{run}';$exe=Join-Path $run '{exe_name}';$dll='{DLL}'
 if((Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant() -ne '{v['exe_sha256']}'){{throw 'Hash mismatch'}}
 if(Get-Process -Name remix-triangle,remixapi_example_c -ErrorAction SilentlyContinue){{throw 'Another probe is running'}}
-$env:DXVK_DUMP_SCREENSHOT_FRAME='10';$env:DXVK_SCREENSHOT_PATH=Join-Path $run 'Screenshots';$env:REMIX_DLL=$dll
+$env:DXVK_DUMP_SCREENSHOT_FRAME='{int(a.shot_frame)}';$env:DXVK_SCREENSHOT_PATH=Join-Path $run 'Screenshots';$env:REMIX_DLL=$dll
 $t=[Diagnostics.Stopwatch]::StartNew()
 $p=Start-Process -FilePath $exe -ArgumentList {argv} -WorkingDirectory $run -PassThru -RedirectStandardOutput (Join-Path $run 'stdout.txt') -RedirectStandardError (Join-Path $run 'stderr.txt')
 $handle=$p.Handle;$done=$p.WaitForExit(90000);$threads=@()
