@@ -320,11 +320,20 @@ int render(const wchar_t* dll, bool hold) {
         v.color=0xffffffff;
     }
     std::vector<remixapi_MeshInfoSurfaceTriangles> surfaces;  // one per captured draw, default material
+    unsigned sky_skipped=0;
     for (const auto& d : scene.draws) if (d.count) {
+        // NieR's sky dome / cloud shells (10-19 km wide, camera inside) are solid to Remix and block the sun:
+        // the first full-frame render came out black. Skip anything wider than 5 km.
+        float lo[3]={1e30f,1e30f,1e30f}, hi[3]={-1e30f,-1e30f,-1e30f};
+        for (std::size_t t=d.first;t<std::size_t(d.first)+d.count;++t) for (unsigned k=0;k<9;++k) {
+            const float v=scene.tris[12*t+k]; lo[k%3]=std::fmin(lo[k%3],v); hi[k%3]=std::fmax(hi[k%3],v);
+        }
+        if (std::fmax(hi[0]-lo[0],std::fmax(hi[1]-lo[1],hi[2]-lo[2]))>5000.f) { ++sky_skipped; continue; }
         remixapi_MeshInfoSurfaceTriangles s{};
         s.vertices_values=vertices.data()+3ull*d.first; s.vertices_count=3ull*d.count;
         surfaces.push_back(s);
     }
+    std::printf("Scene: skipped %u sky-sized draws (>5 km)\n",sky_skipped);
     std::printf("Scene: %zu draws, %zu triangles, camera (%.1f, %.1f, %.1f) fov %.1f aspect %.3f\n", scene.draws.size(),
                 triangles, scene.camera[0], scene.camera[1], scene.camera[2], scene.camera[12], scene.camera[13]);
 #else

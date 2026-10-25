@@ -156,8 +156,15 @@ cache existed) the probe path-traced NieR's own view: 2B, three machine lifeform
 - **Start-up delay:** at 437K triangles Remix needs about 15 s before its first RTX frame. The default
   16-frame/4 s run therefore never renders (2/2 failures); `--hold` with a late screenshot frame does.
   This plausibly explains the earlier intermittent blank runs too (unproven).
-- **Not yet:** the main colour pass (needs the post-cache full-frame capture), UVs/textures/materials,
-  smooth normals, lighting that matches the game, animation, anything live in the game.
+- **Full frame (frame_9443695):** 2995 draws, 0 skipped, 456 MB unique, ~7 s capture stall. Main viewport
+  1708 draws (incl. colour pass with declared NORMAL/TEXCOORD), 1193 shadow-map (2048^2), 94 half-res.
+  Converter: 880 unique draws, 828 pass duplicates merged, 3.45M triangles. Remix rendered the Resistance
+  Camp (2B, NPCs, tent, crates, shelves) as a clay render:
+  `runtime/remix-probe/captures-scene-full-nosky-20261025T223359Z/*.png`.
+- **Sky shells:** 8 draws 10-19 km wide (sky dome/clouds, camera inside) blocked the sun and made the first
+  full render black; the probe skips draws wider than 5 km. Remix-native sky handling is a later step.
+- **Not yet:** UVs/textures/materials, smooth normals, lighting that matches the game, animation, anything
+  live in the game.
 
 ## Where the MCP helps
 
