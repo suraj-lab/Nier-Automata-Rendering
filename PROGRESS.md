@@ -1,8 +1,147 @@
 # NieR:Automata Rendering — Progress & Resume
 
-Last updated: 2026-10-24 (**resolution upscaling DONE**: FSR4 2580x1080 -> 3440x1440 with native post-processing, live-verified in test 3).
+Last updated: 2026-10-25. **Native and Custom75 startup smoke tests PASSED**, with user-confirmed
+good visuals and matching logs. Candidate remains installed with Custom75 selected; v4 deployment
+pins/build artifact remain unchanged. Resolution-change and long-session checks are still pending.
 
-## Session 2026-10-24 resume (start here)
+**RESUMED for offline settings-save/status work.** The user returned and authorized continuation.
+The isolated preview remains documented in `analysis/menu-preview/README.md`; the received Claude
+Design export and live installation are unchanged. Current checkpoint:
+`analysis/runtime/settings-writer/checkpoint.json`. No commit or remote push was made.
+
+## Session checkpoint — 2026-10-25
+
+**In-game menu:** LIVE-TESTED successfully. Panel renders in NieR on Proton/DXVK/WAX; both
+save directions committed cleanly (`Native` then `Custom75`, both `outcome=0`). Cursor fix applied
+(release the game's capture while open) and installed as DLL `f1a43946…` — needs a re-test for the
+cursor feel. Prior DLL `ac58f09f…` backed up at `backups/ingame-menu-cursorfix-20261025T200532Z/`.
+
+**Remix on Windows ARM:** triangle renders through the x64 runtime on Spaghetti. Shutdown "hang"
+was traced to launching over SSH (session 0), NOT a runtime bug — interactive run exits in ~7 s.
+Details: `analysis/remix-probe/` and `analysis/runtime/remix-probe/shutdown-debug/STATUS.md`.
+
+**NieR frame dump captured** (`framedump-capture/NIER_DLAA_frame_20261025_195822_205.txt`): pass list
+only — confirms 2580×1080 Custom75 scale, but no vertex/index bytes. Geometry extraction needs a new
+buffer-capture hook (next build). `NIER_DLAA.ini [Debug]` was flipped on/off safely and restored.
+
+**Next:** build the single-object geometry-capture hook (offline/mock-first), then one short live
+capture to pull a static object into the standalone Remix harness.
+
+---
+
+## Prior continuation: settings, patch safety and FAR (start here)
+
+- **Installed for approved test:** candidate `c4996b836646f9b26db6dcd57df609daa754e49a5f89b23ce454e0874fb248e0`,
+  with new `NIER_RENDER.ini` now selecting Custom75. Original mod DLL, `NIER_DLAA.ini`/debug settings and
+  native 60 FPS cap unchanged. No game launch by assistant, commit or push.
+- **Rollback:** `backups/startup-settings-test-20261024T161800Z/` contains the exact previous v4 DLL,
+  mod/INI snapshots, logs, verified hashes and `RESTORE.md`. `NIER_RENDER.ini` was absent before this
+  test. Keep logs on rollback; restore the v4 DLL and remove only our test INI with the game closed.
+  Do not use the pinned v4 deploy script while this unknown-to-it candidate is installed.
+- **Candidate source/build:** `analysis/runtime/startup-settings/d3d11.dll` (gitignored).
+  Reads Native or Custom75 once at startup. Missing file preserves Custom75; invalid/unreadable
+  config selects Native. Native exits before patching or scale polling. Tracked v4 build stays unchanged.
+- **Safety fix:** reduced scale now requires both depth and proxy success. The proxy installer
+  prepares all seven sites before writing, reverses overlapping-page protection restoration,
+  and rolls bytes back after cache/protection failures. Persistent OS failures can prevent full
+  recovery and require restart; startup patching is not thread-suspended hot reload.
+- **Gates:** pure settings ASan/UBSan pass; new actual-function fault harnesses pass; existing
+  29/29 Part 3 checks pass; 11 real Win32 INI cases pass under an isolated Wine prefix. MinGW
+  candidate builds with `-Werror`; 51 export names/ordinals and 49 forwarders match. Luna accepted
+  the source/tests for offline use. Details and commands: `analysis/STARTUP_SETTINGS.md`.
+- **FAR:** `analysis/FAR_RESEARCH.md` records the pinned-source limiter/timing findings. New
+  `analysis/FAR_UNCAP_FOLLOWUP.md` qualifies the conditional external target, version detection,
+  typed-pointer arithmetic and cutscene uncertainties. Desktop local-worker research
+  `bc33ffcd-024a-41e0-a435-f69d3c357904` exceeded its eight-minute brief and was interrupted/paused;
+  a draft exists in managed artifacts but is not an accepted independent review. Do not resume it
+  silently. No high-FPS correctness or quarantined-binary equivalence is established.
+- **Parked:** GPU headroom capture, FG and NR. Luna caught non-finite optional sampler readings;
+  lead reproduced/fixed it and all eight fake-sysfs tests pass. Live capture remains pending.
+  No extra presets, menu, uncap, NR or FG integration yet.
+
+**Native test passed:** `Preset=Native scale=1.000 valid=1 defaulted=0`, no depth/proxy/scale patches,
+FSR4 native AA 3440x1440 -> 3440x1440, no logged errors; user reports no visual issues.
+Evidence: the backup's `native-run/` folder.
+
+**Custom75 test passed:** both prerequisite patches applied (7 proxy sites), renderer/gate scale 0.75,
+Output SRV and slot-0 redirect active. FSR4 colour/depth/MVs are 2580x1080; output is 3440x1440.
+Logs reach evaluation frame 3600 with no error/warning lines; user says "done, looks good".
+The early setter line reports boot dimensions 1600x900; actual FSR context dimensions above confirm
+configured 3440x1440 output without any resolution re-apply. Evidence: the backup's `custom75-run/`.
+
+**Menu design decided:** one compact ivory/charcoal Dear ImGui panel; official MIT Win32/D3D11
+example/backends as references, FAR/ReShade for hierarchy only. Active/saved/edited values stay
+separate; Save means next launch. Default design hotkey Insert; F8 already belongs to the AA mod.
+One shared UI for native Windows and Linux/Proton, including eventual Windows-on-ARM host testing
+with the x64 game ABI. Windows support is not yet validated; the Windows mock is a capability-aware
+scenario, not a support claim. No in-game menu/hooks were implemented or installed.
+
+**Claude Design received/reviewed:** the refined ivory/charcoal panel is the UI target. Independent
+Luna review `1ad38d06-5472-4b26-8e5c-28d1f99b78f4` accepted it with notes; right-pivot positioning
+and repeat DPI scaling need correction in C++. `analysis/menu-design/IMPLEMENTATION_NOTES.md` records
+those corrections, simulator quirks and integration limits without editing the received files.
+
+**Offline menu controller candidate:** `analysis/checks/menu_state.h` reuses the existing mode enum,
+separates applied/saved/edited state and performs no I/O or game work. Tests written first passed
+ASan/UBSan/-Werror across 69,177,612 transitions; MinGW x64 cross-build passed (EXE not executed).
+`test_menu_design_prototype.cjs` passes 10 scenarios against the actual exported state script without
+loading its browser/CDN runtime. Receipts: `analysis/runtime/menu-state/validation.json`. The header
+is NOT integrated into the production setter; no real config writer or in-game overlay is built.
+
+**Laptop used and result validated:** user confirmed game-free. Laptop Qwen 35B-A3B helper
+`a029dbdb-ea88-4376-93fb-fcdf6e15e618` extracted the design constants: 19 colors, 11 layout and
+16 typography tokens, DPI scales and glyphs. It put JSON in the managed report rather than the
+requested repository file; lead promoted that exact block without rewriting or rerunning the model.
+`analysis/checks/test_menu_style_tokens.py` now passes against
+`analysis/menu-design/claude_style_tokens.json`. All three original handoff hashes and live game
+files remain unchanged. Receipt: `analysis/runtime/menu-style-tokens/validation.json`.
+
+**Isolated preview DONE:** `analysis/menu-preview/` contains the real ImGui panel, Win32/D3D11 host,
+reproducible build/capture scripts, pinned MIT ImGui v1.91.9b and unmodified OFL IBM Plex fonts/notices.
+42 native ASan/UBSan layout/state cases passed; MinGW x64 build passed; all 42 D3D11 Wine/Xvfb captures
+passed (7 fixtures × 2 resolutions × 3 scales). The footer stays in bounds at 200%, body scrolls,
+unknown sizes stay labelled unknown, and closed frontend draws zero vertices. Saves are simulated
+in memory only. Screenshots: `analysis/menu-preview/screenshots/`; full capture/geometry receipt:
+`analysis/runtime/menu-preview/render-validation.json`. Initial headless launch timed out; the retry
+passed with optional installers disabled, but prefix warm-up also changed, so root cause is unproven.
+Luna review b223507e / follow-ups 7d1adcf6 and 8c101e8d accepted OFFLINE PREVIEW with notes; all three
+P2 findings were corrected/confirmed. No native Windows/ARM64 or in-game execution is established.
+
+**Save/status checkpoint accepted offline:** lead-owned `analysis/checks/preset_rewrite.h` passes
+437 preservation/error assertions, ASan/UBSan, two-TU linkage and MinGW. The local-worker draft was
+rejected after a diagnostic loop; parent workflow b1f8ef23 / child 80a1a375 were stopped before review.
+Frozen files were unchanged before lead edits. `startup_status.h` passes concurrent publication tests;
+actual setter/bootstrap producers are connected and fault-tested, without backend/dimension claims.
+The new DLL exists ONLY at `analysis/runtime/settings-writer/status-candidate/d3d11.dll`, SHA256
+`914948447eeae3c3e8b486402c99d3da61a1e191ec8eb5a37afe3eca5bdd9fdd`; ABI checks retain all 51
+exports and 49 forwarders. It is NOT installed. Part3 remains 29/29. Reviewer 456088bc found no issues
+for these components only. The preview still uses simulated saves/status; no real writer/UI consumer.
+
+**Resource state:** desktop Qwen was JIT-loaded for that bounded job, then unloaded again after the
+failed workflow stopped. Laptop services/settings were not touched. The old FAR run remains paused;
+do not resume it silently. No model job is assigned merely to keep memory occupied.
+
+**Real save writer DONE offline (2026-10-25):** `analysis/checks/settings_save.h`, 13 oracle + 6 extra
+Wine cases, 5 mutants caught, Luna blocked once (same-bytes swap) then accepted. Menu state now models
+missing/invalid/unreadable files and committed/not-saved/recovery-required outcomes (desktop worker,
+gate passed, reviewed; lead fixed a notice-priority flaw in its own contract). Details and limits:
+`analysis/SETTINGS_WRITE_PLAN.md`. Laptop is in use for work: desktop-only delegation for now.
+
+**Step 4 DONE offline:** startup status -> menu (`menu_session.h`, desktop worker, first-pass gate),
+real save adapter with fresh re-read (`menu_settings_io.h`, 20 Wine cases), panel notices for
+invalid/unreadable/recovery files, 66 layout + 66 D3D11 capture checks. New screenshots in
+`analysis/menu-preview/screenshots/`. RTX Remix MCP not visible in this session yet (needs restart?).
+
+**Step 5 built offline (NOT installed):** the proxy DLL now hosts the menu (`checks/menu_overlay.cpp`,
+vtable-slot hooks after NIER_DLAA, Insert toggle, real writer). Wine mock-game E2E passes (panel draws,
+real click repairs the INI, stub layer sees 80/80 frames, fails closed without fonts). Design, evidence,
+limits and the live-test/rollback plan: `analysis/IN_GAME_MENU.md`. Luna c9bc992c blocked once (ImGui
+DX11 backend cleared HS/DS/CS; reproduced cs_lost=51, fixed, 0) then OK with notes for a supervised test.
+Menu DLL `ac58f09f…` (runtime/menu-dll). Live test requires explicit user approval. Keep
+save-and-restart only and Custom75 unchanged. Resolution/long-play, native Windows/ARM64 and real
+swapchain/input tests remain pending. Keep v4 pins/build and exact rollback intact.
+
+## Earlier session 2026-10-24 (history)
 
 **Depth fix is DONE and live-verified.** The depth-patch code cave (in `checks/depth_patch.h`) was
 reviewed by a cloud reviewer (caught + fixed a P0 EFLAGS bug) and confirmed in-game: scene depth
@@ -27,13 +166,14 @@ bind 0x88) at slot 0, the pre-AA reader is untouched, and there is no `CopyResou
 samples with plain UVs, so no shader constant patch was needed. FSR: 0 evaluate failures, clean
 rebuilds across two resolution changes. Design: `analysis/PART3_REDIRECT.md`.
 
-Builds: v3 `936602b3…` (tested, currently INSTALLED in the game). v4 `3afafb60…` (=
+Builds: v3 `936602b3…` (tested in game; superseded by the permanent v4 install below). v4 `3afafb60…` (=
 `analysis/build/scale-setter/d3d11.dll`) adds the reviewer P1/P2 fixes: retry a failed Output
 SRV, assign only on SUCCEEDED, log when the copy-back is skipped without a redirect. v4 is
 gated (29/29) and only changes failure paths; it has not been run in-game yet.
 
-Game state: **v3 test DLL installed** (`d3d11.dll` = setter, `d3d11_dlaa.dll` = mod,
-`NIER_DLAA.ini [Debug] Enabled=1`). Restore native AA with
+Historical test 3 state: **v3 test DLL** (`d3d11.dll` = setter, `d3d11_dlaa.dll` = mod,
+`NIER_DLAA.ini [Debug] Enabled=1`), superseded by the permanent v4 install below. The old native-AA
+restore entry point was
 `backups/upscale-test-20261024T132205Z/restore.sh` (hash-verified). Test logs and dumps are there
 too; that folder's `install.sh` installs v1, so install v3/v4 manually as done in test 3.
 
@@ -43,8 +183,8 @@ too; that folder's `install.sh` installs v1, so install v3/v4 manually as done i
 resolution re-apply is needed. The original mod files are in `backups/native-aa-baseline/` (gitignored).
 v4's failure-path fixes get their first real run in the next play session.
 
-**Next:** measure GPU headroom (A/B on GPU usage/power at the 60 FPS cap), then frame generation
-(afmf-linux). DLSS 5 NR is parked (see findings below).
+**Previous next step (now parked):** measure GPU headroom (A/B on GPU usage/power at the 60 FPS cap),
+then frame generation (afmf-linux). Startup settings/menu work now comes first. DLSS 5 NR stays parked.
 
 **New tools:** `checks/analyze_framedump.py` (delegated to local-worker; gate
 `test_analyze_framedump.py` passes) auto-checks depth/colour size + array-count invariants on a

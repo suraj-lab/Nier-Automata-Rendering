@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#1B1E1D;color:#E8E3D3;font-family:'IBM Plex Sans',sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#D9CFA8}a:hover{color:#F3F0E6}
+*{box-sizing:border-box}
+</style>
+</helmet>
+<div style="max-width:1280px;margin:0 auto;padding:48px 32px 80px;display:flex;flex-direction:column;gap:56px">
+
+<header style="display:flex;flex-direction:column;gap:8px">
+  <div style="font-size:28px;letter-spacing:.14em;font-weight:500">NIER RENDER · PANEL PROTOTYPE</div>
+  <div style="font-size:15px;color:#B9B4A6;text-wrap:pretty">One shared Win32/D3D11 overlay for native Windows and Proton · two presets · no live switching · saves are simulated in memory only</div>
+</header>
+
+<section style="display:flex;flex-direction:column;gap:16px">
+  <div style="font-size:13px;font-weight:600;letter-spacing:.14em;color:#B9B4A6">REVIEW OF THE REFERENCES</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:12px 40px;font-size:15px;line-height:1.5;color:#D6D1C3">
+    <div><b style="color:#F3F0E6">Competing badges.</b> “● ACTIVE” repeats the section label; “BYPASS” is jargon. Now one badge reports the outcome: Applied / Not applied.</div>
+    <div><b style="color:#F3F0E6">Saved value invisible.</b> Nothing showed what is on disk. The preset row now shows “Saved: …”, so active, saved and edited are each visible.</div>
+    <div><b style="color:#F3F0E6">Double signalling.</b> The “Unsaved edit” tag and the amber notice said the same thing. Kept the notice only.</div>
+    <div><b style="color:#F3F0E6">Disabled looks pressable.</b> The grey filled Save read as a button; disabled Discard matched enabled. Disabled is now outline-only with faded ink.</div>
+    <div><b style="color:#F3F0E6">Small, faint helper text.</b> ~12px muted grey missed the 15px / 4.5:1 target. Secondary text is now 14px at ≥6:1.</div>
+    <div><b style="color:#F3F0E6">Unclear hints and availability.</b> “Cap unchanged” is not a shortcut, so it was removed. Custom75 stays listed in the dropdown as unavailable, with the reason, instead of disappearing.</div>
+  </div>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:20px">
+  <div style="display:flex;flex-wrap:wrap;gap:20px 32px;align-items:flex-end">
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div style="font-size:12px;font-weight:600;letter-spacing:.14em;color:#B9B4A6">SCENARIO</div>
+      <div style="display:flex;gap:0">
+        <sc-for list="{{ scenarioOpts }}" as="o" hint-placeholder-count="2">
+          <button onClick="{{ o.pick }}" style="font:inherit;font-size:14px;padding:7px 14px;border:1px solid #5B5E57;margin-left:-1px;cursor:pointer;background:{{ o.bg }};color:{{ o.fg }}" style-focus="outline:2px solid #E8E3D3;outline-offset:2px;position:relative;z-index:1">{{ o.label }}</button>
+        </sc-for>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div style="font-size:12px;font-weight:600;letter-spacing:.14em;color:#B9B4A6">VIEWPORT</div>
+      <div style="display:flex">
+        <sc-for list="{{ viewportOpts }}" as="o" hint-placeholder-count="2">
+          <button onClick="{{ o.pick }}" style="font-family:'IBM Plex Mono',monospace;font-size:14px;padding:7px 14px;border:1px solid #5B5E57;margin-left:-1px;cursor:pointer;background:{{ o.bg }};color:{{ o.fg }}" style-focus="outline:2px solid #E8E3D3;outline-offset:2px;position:relative;z-index:1">{{ o.label }}</button>
+        </sc-for>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div style="font-size:12px;font-weight:600;letter-spacing:.14em;color:#B9B4A6">UI SCALE</div>
+      <div style="display:flex">
+        <sc-for list="{{ scaleOpts }}" as="o" hint-placeholder-count="3">
+          <button onClick="{{ o.pick }}" style="font-family:'IBM Plex Mono',monospace;font-size:14px;padding:7px 14px;border:1px solid #5B5E57;margin-left:-1px;cursor:pointer;background:{{ o.bg }};color:{{ o.fg }}" style-focus="outline:2px solid #E8E3D3;outline-offset:2px;position:relative;z-index:1">{{ o.label }}</button>
+        </sc-for>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div style="font-size:12px;font-weight:600;letter-spacing:.14em;color:#B9B4A6">SIMULATE</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button onClick="{{ toggleSaveFails }}" style="font:inherit;font-size:14px;padding:7px 12px;border:1px solid #5B5E57;cursor:pointer;background:transparent;color:#E8E3D3" style-focus="outline:2px solid #E8E3D3;outline-offset:2px">{{ saveFailsLabel }}</button>
+        <button onClick="{{ toggleStartup }}" style="font:inherit;font-size:14px;padding:7px 12px;border:1px solid #5B5E57;cursor:pointer;background:transparent;color:#E8E3D3" style-focus="outline:2px solid #E8E3D3;outline-offset:2px">{{ startupLabel }}</button>
+        <button onClick="{{ toggleOpen }}" style="font:inherit;font-size:14px;padding:7px 12px;border:1px solid #5B5E57;cursor:pointer;background:transparent;color:#E8E3D3" style-focus="outline:2px solid #E8E3D3;outline-offset:2px">{{ openLabel }}</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:12px;align-items:center;margin-left:auto">
+      <div style="position:relative;width:120px;height:{{ miniH }}px;border:1px solid #6A6D66;background:#232726">
+        <div style="position:absolute;top:{{ miniInset }}px;right:{{ miniInset }}px;width:{{ miniPW }}px;height:{{ miniPH }}px;background:#D9D3C1;opacity:{{ miniOpacity }}"></div>
+      </div>
+      <div style="font-size:13px;color:#B9B4A6;line-height:1.4;max-width:160px">Panel footprint in the full viewport</div>
+    </div>
+  </div>
+
+  <div style="display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;font-size:14px;color:#B9B4A6">
+    <div>{{ scenarioCaption }}</div>
+    <div style="font-family:'IBM Plex Mono',monospace">Upper-right of {{ vpLabel }} at 1:1 · 32px inset · Insert opens/closes, Esc closes</div>
+  </div>
+
+  <div style="position:relative;width:100%;max-width:{{ vpW }}px;margin-left:auto;height:{{ frameH }}px;overflow:hidden;border:1px solid #3A3E3B;background:repeating-linear-gradient(135deg,#202423 0 14px,#1D2120 14px 28px)">
+    <div style="position:absolute;left:24px;bottom:20px;font-family:'IBM Plex Mono',monospace;font-size:13px;color:#7D817A">game viewport · {{ vpLabel }} · no screenshot</div>
+    <sc-if value="{{ closed }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute;left:24px;top:24px;font-family:'IBM Plex Mono',monospace;font-size:13px;color:#7D817A">[closed: nothing drawn · press Insert]</div>
+    </sc-if>
+    <sc-if value="{{ open }}" hint-placeholder-val="{{ true }}">
+      <div role="dialog" aria-label="NieR render settings" style="position:absolute;top:32px;right:32px;zoom:{{ uiScale }};width:552px;max-height:{{ panelMaxH }}px;display:flex;flex-direction:column;background:#E8E3D3;color:#26272A;border:1px solid #B8B19C;border-radius:2px;box-shadow:0 2px 0 rgba(0,0,0,.25);font-family:'IBM Plex Sans',sans-serif;font-size:15px;line-height:1.45">
+
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:20px 24px 16px;border-bottom:1px solid #C9C2AE;flex:none">
+          <div style="display:flex;flex-direction:column;gap:4px;min-width:0">
+            <div style="font-size:20px;font-weight:700;letter-spacing:.12em">NIER RENDER</div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#55554C;letter-spacing:.04em">{{ backendLine }}</div>
+          </div>
+          <button onClick="{{ close }}" aria-label="Close (Esc)" style="width:36px;height:36px;flex:none;display:flex;align-items:center;justify-content:center;background:transparent;border:1px solid transparent;border-radius:2px;color:#26272A;font-size:18px;cursor:pointer" style-hover="border-color:#B8B19C" style-focus="outline:2px solid #26272A;outline-offset:1px">✕</button>
+        </div>
+
+        <div style="flex:1 1 auto;min-height:0;overflow-y:auto;padding:0 24px">
+          <div style="display:flex;flex-direction:column;gap:10px;padding:18px 0;border-bottom:1px solid #C9C2AE">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+              <div style="font-size:13px;font-weight:600;letter-spacing:.14em;color:#55554C">ACTIVE THIS SESSION</div>
+              <sc-if value="{{ applied }}" hint-placeholder-val="{{ true }}">
+                <div style="font-size:12px;font-weight:600;letter-spacing:.1em;padding:3px 10px;background:#48523C;color:#F3F0E6;border-radius:2px">● APPLIED</div>
+              </sc-if>
+              <sc-if value="{{ startupFail }}" hint-placeholder-val="{{ false }}">
+                <div style="font-size:12px;font-weight:600;letter-spacing:.1em;padding:3px 10px;background:#8E2F1E;color:#FBF3EE;border-radius:2px">✕ NOT APPLIED</div>
+              </sc-if>
+            </div>
+            <sc-if value="{{ applied }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+                <div style="font-size:28px;font-weight:500;line-height:1.15">{{ activeMode }}</div>
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:13px;padding:2px 8px;background:#D9D3C1;color:#3A3B36">{{ activeChip }}</div>
+              </div>
+              <sc-if value="{{ activeNote }}" hint-placeholder-val="{{ false }}">
+                <div style="font-size:14px;color:#55554C">{{ activeNote }}</div>
+              </sc-if>
+            </sc-if>
+            <sc-if value="{{ startupFail }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;flex-direction:column;gap:4px">
+                <div style="font-size:22px;font-weight:500;line-height:1.2">Not applied — renderer unchanged</div>
+                <div style="font-size:14px;color:#6E2416">{{ failReason }}</div>
+                <div style="font-size:14px;color:#55554C">Setup retries only on the next game launch. Saving a preset does not clear this.</div>
+              </div>
+            </sc-if>
+            <div style="display:grid;grid-template-columns:1fr 48px 1fr;align-items:start;gap:8px;margin-top:4px">
+              <div style="display:flex;flex-direction:column;gap:2px">
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:19px">{{ renderDim }}</div>
+                <div style="font-size:14px;color:#55554C">{{ renderCap }}</div>
+              </div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:18px;color:#6B6A5F;padding-top:1px">→</div>
+              <div style="display:flex;flex-direction:column;gap:2px">
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:19px">{{ displayDim }}</div>
+                <div style="font-size:14px;color:#55554C">{{ displayCap }}</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:10px;padding:18px 0 4px">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+              <div id="preset-label" style="font-size:13px;font-weight:600;letter-spacing:.14em;color:#55554C">PRESET FOR NEXT LAUNCH</div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#55554C">Saved: {{ saved }}</div>
+            </div>
+            <button ref="{{ triggerRef }}" onClick="{{ toggleCombo }}" onKeyDown="{{ triggerKey }}" aria-haspopup="listbox" aria-expanded="{{ comboOpen }}" aria-labelledby="preset-label" style="display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;height:46px;padding:0 14px;background:#F3F0E6;border:1px solid #9C9580;border-radius:2px;font:inherit;font-size:16px;color:#26272A;cursor:pointer;text-align:left" style-hover="border-color:#26272A" style-focus="outline:2px solid #26272A;outline-offset:2px">
+              <span>{{ editedLabel }}</span>
+              <span style="font-size:14px;color:#55554C">{{ chevron }}</span>
+            </button>
+            <sc-if value="{{ comboOpen }}" hint-placeholder-val="{{ false }}">
+              <div ref="{{ listRef }}" role="listbox" tabindex="-1" onKeyDown="{{ listKey }}" style="display:flex;flex-direction:column;background:#F3F0E6;border:1px solid #26272A;border-radius:2px;margin-top:-6px;outline:none">
+                <div role="option" aria-selected="{{ c75Selected }}" aria-disabled="{{ c75Disabled }}" onClick="{{ pickC75 }}" onMouseEnter="{{ hoverC75 }}" style="display:flex;gap:10px;padding:10px 14px;background:{{ c75Bg }};cursor:{{ c75Cursor }};border-bottom:1px solid #D9D3C1">
+                  <span style="width:14px;flex:none;font-family:'IBM Plex Mono',monospace">{{ c75Mark }}</span>
+                  <span style="display:flex;flex-direction:column;gap:2px">
+                    <span style="font-size:16px;color:{{ c75Ink }}">Custom75 — 75% per axis</span>
+                    <span style="font-size:14px;color:{{ c75Sub }}">{{ c75Desc }}</span>
+                  </span>
+                </div>
+                <div role="option" aria-selected="{{ natSelected }}" onClick="{{ pickNat }}" onMouseEnter="{{ hoverNat }}" style="display:flex;gap:10px;padding:10px 14px;background:{{ natBg }};cursor:pointer">
+                  <span style="width:14px;flex:none;font-family:'IBM Plex Mono',monospace">{{ natMark }}</span>
+                  <span style="display:flex;flex-direction:column;gap:2px">
+                    <span style="font-size:16px">Native — full-resolution AA</span>
+                    <span style="font-size:14px;color:#55554C">Skips this controller's upscale patches; existing AA mod stays.</span>
+                  </span>
+                </div>
+              </div>
+            </sc-if>
+            <div style="font-size:14px;color:#55554C;text-wrap:pretty">{{ editedHelp }}</div>
+            <sc-if value="{{ c75Unavailable }}" hint-placeholder-val="{{ false }}">
+              <div style="font-size:14px;color:#55554C">⊘ Custom75 unavailable: not validated for this game/backend setup.</div>
+            </sc-if>
+          </div>
+        </div>
+
+        <div style="flex:none;display:flex;flex-direction:column;gap:12px;padding:12px 24px 18px">
+          <div role="status" aria-live="polite">
+            <sc-if value="{{ nNone }}" hint-placeholder-val="{{ true }}">
+              <div style="padding:10px 14px;background:#DCD7C6;font-size:15px;color:#3A3B36">No unsaved changes.</div>
+            </sc-if>
+            <sc-if value="{{ nDirty }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;gap:10px;padding:10px 14px;background:#E6D3A3;font-size:15px;color:#3A2E12"><span style="flex:none">△</span><span>{{ dirtyText }}</span></div>
+            </sc-if>
+            <sc-if value="{{ nSaved }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;gap:10px;padding:10px 14px;background:#E6D3A3;font-size:15px;color:#3A2E12"><span style="flex:none">↻</span><span style="display:flex;flex-direction:column;gap:2px"><span style="font-weight:600">{{ savedText }}</span><span style="font-size:14px">{{ savedSub }}</span></span></div>
+            </sc-if>
+            <sc-if value="{{ nError }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;gap:10px;padding:10px 14px;background:#EBCFC4;font-size:15px;color:#5A1E14"><span style="flex:none">✕</span><span style="display:flex;flex-direction:column;gap:2px"><span style="font-weight:600">Save failed: settings file could not be written.</span><span style="font-size:14px">{{ errorSub }}</span></span></div>
+            </sc-if>
+          </div>
+          <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:12px">
+            <sc-if value="{{ dirty }}" hint-placeholder-val="{{ false }}">
+              <button onClick="{{ save }}" style="height:44px;background:#48523C;color:#F3F0E6;border:1px solid #48523C;border-radius:2px;font:inherit;font-size:16px;font-weight:500;cursor:pointer" style-hover="background:#3A4330" style-focus="outline:2px solid #26272A;outline-offset:2px">{{ saveLabel }}</button>
+              <button onClick="{{ discard }}" style="height:44px;background:#F3F0E6;color:#26272A;border:1px solid #9C9580;border-radius:2px;font:inherit;font-size:16px;cursor:pointer" style-hover="border-color:#26272A" style-focus="outline:2px solid #26272A;outline-offset:2px">Discard changes</button>
+            </sc-if>
+            <sc-if value="{{ clean }}" hint-placeholder-val="{{ true }}">
+              <button disabled="{{ true }}" style="height:44px;background:transparent;color:#8E8A7C;border:1px solid #C9C2AE;border-radius:2px;font:inherit;font-size:16px;cursor:not-allowed">Save for next launch</button>
+              <button disabled="{{ true }}" style="height:44px;background:transparent;color:#8E8A7C;border:1px solid #C9C2AE;border-radius:2px;font:inherit;font-size:16px;cursor:not-allowed">Discard changes</button>
+            </sc-if>
+          </div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#55554C">Insert open/close · Esc close · Tab/arrows navigate</div>
+        </div>
+      </div>
+    </sc-if>
+  </div>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:16px">
+  <div style="display:flex;justify-content:space-between;align-items:baseline;gap:16px;flex-wrap:wrap">
+    <div style="font-size:13px;font-weight:600;letter-spacing:.14em;color:#B9B4A6">STATE SHEET</div>
+    <div style="font-size:14px;color:#B9B4A6">Select a row to load it into the panel above</div>
+  </div>
+  <div style="overflow-x:auto">
+    <div style="min-width:880px;display:flex;flex-direction:column;font-size:14px">
+      <div style="display:grid;grid-template-columns:200px 150px 110px 110px 1fr 130px;gap:16px;padding:8px 12px;border-bottom:1px solid #4A4E4A;font-size:12px;font-weight:600;letter-spacing:.12em;color:#B9B4A6">
+        <div>STATE</div><div>ACTIVE</div><div>SAVED</div><div>EDITED</div><div>FEEDBACK</div><div>SAVE / DISCARD</div>
+      </div>
+      <sc-for list="{{ sheet }}" as="r" hint-placeholder-count="7">
+        <button onClick="{{ r.load }}" style="display:grid;grid-template-columns:200px 150px 110px 110px 1fr 130px;gap:16px;padding:12px;text-align:left;font:inherit;font-size:14px;color:#E8E3D3;background:{{ r.bg }};border:none;border-bottom:1px solid #2E3230;cursor:pointer" style-hover="background:#262A28" style-focus="outline:2px solid #E8E3D3;outline-offset:-2px">
+          <span style="font-weight:600">{{ r.name }}</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:13px">{{ r.active }}</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:13px">{{ r.saved }}</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:13px">{{ r.edited }}</span>
+          <span style="color:#D6D1C3">{{ r.feedback }}</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:13px">{{ r.buttons }}</span>
+        </button>
+      </sc-for>
+    </div>
+  </div>
+</section>
+
+<section style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:48px">
+  <div style="display:flex;flex-direction:column;gap:20px">
+    <div style="font-size:13px;font-weight:600;letter-spacing:.14em;color:#B9B4A6">TOKENS (1× LOGICAL PX)</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px">
+      <div style="display:flex;gap:10px;align-items:center"><div style="width:28px;height:28px;background:#E8E3D3;flex:none"></div><div style="font-size:13px;line-height:1.3">surface<br><span style="font-family:'IBM Plex Mono',monospace;color:#B9B4A6">#E8E3D3</span></div></div>
+      <div style="display:flex;gap:10px;align-items:center"><div style="width:28px;height:28px;background:#F3F0E6;flex:none"></div><div style="font-size:13px;line-height:1.3">field<br><span style="font-family:'IBM Plex Mono',monospace;color:#B9B4A6">#F3F0E6</span></div></div>
+      <div style="display:flex;gap:10px;align-items:center"><div style="width:28px;height:28px;background:#C9C2AE;flex:none"></div><div style="font-size:13px;line-height:1.3">rule<br><span style="font-family:'IBM Plex Mono',monospace;color:#B9B4A6">#C9C2AE</span></div></div>
+      <div style="display:flex;gap:10px;align-items:center"><div style="width:28px;height:28px;background:#26272A;border:1px solid #4A4E4A;flex:none"></div><div style="font-size:13px;line-height:1.3">text<br><span style="font-family:'IBM Plex Mono',monospace;color:#B9B4A6">#26272A</span></div></div>
+      <div style="display:flex;gap:10px;align-items:center"><div style="width:28px;height:28px;background:#55554C;flex:none"></div><div style="font-size:13px;line-height:1.3">text-2 (6.2:1)<br><span style="font-family:'IBM Plex Mono',monospace;color:#B9B4A6">#55554C</span></div></div>
+      <div style="display:flex;gap:10px;align-items:center"><div style="width:28px;height:28px;background:#48523C;flex:none"></div><div style="font-size:13px;line-height:1.3">primary<br><span style="font-family:'IBM Plex Mono',monospace;color:#B9B4A6">#48523C</span></div></div>
+      <div style="display:flex;gap:10px;align-items:center"><div style="width:28px;height:28px;background:#E6D3A3;flex:none"></div><div style="font-size:13px;line-height:1.3">pending bg / ink<br><span style="font-family:'IBM Plex Mono',monospace;color:#B9B4A6">#E6D3A3 #3A2E12</span></div></div>
+      <div style="display:flex;gap:10px;align-items:center"><div style="width:28px;height:28px;background:#EBCFC4;flex:none"></div><div style="font-size:13px;line-height:1.3">error bg / ink<br><span style="font-family:'IBM Plex Mono',monospace;color:#B9B4A6">#EBCFC4 #5A1E14</span></div></div>
+      <div style="display:flex;gap:10px;align-items:center"><div style="width:28px;height:28px;background:#8E2F1E;flex:none"></div><div style="font-size:13px;line-height:1.3">error badge<br><span style="font-family:'IBM Plex Mono',monospace;color:#B9B4A6">#8E2F1E</span></div></div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px;font-size:14px;line-height:1.5;color:#D6D1C3">
+      <div><b style="color:#F3F0E6">Type.</b> IBM Plex Sans + Plex Mono (OFL, bundle TTFs). Title 20/700 +0.12em · mode 28/500 · body 15–16 · secondary 14 · labels 13/600 uppercase +0.14em · dimensions mono 19.</div>
+      <div><b style="color:#F3F0E6">Spacing.</b> Panel 552 wide, padding 24 · section gap 18 · row gap 10 · control height 44–46 · rules 1px · radius 2 · inset from viewport 32.</div>
+      <div><b style="color:#F3F0E6">Focus.</b> 2px text-colour outline, 2px offset, on every interactive item.</div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:20px">
+    <div style="font-size:13px;font-weight:600;letter-spacing:.14em;color:#B9B4A6">IMGUI IMPLEMENTATION NOTES</div>
+    <ol style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:10px;font-size:14px;line-height:1.5;color:#D6D1C3">
+      <li>One <span style="font-family:'IBM Plex Mono',monospace">Begin()</span> window, NoTitleBar | NoResize | NoCollapse | NoSavedSettings. Pos = (display.x − 32 − w, 32). Max height = display.y − 64.</li>
+      <li>Layout: header, then <span style="font-family:'IBM Plex Mono',monospace">BeginChild("body")</span> with height = avail − footerHeight (scrolls), then the footer, which always stays visible.</li>
+      <li>Scale: rebuild the font atlas at 15 × DPI scale and call <span style="font-family:'IBM Plex Mono',monospace">style.ScaleAllSizes()</span>. Read DPI from Win32 so it works the same on Windows and Proton. Bundle the fonts; never look up a system font.</li>
+      <li>Keep three separate values: <span style="font-family:'IBM Plex Mono',monospace">active</span> (fixed at startup), <span style="font-family:'IBM Plex Mono',monospace">saved</span> (on disk), <span style="font-family:'IBM Plex Mono',monospace">edited</span> (in memory). dirty = edited ≠ saved. Save writes only <span style="font-family:'IBM Plex Mono',monospace">saved</span>. <span style="font-family:'IBM Plex Mono',monospace">startupError</span> is cleared only by a restart.</li>
+      <li>Combo: <span style="font-family:'IBM Plex Mono',monospace">BeginCombo</span> with two <span style="font-family:'IBM Plex Mono',monospace">Selectable</span>s. Show Custom75 with <span style="font-family:'IBM Plex Mono',monospace">ImGuiSelectableFlags_Disabled</span> when the capability is not validated, with the reason as a second line.</li>
+      <li>Disabled buttons: <span style="font-family:'IBM Plex Mono',monospace">BeginDisabled()</span> plus border-only style overrides. Feedback is one drawn rect plus text. The ✕ △ ↻ ⊘ glyphs must be merged into the atlas.</li>
+      <li>Input: enable NavEnableKeyboard while open and swallow game input. Insert toggles; Esc closes the open combo first, then the window. Closing does no I/O. When closed, submit nothing: no HUD stub.</li>
+      <li>Fill backend/platform/dimensions from runtime probes. Show “unknown” / “—” until observed. Never derive them from OS or GPU vendor.</li>
+    </ol>
+  </div>
+</section>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const LABEL = { Custom75: 'Custom75 — 75% per axis', Native: 'Native — full-resolution AA' };
+const SCEN = {
+  proton: { backendLine: 'FSR 4.1.1 · D3D11 · PROTON', active: 'Custom75', render: '2580×1080', display: '3440×1440', renderCap: 'Render resolution', c75ok: true, saved: 'Custom75', failReason: 'Reason: upscaler bridge did not initialise at startup.', caption: 'Proton example · recorded test session (RX 9070 XT, 3440×1440)' },
+  windows: { backendLine: 'AA BACKEND UNKNOWN · D3D11 · WINDOWS', active: 'Native', render: '—', display: '3440×1440', renderCap: 'Render resolution: not observed', c75ok: false, saved: 'Native', failReason: 'Reason: startup protection/cache check failed.', caption: 'Windows example · CONCEPTUAL sample data · not measured or compatibility-tested' }
+};
+const BASE = { scenario: 'proton', saved: 'Custom75', edited: 'Custom75', startupFail: false, saveFails: false, saveError: false, savedThisSession: false, open: true, comboOpen: false };
+
+class Component extends DCLogic {
+  state = { ...BASE, vp: '3440', scale: 1, hi: 'Custom75' };
+  triggerRef = React.createRef();
+  listRef = React.createRef();
+
+  componentDidMount() {
+    this.onKey = (e) => {
+      if (e.key === 'Insert') { e.preventDefault(); this.state.open ? this.close() : this.openPanel(); }
+      else if (e.key === 'Escape') {
+        if (this.state.comboOpen) { this.setState({ comboOpen: false }, () => this.triggerRef.current && this.triggerRef.current.focus()); }
+        else if (this.state.open) this.close();
+      }
+    };
+    window.addEventListener('keydown', this.onKey);
+  }
+  componentWillUnmount() { window.removeEventListener('keydown', this.onKey); }
+
+  openPanel() { this.setState({ open: true }, () => this.triggerRef.current && this.triggerRef.current.focus()); }
+  close() { this.setState({ open: false, comboOpen: false }); }
+  c75ok() { return SCEN[this.state.scenario].c75ok; }
+  select(v) {
+    if (v === 'Custom75' && !this.c75ok()) return;
+    this.setState({ edited: v, comboOpen: false, saveError: false }, () => this.triggerRef.current && this.triggerRef.current.focus());
+  }
+  openCombo() { this.setState(s => ({ comboOpen: true, hi: s.edited }), () => this.listRef.current && this.listRef.current.focus()); }
+  load(p) { this.setState({ ...BASE, saved: SCEN[p.scenario || 'proton'].saved, edited: SCEN[p.scenario || 'proton'].saved, ...p, hi: p.edited || SCEN[p.scenario || 'proton'].saved }); }
+
+  renderVals() {
+    const s = this.state, sc = SCEN[s.scenario];
+    const W = s.vp === '3440' ? 3440 : 1920, H = s.vp === '3440' ? 1440 : 1080;
+    const dirty = s.edited !== s.saved;
+    const applied = !s.startupFail;
+    const restartPending = s.savedThisSession && (s.startupFail || s.saved !== sc.active);
+    const notice = s.saveError ? 'error' : dirty ? 'dirty' : restartPending ? 'saved' : 'none';
+    const sessionPhrase = applied ? `This session stays on ${sc.active}.` : 'This session\u2019s renderer stays unchanged.';
+    const seg = (cur, val, label, pick) => ({ label, pick, bg: cur === val ? '#E8E3D3' : 'transparent', fg: cur === val ? '#1B1E1D' : '#E8E3D3' });
+    const opts = ['Custom75', 'Native'].filter(v => v !== 'Custom75' || sc.c75ok);
+    const move = (d) => { const i = opts.indexOf(s.hi); const n = opts[(i + d + opts.length) % opts.length] || opts[0]; this.setState({ hi: n }); };
+    const c75ok = sc.c75ok;
+    const row = (name, p, active, saved, edited, feedback, buttons) => ({ name, active, saved, edited, feedback, buttons, load: () => this.load(p), bg: 'transparent' });
+    const miniW = 120, miniH = Math.round(miniW * H / W), k = miniW / W;
+    return {
+      scenarioOpts: [seg(s.scenario, 'proton', 'Proton · Custom75 (verified)', () => this.load({ scenario: 'proton' })), seg(s.scenario, 'windows', 'Windows · Native (conceptual)', () => this.load({ scenario: 'windows' }))],
+      viewportOpts: [seg(s.vp, '3440', '3440×1440', () => this.setState({ vp: '3440' })), seg(s.vp, '1920', '1920×1080', () => this.setState({ vp: '1920' }))],
+      scaleOpts: [1, 1.5, 2].map(v => seg(s.scale, v, `${v * 100}%`, () => this.setState({ scale: v }))),
+      saveFailsLabel: s.saveFails ? '☑ Next save fails' : '☐ Next save fails',
+      startupLabel: s.startupFail ? '☑ Startup setup failed' : '☐ Startup setup failed',
+      openLabel: s.open ? 'Close panel' : 'Open panel',
+      toggleSaveFails: () => this.setState({ saveFails: !s.saveFails }),
+      toggleStartup: () => this.setState({ startupFail: !s.startupFail }),
+      toggleOpen: () => s.open ? this.close() : this.openPanel(),
+      miniH, miniInset: Math.max(1, Math.round(32 * k)), miniPW: Math.round(552 * s.scale * k), miniPH: Math.round(Math.min(516 * s.scale, H - 64) * k), miniOpacity: s.open ? 1 : 0.15,
+      scenarioCaption: sc.caption, vpLabel: `${W}×${H}`, vpW: W,
+      frameH: Math.min(H, Math.round(720 * s.scale + 64)),
+      uiScale: s.scale, panelMaxH: Math.floor((Math.min(H, Math.round(720 * s.scale + 64)) - 64) / s.scale),
+      open: s.open, closed: !s.open, close: () => this.close(),
+      backendLine: sc.backendLine,
+      applied, startupFail: s.startupFail,
+      activeMode: sc.active,
+      activeChip: sc.active === 'Custom75' ? '75% / axis' : 'full resolution',
+      activeNote: sc.active === 'Native' ? 'Controller patches skipped · existing AA mod kept' : '',
+      failReason: sc.failReason,
+      renderDim: applied ? sc.render : '—', displayDim: applied ? sc.display : '—',
+      renderCap: applied ? sc.renderCap : 'Render resolution: unknown',
+      displayCap: applied ? 'Display resolution' : 'Display resolution: unknown',
+      saved: s.saved,
+      triggerRef: this.triggerRef, listRef: this.listRef,
+      comboOpen: s.comboOpen, chevron: s.comboOpen ? '▴' : '▾',
+      toggleCombo: () => s.comboOpen ? this.setState({ comboOpen: false }) : this.openCombo(),
+      triggerKey: (e) => { if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); this.openCombo(); } },
+      listKey: (e) => {
+        if (e.key === 'ArrowDown') { e.preventDefault(); move(1); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); move(-1); }
+        else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.select(s.hi); }
+        else if (e.key === 'Tab') this.setState({ comboOpen: false });
+      },
+      editedLabel: LABEL[s.edited],
+      editedHelp: s.edited === 'Custom75' ? 'Renders at 75% per axis, then upscales to display. A custom ratio, not the standard FSR Quality preset.' : 'Renders at full resolution. Skips this controller\u2019s upscale patches; the existing AA mod stays installed.',
+      c75Unavailable: !c75ok,
+      c75Selected: s.edited === 'Custom75', c75Disabled: !c75ok, natSelected: s.edited === 'Native',
+      c75Bg: c75ok && s.hi === 'Custom75' ? '#DCD7C6' : 'transparent', natBg: s.hi === 'Native' ? '#DCD7C6' : 'transparent',
+      c75Cursor: c75ok ? 'pointer' : 'not-allowed',
+      c75Ink: c75ok ? '#26272A' : '#7A776B', c75Sub: c75ok ? '#55554C' : '#6B6A5F',
+      c75Desc: c75ok ? 'Custom ratio, not the standard FSR Quality preset.' : 'Unavailable: not validated for this game/backend setup.',
+      c75Mark: s.edited === 'Custom75' ? '✓' : (c75ok ? '' : '⊘'), natMark: s.edited === 'Native' ? '✓' : '',
+      pickC75: () => this.select('Custom75'), pickNat: () => this.select('Native'),
+      hoverC75: () => c75ok && this.setState({ hi: 'Custom75' }), hoverNat: () => this.setState({ hi: 'Native' }),
+      nNone: notice === 'none', nDirty: notice === 'dirty', nSaved: notice === 'saved', nError: notice === 'error',
+      dirtyText: `Unsaved. ${sessionPhrase}`,
+      savedText: `${s.saved} saved for next launch. Restart required.`,
+      savedSub: applied ? `This session keeps ${sc.active} at ${sc.render} → ${sc.display}.` : 'This session\u2019s renderer stays unchanged.',
+      errorSub: `Saved preset is still ${s.saved}. Your ${s.edited} selection is kept. ${sessionPhrase}`,
+      dirty, clean: !dirty,
+      saveLabel: s.saveError ? 'Retry save' : 'Save for next launch',
+      save: () => s.saveFails ? this.setState({ saveError: true }) : this.setState({ saved: s.edited, saveError: false, savedThisSession: true }),
+      discard: () => this.setState({ edited: s.saved, saveError: false, hi: s.saved }),
+      sheet: [
+        row('01 Unchanged', { scenario: 'proton' }, 'Custom75 · applied', 'Custom75', 'Custom75', 'No unsaved changes.', 'off / off'),
+        row('02 Unsaved edit', { scenario: 'proton', edited: 'Native' }, 'Custom75 · applied', 'Custom75', 'Native', 'Unsaved. This session stays on Custom75.', 'on / on'),
+        row('03 Saved, restart required', { scenario: 'proton', saved: 'Native', edited: 'Native', savedThisSession: true }, 'Custom75 · applied', 'Native', 'Native', 'Native saved for next launch. Restart required.', 'off / off'),
+        row('04 Save failure', { scenario: 'proton', edited: 'Native', saveFails: true, saveError: true }, 'Custom75 · applied', 'Custom75', 'Native', 'Save failed. Saved preset still Custom75. Retry save.', 'on (Retry) / on'),
+        row('05 Startup failure', { scenario: 'proton', startupFail: true }, 'Not applied · — → —', 'Custom75', 'Custom75', 'Not applied — renderer unchanged + reason. Persists after save.', 'per edit'),
+        row('06 Windows · conceptual', { scenario: 'windows' }, 'Native · — → 3440×1440', 'Native', 'Native', 'Custom75 listed, disabled: not validated for this setup.', 'off / off'),
+        row('07 Closed', { scenario: 'proton', open: false }, 'unchanged', 'unchanged', 'kept in memory', 'Nothing drawn. No save, patch or restart.', '—')
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

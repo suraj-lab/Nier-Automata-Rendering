@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="800" viewBox="0 0 720 800" role="img" aria-labelledby="title description">
+  <title id="title">NIER RENDER — Windows design scenario</title>
+  <desc id="description">The same compact panel on Windows, illustrated with conceptual Native-active data. Render resolution and AA backend are unknown. Custom75 is unavailable because this example setup is not validated, not because Windows is globally excluded. This is not proof of Windows or Windows-on-ARM compatibility.</desc>
+  <defs>
+    <style>
+      text { font-family: 'Noto Sans', sans-serif; fill: #292b27; }
+      .mono { font-family: 'Noto Sans Mono', monospace; }
+      .muted { fill: #68665b; }
+      .label { font-size: 11px; font-weight: 600; letter-spacing: 1.5px; }
+      .small { font-size: 12px; }
+      .body { font-size: 15px; }
+      .disabled { fill: #858275; }
+    </style>
+  </defs>
+  <rect width="720" height="800" fill="#1d2422"/>
+  <text x="84" y="48" font-size="23" letter-spacing="2" style="fill:#d7d8ca">WINDOWS / SHARED UI</text>
+  <text x="84" y="75" class="small" style="fill:#adb5a7">Conceptual sample data · Windows runtime support is not yet verified</text>
+  <text x="84" y="96" class="small" style="fill:#adb5a7">Includes future x64-game-on-ARM64-host planning, not a support claim</text>
+
+  <g transform="translate(84 124)">
+    <rect x="4" y="6" width="552" height="516" rx="3" fill="#000" opacity="0.22"/>
+    <rect width="552" height="516" rx="3" fill="#eae5d7" stroke="#b9b29e"/>
+    <rect width="4" height="80" fill="#4d5743"/>
+    <text x="24" y="36" font-size="22" font-weight="600" letter-spacing="2">NIER RENDER</text>
+    <text x="24" y="59" class="small mono muted">AA BACKEND UNKNOWN · D3D11 · WINDOWS</text>
+    <path d="M508 23l12 12m0-12l-12 12" stroke="#55574e" stroke-width="1.5"/>
+    <line x1="24" x2="528" y1="80" y2="80" stroke="#c5bead"/>
+    <text x="24" y="111" class="label muted">ACTIVE THIS SESSION</text>
+    <text x="24" y="148" font-size="27" font-weight="500">Native</text>
+    <rect x="438" y="127" width="90" height="25" rx="2" fill="#4d5743"/>
+    <text x="483" y="144" text-anchor="middle" class="label" style="fill:#f1f0e5;font-size:10px;letter-spacing:0.7px">BYPASS</text>
+    <text x="24" y="184" class="mono" font-size="18">—</text>
+    <path d="M208 178h35m-7-5l7 5-7 5" stroke="#7a7b6b" fill="none" stroke-width="1.5"/>
+    <text x="278" y="184" class="mono" font-size="18">3440×1440</text>
+    <text x="24" y="205" class="small muted">Render resolution: unknown</text>
+    <text x="278" y="205" class="small muted">Display resolution</text>
+    <line x1="24" x2="528" y1="226" y2="226" stroke="#c5bead"/>
+    <text x="24" y="256" class="label muted">PRESET FOR NEXT LAUNCH</text>
+    <rect x="24" y="273" width="504" height="44" rx="2" fill="#f5f0e5" stroke="#a8a28f"/>
+    <text x="40" y="301" font-size="16">Native — full-resolution AA</text>
+    <path d="M498 291l6 6 6-6" stroke="#5c6051" fill="none" stroke-width="1.5"/>
+    <text x="24" y="341" class="small muted">Custom75 unavailable: this game/backend setup is not validated.</text>
+    <rect x="24" y="361" width="504" height="40" rx="2" fill="#dfdfd0"/>
+    <text x="40" y="386" class="body">Controller patches bypassed. Existing AA mod retained.</text>
+    <rect x="24" y="421" width="320" height="44" rx="2" fill="#d6d1c2"/>
+    <text x="184" y="448" text-anchor="middle" class="body disabled">Save for next launch</text>
+    <rect x="356" y="421" width="172" height="44" rx="2" fill="none" stroke="#c7c1b1"/>
+    <text x="442" y="448" text-anchor="middle" class="body disabled">Discard changes</text>
+    <text x="24" y="494" class="small muted mono">Insert: toggle   ·   Esc: close   ·   Cap unchanged</text>
+  </g>
+
+  <g transform="translate(84 680)">
+    <rect width="552" height="68" rx="2" fill="#2c372d" stroke="#56614e"/>
+    <text x="18" y="24" class="label" style="fill:#d6dfc9">SAME UI / CAPABILITY-DRIVEN AVAILABILITY</text>
+    <text x="18" y="46" class="small" style="fill:#c1cdb9">A validated Windows profile can expose Custom75 too.</text>
+    <text x="18" y="61" class="small" style="fill:#c1cdb9">No OS-only block, Linux-only shell UI or unverified backend claims.</text>
+  </g>
+  <text x="84" y="779" class="small" style="fill:#a8b1a1">Design reference only · nothing installed or injected</text>
+</svg>

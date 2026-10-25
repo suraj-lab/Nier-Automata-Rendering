@@ -12,7 +12,8 @@ FROZEN = {
     "proxy_patch.h": "60eae2113d50060ce8765a7dd7ea25f6f7e28635200c198a4be4a69fcd0268a6",
     "proxy_patch_test.cpp": "236d4f2b3e243edea2f34f09c693e30ec50870e777b1a0e2a327f3f6128f0d60",
     "redirect_logic_test.cpp": "bb5336c702dc4ceede96d8e80d6eb0f6998b4869bebd93feffc36f1cdbcacb53",
-    "test_setter_proxy_integration.py": "2f1040e9026c8b0bfa104715380e89f6121bfb8f06677b5d0f566b10d45972d3",
+    # Lead update 2026-10-25: DLL now built by build_menu_dll.py (setter + in-game menu).
+    "test_setter_proxy_integration.py": "ee1e19b7f5ccba79cd957bfe4e16211d48b2f10e65f146f92aab3e4744847364",
     "depth_patch.h": "5fa527b05c4ff9e278f613aa929fd935219e1b504c44581ec11a78b8c1c98517",
     "scale_patch.h": "f02217c1d5f0bbb1a1bde090b9e8e803c1aeb7390bc4a897dda5354d37f3e7eb",
     "d3d11_log_proxy.def": "4a8c1556b94182924fb9d05039871e9d2f1d599a3558b7369418d53ff4c67945",

@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Check the scale-setter DLL exports the same names/ordinals as original NIER_DLAA,
 with 49 forwarders to d3d11_dlaa and the two create functions implemented locally."""
-import re, subprocess, sys, pathlib
+import argparse, re, subprocess, sys, pathlib
 
 A = pathlib.Path(__file__).resolve().parents[1]
-ORIG, NEW = A / "input/NIER_DLAA_1.1.dll", A / "build/scale-setter/d3d11.dll"
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("dll", nargs="?", type=pathlib.Path, default=A / "build/scale-setter/d3d11.dll")
+ORIG, NEW = A / "input/NIER_DLAA_1.1.dll", parser.parse_args().dll
 WRAPPED = {"D3D11CreateDevice", "D3D11CreateDeviceAndSwapChain"}
 
 def exports(dll):

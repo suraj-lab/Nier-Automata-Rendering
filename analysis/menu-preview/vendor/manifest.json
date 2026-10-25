@@ -1,0 +1,121 @@
+{
+  "imgui_commit": "f5befd2d29e66809cd1110a152e375a7f1981f06",
+  "plex_commit": "71f558992315a12ca1f06a2215d57962a1992162",
+  "files": {
+    "vendor/imgui/imgui.cpp": {
+      "url": "https://raw.githubusercontent.com/ocornut/imgui/f5befd2d29e66809cd1110a152e375a7f1981f06/imgui.cpp",
+      "sha256": "af1cc31255fbf58d57ecc9d727cbd39a84e44fa8f11be7fd419fa0100c5255d8",
+      "bytes": 882057
+    },
+    "vendor/imgui/imgui_draw.cpp": {
+      "url": "https://raw.githubusercontent.com/ocornut/imgui/f5befd2d29e66809cd1110a152e375a7f1981f06/imgui_draw.cpp",
+      "sha256": "9d2d9ee6745d9b98d7f39a16da8ffcf783f90bb8c9e931038fc8e9a15cbe3d84",
+      "bytes": 258761
+    },
+    "vendor/imgui/imgui_tables.cpp": {
+      "url": "https://raw.githubusercontent.com/ocornut/imgui/f5befd2d29e66809cd1110a152e375a7f1981f06/imgui_tables.cpp",
+      "sha256": "4ea380fa9d49cac6cbfbc8b969969f9b0705518ec9ca340681d8c70e3eefbc28",
+      "bytes": 247597
+    },
+    "vendor/imgui/imgui_widgets.cpp": {
+      "url": "https://raw.githubusercontent.com/ocornut/imgui/f5befd2d29e66809cd1110a152e375a7f1981f06/imgui_widgets.cpp",
+      "sha256": "54ac29dbcbe70091f5e5fc2cb4099e6d0b9d1c939e5158f2be983cb508714414",
+      "bytes": 517769
+    },
+    "vendor/imgui/imgui.h": {
+      "url": "https://raw.githubusercontent.com/ocornut/imgui/f5befd2d29e66809cd1110a152e375a7f1981f06/imgui.h",
+      "sha256": "2d0180859ff85e7fe66ed9999b0f05f2fc45176773046a8f86b3b6bd190b0765",
+      "bytes": 378236
+    },
+    "vendor/imgui/imgui_internal.h": {
+      "url": "https://raw.githubusercontent.com/ocornut/imgui/f5befd2d29e66809cd1110a152e375a7f1981f06/imgui_internal.h",
+      "sha256": "1363c617a743957f367afe1c6c88345870b7aa25ee339809fb915466e4fb9575",
+      "bytes": 272833
+    },
+    "vendor/imgui/imconfig.h": {
+      "url": "https://raw.githubusercontent.com/ocornut/imgui/f5befd2d29e66809cd1110a152e375a7f1981f06/imconfig.h",
+      "sha256": "0884061cc43e27e1d346fe18dcd1425792eb2532d3d16610a82eb5ac751f7594",
+      "bytes": 11579
+    },
+    "vendor/imgui/imstb_rectpack.h": {
+      "url": "https://raw.githubusercontent.com/ocornut/imgui/f5befd2d29e66809cd1110a152e375a7f1981f06/imstb_rectpack.h",
+      "sha256": "2efa3d5f7d003c19743b15155dad9f46d9f9fc783a18893d703b431d3c990972",
+      "bytes": 20344
+    },
+    "vendor/imgui/imstb_textedit.h": {
+      "url": "https://raw.githubusercontent.com/ocornut/imgui/f5befd2d29e66809cd1110a152e375a7f1981f06/imstb_textedit.h",
+      "sha256": "77010e494caf72c178b573569612aec409d24380409676325a31d02de0ec64b7",
+      "bytes": 57128
+    },
+    "vendor/imgui/imstb_truetype.h": {
+      "url": "https://raw.githubusercontent.com/ocornut/imgui/f5befd2d29e66809cd1110a152e375a7f1981f06/imstb_truetype.h",
+      "sha256": "87f08919ae8e7223451d0e9d06b62829075d3e920c9e6ad436db9d7e7427ffce",
+      "bytes": 199485
+    },
+    "vendor/imgui/LICENSE.txt": {
+      "url": "https://raw.githubusercontent.com/ocornut/imgui/f5befd2d29e66809cd1110a152e375a7f1981f06/LICENSE.txt",
+      "sha256": "c80c5789748d955c4a650562baa0d750494e2c7128c2ca66aaebe2e3c4e198bf",
+      "bytes": 1083
+    },
+    "vendor/imgui/backends/imgui_impl_win32.cpp": {
+      "url": "https://raw.githubusercontent.com/ocornut/imgui/f5befd2d29e66809cd1110a152e375a7f1981f06/backends/imgui_impl_win32.cpp",
+      "sha256": "e572de10045298bbf833aa7a15e28d2777df57603b4e50b9c8aa4c878f1e4cfa",
+      "bytes": 49602
+    },
+    "vendor/imgui/backends/imgui_impl_win32.h": {
+      "url": "https://raw.githubusercontent.com/ocornut/imgui/f5befd2d29e66809cd1110a152e375a7f1981f06/backends/imgui_impl_win32.h",
+      "sha256": "606df46db972371ac6b5f5ad94bba75a09657da47b259105c4845c1f8638fa0c",
+      "bytes": 3549
+    },
+    "vendor/imgui/backends/imgui_impl_dx11.cpp": {
+      "url": "https://raw.githubusercontent.com/ocornut/imgui/f5befd2d29e66809cd1110a152e375a7f1981f06/backends/imgui_impl_dx11.cpp",
+      "sha256": "7a8f7294b86065d514a9e19f1bed3bc84d4587f0142b2c551a584b4067cb2902",
+      "bytes": 30818
+    },
+    "vendor/imgui/backends/imgui_impl_dx11.h": {
+      "url": "https://raw.githubusercontent.com/ocornut/imgui/f5befd2d29e66809cd1110a152e375a7f1981f06/backends/imgui_impl_dx11.h",
+      "sha256": "cf55f23132dcd240c31995494e0828abb84e552adee71be20f384d68eca21697",
+      "bytes": 2335
+    },
+    "vendor/imgui/examples/example_win32_directx11/main.cpp": {
+      "url": "https://raw.githubusercontent.com/ocornut/imgui/f5befd2d29e66809cd1110a152e375a7f1981f06/examples/example_win32_directx11/main.cpp",
+      "sha256": "58c218702299ada4a2d0f7fde6dd04ab42460f8b792a82a05bdd64d9da6e94aa",
+      "bytes": 11781
+    },
+    "vendor/fonts/IBMPlexSans-Regular.ttf": {
+      "url": "https://raw.githubusercontent.com/IBM/plex/71f558992315a12ca1f06a2215d57962a1992162/packages/plex-sans/fonts/complete/ttf/IBMPlexSans-Regular.ttf",
+      "sha256": "975dcda37d80f038dcd143c22e33ca2d97a0cc5a929aace1c749153b0fe1afa5",
+      "bytes": 200500
+    },
+    "vendor/fonts/IBMPlexSans-Medium.ttf": {
+      "url": "https://raw.githubusercontent.com/IBM/plex/71f558992315a12ca1f06a2215d57962a1992162/packages/plex-sans/fonts/complete/ttf/IBMPlexSans-Medium.ttf",
+      "sha256": "331c8639d7598b2cde62a911a71db195e30cb655cd6bdf2e324a7e984955f907",
+      "bytes": 202460
+    },
+    "vendor/fonts/IBMPlexSans-SemiBold.ttf": {
+      "url": "https://raw.githubusercontent.com/IBM/plex/71f558992315a12ca1f06a2215d57962a1992162/packages/plex-sans/fonts/complete/ttf/IBMPlexSans-SemiBold.ttf",
+      "sha256": "a20caf8286023a6a7a85e40b1d2a4ae9fc3e3b1f9eda8f4c542dd4986af67bb1",
+      "bytes": 202632
+    },
+    "vendor/fonts/IBMPlexSans-Bold.ttf": {
+      "url": "https://raw.githubusercontent.com/IBM/plex/71f558992315a12ca1f06a2215d57962a1992162/packages/plex-sans/fonts/complete/ttf/IBMPlexSans-Bold.ttf",
+      "sha256": "9e6c74a889a700d707613d24548fe4ffa6bc59559a0689d2cf9e133bdcdafb2f",
+      "bytes": 200872
+    },
+    "vendor/fonts/IBMPlexMono-Regular.ttf": {
+      "url": "https://raw.githubusercontent.com/IBM/plex/71f558992315a12ca1f06a2215d57962a1992162/packages/plex-mono/fonts/complete/ttf/IBMPlexMono-Regular.ttf",
+      "sha256": "7c6fbddca4b700be918f5f6183d9bd4464fa427fe435f0b480d77fe2bb8c5a43",
+      "bytes": 173052
+    },
+    "vendor/fonts/IBMPlexMono-Medium.ttf": {
+      "url": "https://raw.githubusercontent.com/IBM/plex/71f558992315a12ca1f06a2215d57962a1992162/packages/plex-mono/fonts/complete/ttf/IBMPlexMono-Medium.ttf",
+      "sha256": "98fbd727aae340b236955879dabed4d991aac9e8e90b3b2a67ce4a59221cc97c",
+      "bytes": 174008
+    },
+    "vendor/fonts/LICENSE.txt": {
+      "url": "https://raw.githubusercontent.com/IBM/plex/71f558992315a12ca1f06a2215d57962a1992162/LICENSE.txt",
+      "sha256": "7e6b2818edbd8f6a01ae80641cc8f16a51080d08fb4e532be3a0b6f74adb07da",
+      "bytes": 4456
+    }
+  }
+}

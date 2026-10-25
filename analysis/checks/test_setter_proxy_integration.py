@@ -43,11 +43,9 @@ with tempfile.TemporaryDirectory() as td:
         rc, out = run([str(exe)])
         check("proxy_patch_test passes", rc == 0 and "all passed" in out, out)
 
-    # 3. setter DLL builds with -Werror (same flags as SCALE_SETTER.md)
-    dll = pathlib.Path(td) / "d3d11.dll"
-    rc, out = run(["x86_64-w64-mingw32-g++", "-std=c++17", "-O2", "-Wall", "-Wextra", "-Werror", "-shared",
-                   "-static", "-static-libgcc", "-static-libstdc++", "-o", str(dll), str(SRC),
-                   str(C / "d3d11_log_proxy.def")], cwd=C)
+    # 3. setter DLL builds with -Werror (the shipped build: setter + in-game menu, see build_menu_dll.py)
+    dll = C.parent / "runtime" / "menu-dll" / "d3d11.dll"
+    rc, out = run([sys.executable, str(C / "build_menu_dll.py")], cwd=C)
     check("setter dll builds (-Werror)", rc == 0, out)
     if rc == 0:
         rc, out = run(["x86_64-w64-mingw32-objdump", "-p", str(dll)])

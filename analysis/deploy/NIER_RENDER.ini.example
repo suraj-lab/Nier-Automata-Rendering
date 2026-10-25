@@ -1,0 +1,6 @@
+; Offline candidate only. Deployed v4 does not read this file.
+; A future approved candidate installation reads NIER_RENDER.ini beside d3d11.dll.
+; Native skips this setter's patches; Custom75 renders at 75% per axis.
+; Restart the game after changes. No other presets or hot reload yet.
+[Rendering]
+Preset=Custom75

@@ -30,3 +30,14 @@ upstream/
 backups/native-aa-baseline/
 # Copies of the closed NIER_DLAA mod inside test backups (kept on disk, never tracked)
 backups/*/game/d3d11.dll
+
+# Local backups (contain game binaries / closed mod copies) — never tracked
+backups/
+
+# Compiled test binaries
+analysis/build/scale-setter/depth_patch_test
+analysis/build/scale-setter/proxy_patch_test
+
+# Python bytecode
+__pycache__/
+*.pyc
