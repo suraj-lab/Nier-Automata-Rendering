@@ -1,4 +1,29 @@
-# Standalone Remix triangle — rendered on Windows ARM; shutdown unresolved
+# Standalone Remix probe — triangle, captured NieR meshes and whole NieR scenes
+
+Status 2026-10-25: renders on the laptop (Windows ARM, x64 runtime via the Toolkit) and on the Arch desktop
+under Proton (Portal RTX's runtime). The "shutdown hang" was launching over SSH (session 0), not a runtime bug.
+Findings and screenshots: `../REMIX_FEASIBILITY.md`. The original triangle notes follow below.
+
+## Variants and tools
+
+| Build | Command | Input |
+|---|---|---|
+| reference triangle | `python3 build.py` -> `remix-triangle.exe` | none |
+| one captured draw | `python3 capture_to_mesh.py <draw_dir> <dir>/captured_mesh.h`, then `build.py --mesh <dir>/captured_mesh.h` -> `remix-mesh.exe` | F9 draw folder |
+| whole captured frame | `python3 scene_from_frame.py <frame_dir> scene.bin`, then `build.py --scene` -> `remix-scene.exe` | F9 frame folder |
+
+- All builds: `--self-check` (CPU only), `--render C:\abs\path\d3d9.dll` (16 frames), add `--hold` to keep
+  rendering until the window closes (5 min cap; the mesh build spins, the scene stays put).
+- Laptop screenshot run: `python3 run_remote.py <label> [--mesh | --scene <scene.bin>] --conf rtx.no-ngx.conf
+  [--hold --shot-frame N]`. Large scenes need about 15 s before the first RTX frame: use `--hold --shot-frame 1500`.
+- Live window in the user's laptop session: `./show_on_laptop.sh <label> [mesh|scene] [scene.bin]`.
+- Desktop (Proton): `STEAM_COMPAT_DATA_PATH=<scratch> STEAM_COMPAT_CLIENT_INSTALL_PATH=~/.local/share/Steam
+  <proton-cachyos>/proton run ./remix-triangle.exe --render 'Z:\...\PortalRTX\bin\.trex\d3d9.dll' --hold`.
+- Scene mode: NieR's camera from `cb0`, a distant sun, window aspect with the game's vertical FOV, draws
+  wider than 5 km skipped (NieR sky shells block the sun).
+- Gates: `test_capture_to_mesh.py` (+ `_hidden`), `test_scene_from_frame.py` (+ `_hidden`).
+
+## Original triangle notes
 
 This is an isolated Windows x64 SDK probe, not a NieR mod. Its current reference scene follows
 NVIDIA's RemixAPI_C sample: a triangle using the default material, parameterized camera and sphere

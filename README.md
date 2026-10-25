@@ -2,17 +2,33 @@
 
 ## Scope and status
 
-Documentation refreshed 2026-10-19 from the recorded 2026-10-18 runtime state;
-this refresh did not re-test the game. [PROGRESS.md](PROGRESS.md) is the
-authoritative resume record, including installed-file hashes and rollback notes.
+Status refreshed 2026-10-25. [PROGRESS.md](PROGRESS.md) is the authoritative resume record (installed
+hashes, rollback chain, verified facts, next steps); its top "Checkpoint" section is the place to start.
 
-| Area | Recorded status |
+| Area | Status |
 | --- | --- |
-| FSR4.1.1 native AA | Working in-game at 3440x1440 with character motion; F8 toggle. |
+| FSR4.1.1 native AA | Working in-game at 3440x1440 (NIER_DLAA, now chained behind our proxy as `d3d11_dlaa.dll`). |
+| Resolution upscaling | **Working:** Custom75 renders 2580x1080 and FSR4 upscales to 3440x1440 (user-confirmed). |
+| Startup settings | `NIER_RENDER.ini` selects Native / Custom75 for the next launch; honest startup status. |
+| In-game menu | **Installed, live-tested:** Insert panel, save-for-next-launch, mouse/camera blocked while open. |
+| RTX Remix | F9 whole-frame capture in the game; real NieR scenes path-traced offline in Remix (laptop + desktop Proton). Not live in the game. |
 | Visual stack | LodMod + WAX texture injection; 289 textures active. Special K quarantined. |
-| Resolution upscaling | Research found a closed-proxy copy-back blocker; native post handoff unresolved. |
-| DLSS 5 NR | Blocked on a legitimately obtained `nvngx_dlssnr.dll`. |
-| Frame generation | afmf-linux v1.3.1 installed; not tested in-game. |
+| DLSS 5 NR | Parked: blocked on a legitimately obtained `nvngx_dlssnr.dll`. |
+| Frame generation / FPS uncap | Not pursued; native 60 FPS cap kept (research in `analysis/FAR_*.md`). |
+
+### Documentation by stage
+
+1. Native AA and visual stack: `analysis/NATIVE_AA_INSTALL.md`, `analysis/VISUAL_STACK.md`, `analysis/FSR4_RESULTS.md`.
+2. Upscaling research: `analysis/UPSCALING_RESEARCH.md`, `GAME_RENDER_SCALE.md`, `VIEWPORT_RESULTS.md`,
+   `DEPTH_SCALE_RESULTS.md`, `MOTION_VECTOR_RESULTS.md`, `ROUTING_RESULTS.md`, `FRAMEDUMP_RESULTS.md`.
+3. Upscaling patch and deployment: `analysis/SCALE_SETTER.md`, `PART3_REDIRECT.md`, `UPSCALING_PATCH.md`,
+   `analysis/deploy/README.md`.
+4. Startup settings and saving: `analysis/STARTUP_SETTINGS.md`, `SETTINGS_WRITE_PLAN.md`.
+5. Menu design and preview: `analysis/menu-design/README.md`, `analysis/menu-preview/README.md`.
+6. In-game menu, mouse fix, F9 capture (with install history): `analysis/IN_GAME_MENU.md`.
+7. RTX Remix (feasibility -> first mesh -> scenes, verified transforms): `analysis/REMIX_FEASIBILITY.md`,
+   `analysis/remix-probe/README.md`.
+8. Frame-rate research (parked): `analysis/FAR_RESEARCH.md`, `FAR_UNCAP_FOLLOWUP.md`.
 
 Use **GE-Proton11-7-x86_64**, in-game Anti-Aliasing **Off**, Motion Blur **On**:
 
@@ -20,8 +36,8 @@ Use **GE-Proton11-7-x86_64**, in-game Anti-Aliasing **Off**, Motion Blur **On**:
 WINEDLLOVERRIDES="d3d11=n,b;dinput8=n,b;dxgi=n,b" mangohud gamemoderun %command%
 ```
 
-`d3d11.dll` supplies FSR4 native AA, `dinput8.dll` supplies LodMod, and `dxgi.dll`
-supplies WAX. The game uses the Windows 10 executable. WAX gameplay patches,
+`d3d11.dll` is our proxy (upscaling, menu, capture) and chains to `d3d11_dlaa.dll` (FSR4 AA);
+`dinput8.dll` supplies LodMod, and `dxgi.dll` supplies WAX. The game uses the Windows 10 executable. WAX gameplay patches,
 including inventory auto-purge and FPS uncap, remain disabled. The native
 **60 FPS cap stays in place**: upscaling is for GPU headroom, not an FPS unlock.
 
