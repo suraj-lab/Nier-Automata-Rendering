@@ -1,0 +1,6 @@
+{
+  "source": "https://raw.githubusercontent.com/NVIDIAGameWorks/dxvk-remix/bbd74a1287c2fa887f4a2b0e46a1530177890b64/public/include/remix/remix_c.h",
+  "commit": "bbd74a1287c2fa887f4a2b0e46a1530177890b64",
+  "sha256": "829119429af9f922e94df53b31e3106324ce0926c01b77dc650410d24cfcada0",
+  "license": "MIT notice retained verbatim in remix_c.h"
+}
