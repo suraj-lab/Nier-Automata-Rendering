@@ -24,8 +24,18 @@ Details: `analysis/remix-probe/` and `analysis/runtime/remix-probe/shutdown-debu
 only — confirms 2580×1080 Custom75 scale, but no vertex/index bytes. Geometry extraction needs a new
 buffer-capture hook (next build). `NIER_DLAA.ini [Debug]` was flipped on/off safely and restored.
 
-**Next:** build the single-object geometry-capture hook (offline/mock-first), then one short live
-capture to pull a static object into the standalone Remix harness.
+**Geometry-capture hook — offline foundation DONE (uncommitted):**
+- `geometry_capture.h`: raw VB/IB readback (CopyResource→staging→Map), byte-exact under Wine.
+- `input_layout_hook.h`: hooks `ID3D11Device::CreateInputLayout` (vtable slot 11) to recover the
+  vertex format (POSITION/NORMAL/TEXCOORD with formats+offsets) — D3D11 can't expose this otherwise.
+- `draw_capture.h`: hooks `DrawIndexed` (slot 12) + `DrawIndexedInstanced` (slot 19) on the immediate
+  context; on trigger captures draw args + geometry + format + VS constant buffers (raw transform bytes).
+- `test_geometry_capture.py`: Wine mock draws a known mesh; all bytes/args/format verified. Caveat:
+  Wine SIGKILLs the mock at device teardown AFTER capture (documented; output verified, exit not trusted).
+
+**Next (Remix object milestone):** map world/view/proj CB slot+offset per shader; build a keybind-
+triggered live capture probe; convert captured vertices → Remix `HardcodedVertex` and render in the
+standalone harness. Also re-test the in-game menu cursor fix (`f1a43946…`).
 
 ---
 
