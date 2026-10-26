@@ -1,8 +1,197 @@
 # NieR:Automata Rendering — Progress & Resume
 
-Last updated: 2026-10-25 (late). **Checkpoint below is the place to resume.** Upscaling (Custom75,
-FSR4 2580x1080 -> 3440x1440) and the in-game menu are working and installed; the RTX Remix track has
-gone from a standalone triangle to path-traced captures of real NieR scenes.
+Last updated: 2026-10-26/27. **Start at the checkpoint below.** Two things changed this session: Remix now renders
+NieR geometry *with the game's own textures*, and "live Remix in NieR" went from "judged not viable" to "architecture
+proven to exist, three unknowns left".
+
+## Checkpoint — 2026-10-26/27 (start here)
+
+**Installed in the game.** `d3d11.dll` = `b32f6f5f76e0d773…` (menu + FSR4 + capture + shader identity + PS constant
+buffers); `d3d11_dlaa.dll` = `3d628eb5…` untouched; `NIER_RENDER.ini` = `Preset=Custom75`; 60 FPS cap unchanged.
+Rollback: `backups/ingame-menu-shaderid-20261026T225431Z/` with `receipt.json`, plus the older `ingame-menu-*` chain.
+
+**Gates: 22 green** — 17 in `analysis/checks/`, 5 in `analysis/remix-probe/`. Nothing is committed since 2026-10-25:
+12 files modified, 6 new.
+
+### What works
+
+- **F9 -> Remix stills, textured.** `scene_from_frame.py` emits NSCN **v3**: per-draw albedo id, a texture table, the
+  used `tex_<id>.dds` copied into `<out>_textures/`, and an 8x8 mip-chained `scene_sky.dds` for the dome light.
+  Real capture: 1057 draws, 2.74M triangles, 190 textures. The camp renders with 2B, her dress and sword, vegetation
+  from the WAX pack, shelves and crates. Image: `analysis/runtime/remix-probe/stills/`.
+- **Materials.** `blendType_value`: **0 = fully transparent, 1 = blend by albedo texture alpha, 2 = opaque.** That one
+  integer was the cause of every "black scene". Everything is currently forced to 2.
+- **Capture records shader identity.** `vs_hash`/`ps_hash` (pointer identity, stable within a capture) and `ps_cbs`
+  (pixel-shader constant buffers, written as `ps_cb_<slot>.bin`). Asserted by `test_menu_overlay.py`.
+- **`dds_stack.py`** averages N post-tonemap frames (`test_dds_stack.py`, 3 checks).
+- **`run_remote.py`** auto-unloads laptop models before rendering and takes `--sun --sun-angle --sky --albedo --mat
+  --blend --flip-normals --skip-max --sky-tex --watchdog --env --no-unload`.
+
+### Negative results, settled (do not re-run these)
+
+- **NRD never engages for an API-only client.** Five configurations, noise 0.084 in all: `useDenoiser` on/off
+  (1 float16 ULP apart), reference mode + `resetOnCameraTransformChange=False` + `numberOfFramesToAccumulate=1024`,
+  `uniqueObjectDistance=1000000` (the option does exist — verified), frames 150 vs 1200. Source rules out the two
+  structural explanations: `rtxImagePostTonemapping` *is* the final post-composite image, and the API path shares the
+  D3D9 camera bookkeeping. Only option-layer precedence is left, and it needs a debug build.
+- **The noise is deterministic**, so accumulation and frame averaging cannot fix it (two frames average to 0.978x
+  where independent samples would give 0.707x). A box filter outside Remix gives 0.53x and is the only working lever.
+
+### Live Remix in NieR — status changed, three unknowns left
+
+1. **The interop API is present.** The export table has no `dxvk_*` names, but these are `remixapi_Interface` members.
+   The probe now prints, on every scene run: `Interop: startup=1 createD3D9=1 registerD3D9=1 getSwapchain=1
+   getVkImage=1 copyOutput=1 setDefaultOutput=1`.
+2. **NVIDIA ships a non-D3D9 host.** RTX Remix for Minecraft (Fabric mod, Remix 1.6, 2026-10-23) drives Remix from a
+   Java/OpenGL process via the C API, and solves presentation + UI with `StartupInfo.interopImage` +
+   `dxvk_GetInteropInfo` + a Present handshake. Undocumented, absent from public source (runtime 0.16.0 vs public
+   0.6.6). NVIDIA closed the *D3D11* request as NOT_PLANNED and no public D3D11 bridge exists.
+3. **Design sketch, untested at every step:** inside NieR's process -> `dxvk_CreateD3D9` -> submit the captured scene
+   per frame -> `dxvk_CopyRenderingOutput(surface, FINAL_COLOR)` into a surface we own -> bring that image into DXVK's
+   D3D11 device (shared handle, or `dxvk_GetVkImage` + cross-device import) -> replay NieR's UI draws on top ->
+   present through the game's own swapchain.
+
+**Unknowns in risk order:** (a) can two Vulkan devices in one Proton process share an image at all; (b) native
+framerate — **no valid number exists yet** (the 0.52 fps measurement came from the ARM laptop running x64 under
+emulation and proves nothing about native); (c) UI replay cost.
+
+### Next steps, in order
+
+1. **Native framerate.** One clean desktop run at `HEIGHT=180` with a teardown that actually kills the wine process
+   (`setsid` + `kill -- -$pid` then verify with `pgrep -x remix-scene.exe`). This single number decides whether live
+   is worth building.
+2. **Interop probe** (delegate to a cloud agent with a gate): create a D3D11 device, init Remix, `dxvk_CreateD3D9`,
+   `CopyRenderingOutput` into a host-owned surface, read the pixels back. Either it produces pixels or it tells us
+   where the boundary is.
+3. **Stills polish, all cheap and option-verified** (see `RtxOptions.md`, 1041 lines, dumped from the running binary):
+   `rtx.enableCullingInSecondaryRays = True` for the streaks; legacy DDS with RGB masks for the dome/sky; cutouts by
+   scanning each `ps_hash` for `discard` then setting `alphaTestType`; exposure via `rtx.autoExposure.evMinValue/
+   evMaxValue` (-2..5 default).
+4. Skip: denoising inside Remix. Post-filter only.
+
+### How to resume
+
+```
+# gates
+for t in analysis/checks/test_*.py; do python3 "$t" >/dev/null || echo "FAIL $t"; done
+cd analysis/remix-probe && python3 test_scene_from_frame.py scene_from_frame.py
+
+# still from a fresh F9 capture
+python3 analysis/remix-probe/scene_from_frame.py <F9 frame dir> /tmp/out/scene.bin
+python3 analysis/remix-probe/run_remote.py still-1 --scene /tmp/out/scene.bin   --conf analysis/remix-probe/rtx.no-ngx.conf --hold --shot-frame 600   --sun 2 --sun-angle 20 --sky 0.5 --watchdog 45000 --env REPROBE_HEIGHT=360
+
+# authoritative option list for the exact binary in use
+  ... --env DXVK_DOCUMENTATION_WRITE_RTX_OPTIONS_MD=1     # writes RtxOptions.md into the run folder
+```
+
+**Method (see the section below): check the reference implementation first** — `PortalRTX/dxvk.conf`,
+`bridge.defaults.conf`, `strings` on `.trex/d3d9.dll`, and prior art — before source reading or GPU runs. That single
+change of order is what produced the interop finding after a session of negative conclusions.
+
+## Checkpoint — 2026-10-26 (textured stills in Remix)
+
+**v3 converter + materials landed.** `scene_from_frame.py` now emits NSCN v3: per-draw albedo id plus a
+texture table, and copies the used `tex_<id>.dds` into `<out>_textures/`. Albedo = largest-area sRGB
+(`*_UNORM_SRGB`) pixel-shader texture, lowest slot on a tie. Gates: `test_scene_from_frame.py` (11 checks,
+incl. a hand-computed skinned vertex, stale-texture replacement, uint32 id bound, unusable output path) and
+12/12 hidden, plus `SCENE_TEXTURED_FRAME=<capture>` for a real capture (1057 draws, 190 textures).
+Independent reviewer found 14 issues, 9 valid and fixed; ledger updated.
+
+**Remix now renders NieR geometry with materials and textures** (laptop, `remix-scene.exe`, 1028x540):
+`analysis/runtime/remix-probe/stills/nier-camp-textured-v3-*.png`. 2B, her dress and sword, vegetation from
+the WAX pack, shelves and crates, all path-traced from one F9 capture.
+
+Facts established the hard way (each cost a GPU run — check these before re-diagnosing):
+- **`blendType_value`: 0 = fully transparent, 1 = blend by albedo texture alpha, 2 = opaque.** A material with
+  any other blend value renders invisible; this, not lighting, was behind every "black scene" run.
+- Textures load: the runtime logs each `scene_textures/tex_<id>.dds` as a replacement texture (only a
+  missing-mipmap warning). The DDS files are fine; do not re-test the loader.
+- Sampling our own albedo at our own UVs gives mean rgb (0.44, 0.40, 0.36) over 40 draws — UVs and texture
+  selection are correct.
+- Scene normals are unit length and 48.5% face the sun; flipping them changes nothing.
+- `nullptr` material renders bright and continuous (Remix's unlit default): it is *not* a lighting reference.
+- Remix irradiance ≈ π·radiance, nearly independent of `angularDiameterDegrees`; use radiance ~1-100. A
+  narrow disc trips the firefly filters (threshold 1000), so the sun is given a 20° diameter.
+- `remixapi_LightInfoDomeEXT` with a null `colorTexture` produces **no light at all** (the texture index stays
+  invalid and the radiance is never uploaded) — our "ambient dome" was void. Needs a 1x1 white DDS.
+
+**Capture now records shader identity (2026-10-26 late, gated).** `draw_capture.h` gained `vs_hash`/`ps_hash`
+(pointer identity — stable within a process, so one capture can group draws by shader family) and `ps_cbs`
+(pixel-shader constant buffers, written as `ps_cb_<slot>.bin` so a slot shared with a VS buffer cannot
+overwrite it). `test_menu_overlay.py` asserts the keys, that the two hashes differ, and that both files are
+written; the mock game binds one PS constant buffer. All 17 gates pass; the DLL is rebuilt at
+`analysis/runtime/menu-dll/d3d11.dll` (`d3d11_log_proxy` exports verified, no forbidden imports) and is **not
+deployed**. Next: deploy it, take one F9 capture, and use `ps_hash` to identify the albedo slot per shader
+family instead of guessing from texture formats — that is what fixes 2B's black dress.
+
+**NRD does not denoise this client, measured three ways (2026-10-26).** Source reading says NRD should engage
+(its only gates are `useDenoiser && !useDenoiserReferenceMode && !useRayReconstruction`, all satisfied, and the
+missing log line is debug-level only). Empirically it does nothing: `rtx.useDenoiser=True` vs `False` differ by
+one float16 ULP (max abs diff 0.000488) with identical noise 0.0841; `rtx.uniqueObjectDistance=1000000` (the
+suggested fix if the camera reads as cut every frame) changes nothing either. So the guide resources are
+presumably never allocated for an API-only client, or the result never reaches the composite. Conclusion for the
+stills path: **denoising must happen outside Remix.** A box filter measured on a real frame gives 0.62x noise at
+3x3 and 0.53x at 5x5 with block-level detail unchanged, so a tuned spatial filter is the practical deliverable.
+Side note: a 1028x540 render of this scene consumes most of the laptop's unified memory; use
+`REPROBE_HEIGHT=360` for diagnostic runs.
+
+**Measured: no accumulation and no independent samples (2026-10-26 latest).** Two runs of the identical scene
+differing only in the capture frame (150 vs 1200) give the same noise, 0.0843 vs 0.0841 within-block — so a static
+camera does not converge no matter how long it runs, and `rtx.accumulation.resetOnCameraTransformChange=False` with
+`numberOfFramesToAccumulate=64` changes nothing. The two frames are not byte-identical (pixel correlation 0.9807),
+but averaging them only moves the noise to 0.0824 (factor 0.978 where independent samples would give 0.707). So
+`dds_stack.py` is correct and useful, but it cannot denoise on its own: the frame-to-frame difference is largely the
+same deterministic noise. Real options now: make NRD actually engage, or apply a spatial filter outside Remix.
+
+**Frame averaging is in, for when the denoiser cannot run (2026-10-26 latest).** `analysis/remix-probe/dds_stack.py`
+averages N `rtxImagePostTonemapping` DDS frames into one PNG in linear space, gated by `test_dds_stack.py`
+(black+white -> mid-grey hand-computed, identical frames reproduce one frame, mismatched sizes / non-DDS /
+NaN payloads exit 2 without a traceback or a stray output file). Written by a cloud agent against the gate
+after both local nodes stalled for 12 minutes on the same brief; the gate did not change between candidates.
+**Open question before it helps:** two identical runs produced byte-identical captures, so averaging separate
+runs cannot reduce noise. Independent samples must come from different frames within one run (the screenshot
+frame is configurable) or from a changed seed — worth one run to settle.
+
+**Sky and denoising: both blocked, with measurements (2026-10-26 late).**
+- *Sky via a dome light is blocked.* A dome light with a `colorTexture` crashes the runtime with
+  `0xC0000094` (integer divide by zero) inside `Present`, on frame 0, measured with a 1x1 DDS and with an
+  8x8 mip-chained DDS. `run_remote.py` now ships `scene_sky.dds`, and attaching it is opt-in
+  (`REPROBE_SKY_TEX=1`). The promising alternative is a *real* sky: include NieR's own sky-dome draws as
+  geometry via `REPROBE_SKIP_MAX` (they are 10-19 km shells skipped for blocking the sun at the default
+  5000).
+- *Denoising does not run.* `NRD.dll` ships with the runtime, the conf lines parse, and switching
+  `rtx.useDenoiserReferenceMode` to False changes nothing measurable: within-block noise 0.0843 before vs
+  0.0842 after. The log shows no NRD activity at all, consistent with NRD needing guides (motion vectors,
+  normals) that an API-only client does not provide. Options: accept the noise, post-filter outside Remix, or
+  enable DLSS/NGX (which hangs at shutdown on this host).
+- Laptop renders now unload LM Studio models first (`run_remote.py` does it automatically): a loaded 35B model
+  was holding 23.57 GB of the laptop's unified memory during earlier renders.
+
+**Albedo selection is still the weak point (2026-10-26 late).** `mostly_black()` now rejects near-empty
+atlases (>90% black blocks, read from the colour endpoints: BC1 bytes 0-3, BC2/BC3 bytes 8-11 — the reviewer
+caught that my first version read the alpha block for BC2/BC3 and so mis-judged 28 of 190 textures).
+A 50% threshold would reject the dress mask, but it also rejects a legitimate green banner (0.536 vs 0.660),
+so the guard stays conservative; the real fix is shader identity, not texture statistics. For 2B's draws the
+captured candidates contain no diffuse at all (a white 32x32 dummy, an environment photo, and blue-ish normal
+maps), so her dress renders black from a detail atlas. `analysis/remix-probe/DIAGNOSIS_LOG.md` records the
+wrong turns from this session, with the cheap check that would have avoided each.
+
+**Next (in order):**
+1. Denoising: `rtx.useDenoiser` / `rtx.useDenoiserReferenceMode` had no visible effect at frame 1200; verify the
+   effective value (Remix option layers) and get a clean still. Noise is the biggest quality gap now.
+2. Sky/ambient: 1x1 white DDS for the dome light, then `rtx.volumetrics.enableAtmosphere` for a physical sky.
+   The 7 skipped sky-sized draws are still skipped.
+3. Alpha: real cutout draws (foliage, hair) should use blend 1 + alpha test rather than blend 2.
+4. Overdraw streaks visible in the still (thin geometry + no sky) — likely fixed by 2.
+5. Only then: the Goal 2 decision (Remix live inside NieR), unchanged: the wall is presentation and the game's
+   HUD, not geometry.
+
+**Runner note:** `run_desktop.sh` exists for Proton runs but the desktop render competes with the compositor on
+the same card (`MESA_VK_DEVICE_SELECT` pins Vulkan to the 9070 XT, which drives both monitors); prefer the
+laptop for stills. `run_remote.py` gained `--sun --sun-angle --sky --albedo --mat --blend --flip-normals
+--watchdog`, and the probe prints its effective modes.
+
+---
 
 ## Checkpoint — 2026-10-25 late (start here)
 
@@ -610,6 +799,76 @@ W/H and jitter, motion grids).
   Dotfiles copy not yet mirrored.
 - SteamStub-unpacked exe exists only as an analysis copy:
   `analysis/input/NieRAutomata_win10.unpacked.exe` (never run, never shared).
+
+## Live Remix in NieR: architecture exists (2026-10-26 late) — status changed
+
+Two facts overturned the earlier "not viable" judgement:
+
+1. **The interop API is present in the runtime we use.** The export table contains no `dxvk_*` names, but those are
+   `remixapi_Interface` members, not exports. Probing the struct directly after `remixapi_InitializeLibrary` gives:
+   `startup=1 createD3D9=1 registerD3D9=1 getSwapchain=1 getVkImage=1 copyOutput=1 setDefaultOutput=1`. The probe
+   prints this line on every scene run now.
+2. **NVIDIA ships a non-D3D9 host.** RTX Remix for Minecraft (Fabric mod, shipped with Remix 1.6, 2026-10-23) runs
+   Remix from a Java/OpenGL process purely through the C API. Presentation and UI are solved with
+   `StartupInfo.interopImage` + `dxvk_GetInteropInfo` + a Present handshake: the host draws its own UI into a shared
+   image and Remix composites and presents it. That extension is undocumented and absent from public source (shipped
+   runtime is API 0.16.0, public header 0.6.6). NVIDIA has closed the *D3D11* request as NOT_PLANNED, and no public
+   D3D11 bridge exists — but the architecture for a non-D3D9 host is proven, in their own product.
+
+**Sketch of a live path** (not yet tested at any step): inside NieR's process, `dxvk_CreateD3D9` to obtain Remix's own
+D3D9 device -> submit the captured scene through the API -> `dxvk_CopyRenderingOutput(surface, FINAL_COLOR)` into a
+host-owned surface -> bring that image into DXVK's D3D11 device (shared surface handle, or `dxvk_GetVkImage` +
+cross-device import) -> replay NieR's UI draws on top -> present through the game's own swapchain.
+
+**Unknowns, in order of risk:** (a) two Vulkan devices in one process under Proton sharing an image at all;
+(b) framerate once it runs — no native measurement exists yet, the 0.52 fps figure came from the ARM laptop and is
+not evidence; (c) UI replay cost and correctness.
+
+## Denoise: parked, with the evidence (2026-10-26 late)
+
+Every configuration path has now been tried and all of them leave the image at noise ≈0.084 within-block:
+
+| attempt | result |
+|---|---|
+| `useDenoiser=True` vs `False` | differ by 1 float16 ULP |
+| `useDenoiserReferenceMode=True` + `resetOnCameraTransformChange=False` + `numberOfFramesToAccumulate=1024` | 0.0839, unchanged |
+| `uniqueObjectDistance=1000000` (camera-cut hypothesis) | bit-identical; the option **does** exist in this build, so the test was valid |
+| frame 150 vs 1200 | 0.0843 vs 0.0841 — no temporal convergence |
+| averaging two frames | 0.0824 (0.978x; independent samples would give 0.707) |
+
+Source reading rules out the two structural explanations: `rtxImagePostTonemapping` **is** the final post-composite
+image (so we are not reading a pre-denoise buffer), and the API path uses the same `RtCamera` bookkeeping as D3D9, so
+a static camera cannot trip `isCameraCut()`. What remains is option-layer precedence — a higher-priority layer may
+win over `rtx.conf` — which cannot be settled without a debug build or a capture path that works.
+
+**Crashes are probably memory, not code (user observation, 2026-10-26).** Every crash in this round happened on a
+long `--hold` at full size, and the renderer at 1028x540 with 2.7M triangles plus 450 MB of textures consumes most of
+the laptop's unified memory. Treat the two below as *unverified* — they are not established feature bugs:
+- **Dome light with `colorTexture`**: `0xC0000094` inside `Present` on frame 0. Source's only divisor on that path is
+  the DDS parser's `(extent + blockExtent - 1) / blockExtent`, zero when the pixel format does not map — so a
+  *legacy* DDS with explicit RGB masks is still the thing to try, but only on a small, short run.
+- **`rtx.captureDebugImage = True`**: `0xC0000005` after "Test screenshot capture triggered".
+
+**Rule from this: size every run to fit.** `REPROBE_HEIGHT=360`, short watchdogs, models unloaded, and re-check the
+feature in a small run before concluding it is broken.
+
+Practical conclusion for stills: **denoise outside Remix** (a box filter measured 0.53x at 5x5), or accept the noise.
+Recorded so nobody re-runs these.
+
+## Method: check the reference implementation first
+
+Learned the expensive way on 2026-10-26 after ~15 GPU runs and five research agents: **Portal RTX is installed on
+this machine and is a working Remix game.** Before theorising, guessing conf keys or running anything:
+
+1. `PortalRTX/dxvk.conf` and `rtx.conf` — the option names a shipping game actually uses, with working values.
+2. `PortalRTX/bin/.trex/bridge.defaults.conf` — 568 lines of shipped defaults.
+3. **`DXVK_DOCUMENTATION_WRITE_RTX_OPTIONS_MD=1`** as an env var when launching the runtime: it writes
+   `RtxOptions.md` (1041 lines here) listing every option with type, default, min/max and description **for the
+   exact binary in use**. This is authoritative and it ends all "does this key exist" guessing — unknown keys are
+   never warned about at any log level, so a conf line being echoed means nothing.
+4. `strings` on `PortalRTX/bin/.trex/d3d9.dll` for env vars and internal stage names. This is how the
+   `rtxImagePostComposite`, `rtxImageDxvkView` and `RTX_TAKE_PRE_PRESENT_SCREENSHOT_FRAME` names were found —
+   names that no amount of reasoning had produced.
 
 ## Tooling for resume
 

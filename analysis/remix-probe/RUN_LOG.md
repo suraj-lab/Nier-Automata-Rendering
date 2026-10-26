@@ -1,0 +1,59 @@
+# Remix probe run log
+
+`run-facts.csv` lists 46 runs.
+
+## Runs
+
+| label | timed_out | seconds | captures | exe_sha256 | first stdout line |
+|---|---|---|---|---|---|
+| 2b-body-20261025T215648Z | true | 91.5 | 1 | cd0a2c88 | `main thread 30136` |
+| 2b-head-20261025T212955Z | true | 92.2 | 0 | 8b6a1200 | `main thread 10008` |
+| 2b-head-final-20261025T214755Z | true | 91.6 | 1 | 17e5bfff | `main thread 19588` |
+| 2b-head-flat-20261025T213457Z | true | 91.4 | 0 | 00bff6fc | `main thread 11248` |
+| 2b-head-tri1-20261025T213735Z | true | 91.3 | 1 | 28700606 | `main thread 28104` |
+| run-20261025T150514049Z | true | 90.4 | 0 | n/a | `n/a` |
+| run-20261025T150514049Z | false | 0.0 | 0 | n/a | `n/a` |
+| bisect-393-20261025T213931Z | true | 91.3 | 1 | 2074821e | `main thread 24524` |
+| bisect-591-20261025T214116Z | true | 91.5 | 1 | c2aa2df4 | `main thread 32632` |
+| bisect-690-20261025T214302Z | true | 91.4 | 1 | 1e65623e | `main thread 15188` |
+| bisect-786-20261025T214449Z | true | 91.0 | 1 | 69c2a5dc | `main thread 5224` |
+| blend-bisect-20261026T223205Z | true | 26.4 | 1 | 9b62a7e1 | `main thread 32212` |
+| capture-20261025T151744Z | true | 90.8 | 1 | n/a | `[94440140] begin InitializeLibrary` |
+| control-triangle-20261025T213303Z | true | 91.3 | 1 | 99eabd78 | `main thread 22608` |
+| diagnostic-20261025T151136Z | true | 91.2 | 0 | n/a | `[94072781] begin InitializeLibrary` |
+| fallback2-tex-20261026T222632Z | true | 30.6 | 1 | a67bb1b8 | `main thread 24524` |
+| flip-normals-20261026T222759Z | true | 31.1 | 1 | 9c14b18e | `main thread 35336` |
+| full-tex-v3-20261026T221100Z | true | 91.2 | 1 | 2e8ceac0 | `main thread 25564` |
+| lit-v1-20261026T221354Z | true | 61.1 | 1 | 26f6b5ac | `main thread 33540` |
+| lit-v2-20261026T221548Z | true | 45.6 | 1 | 26f6b5ac | `main thread 14200` |
+| lit-v3-20261026T221759Z | true | 30.4 | 1 | 26f6b5ac | `main thread 28932` |
+| lit-v4-20261026T221919Z | true | 30.7 | 1 | 26f6b5ac | `main thread 34432` |
+| lit-v5-opaque-20261026T222048Z | true | 31.3 | 1 | df4b857a | `main thread 28824` |
+| lit-v6-notex-20261026T222202Z | true | 30.4 | 1 | df4b857a | `main thread 26116` |
+| lit-v7-sun3-20261026T222340Z | true | 31.1 | 1 | a2af9fac | `main thread 27572` |
+| main-stack-20261025T160523Z | true | 90.8 | 1 | d859f744 | `main thread 25492` |
+| mat-none-20261026T222518Z | true | 31.0 | 1 | a67bb1b8 | `main thread 31048` |
+| mat-triangle-20261026T223055Z | true | 25.9 | 1 | 69855565 | `main thread 10832` |
+| modes-check-20261026T222922Z | true | 20.9 | 1 | d5640adc | `main thread 27344` |
+| no-ngx-20261025T161508Z | true | 90.4 | 1 | d859f744 | `main thread 21084` |
+| nvidia-sample-20261025T155103Z | true | 90.8 | 0 | ee4d5b20 | `n/a` |
+| nvidia-sample-rerun-20261025T160041Z | true | 90.4 | 0 | ee4d5b20 | `n/a` |
+| one-draw-tex-20261026T220902Z | true | 91.1 | 1 | 2e8ceac0 | `main thread 33008` |
+| reference-20261025T152812Z | true | 90.9 | 1 | n/a | `[95068562] begin InitializeLibrary` |
+| sample-control-20261025T164041Z | true | 90.3 | 1 | ee4d5b20 | `n/a` |
+| sampler-20261025T160334Z | true | 90.8 | 1 | a1e7252f | `main thread 29588` |
+| scene-full-20261025T223115Z | true | 90.8 | 1 | 1a175d7c | `main thread 516` |
+| scene-full-nosky-20261025T223359Z | true | 91.7 | 1 | 437f1144 | `main thread 20364` |
+| scene-hold-20261025T222059Z | true | 90.6 | 1 | 326bc36b | `main thread 8272` |
+| scene-oracle-20261025T221530Z | true | 91.5 | 0 | 326bc36b | `main thread 28244` |
+| scene-oracle2-20261025T221743Z | true | 90.6 | 0 | 326bc36b | `main thread 29540` |
+| scene-v2-20261025T225509Z | true | 91.6 | 1 | e969d2ee | `main thread 28196` |
+| still-v1-20261026T223556Z | true | 76.3 | 2 | 05f48865 | `main thread 12528` |
+| textured-blend1-20261026T223323Z | true | 31.3 | 1 | 8f1604a3 | `main thread 12556` |
+| textured-blend2-20261026T223438Z | true | 30.5 | 1 | 8f1604a3 | `main thread 28932` |
+| window-close-20261025T154814Z | true | 91.0 | 1 | e3361ad3 | `[96271203] begin InitializeLibrary` |
+
+## Notes
+
+- 45 of the 46 runs report `timed_out = true`.
+- `captures` counts Remix's own post-tonemapping DDS files.

@@ -21,7 +21,19 @@ Findings and screenshots: `../REMIX_FEASIBILITY.md`. The original triangle notes
   <proton-cachyos>/proton run ./remix-triangle.exe --render 'Z:\...\PortalRTX\bin\.trex\d3d9.dll' --hold`.
 - Scene mode: NieR's camera from `cb0`, a distant sun, window aspect with the game's vertical FOV, draws
   wider than 5 km skipped (NieR sky shells block the sun).
-- Gates: `test_capture_to_mesh.py` (+ `_hidden`), `test_scene_from_frame.py` (+ `_hidden`).
+- Gates: `test_capture_to_mesh.py` (+ `_hidden`), `test_scene_from_frame.py` (+ `_hidden`), `test_dds_stack.py`.
+- Stills tooling: `scene_from_frame.py` emits NSCN v3 (per-draw albedo, texture table, copied `scene_textures/`, and
+  an 8x8 mip-chained `scene_sky.dds`); `dds_stack.py` averages N post-tonemap DDS frames into a PNG.
+- `run_remote.py` takes `--sun --sun-angle --sky --albedo --mat --blend --flip-normals --skip-max --sky-tex
+  --watchdog --env --no-unload`, and **unloads laptop LM Studio models before every render** (a loaded 35B model
+  holds ~24 GB of unified memory and competes with the renderer).
+- **Memory rule:** size every run to fit — `--env REPROBE_HEIGHT=360`, short watchdog. Full-size long holds exhaust
+  the host's memory, and crashes after that point say nothing about the feature being tested.
+- **Authoritative option list for the binary in use:** `--env DXVK_DOCUMENTATION_WRITE_RTX_OPTIONS_MD=1` writes
+  `RtxOptions.md` into the run folder (1041 lines here). Unknown `rtx.conf` keys are never warned about at any log
+  level, so a key being echoed in the log does not mean it exists.
+- Background: `DIAGNOSIS_LOG.md` (wrong hypotheses and what settled each), `RUN_LOG.md` (46 runs),
+  `TEXTURE_INVENTORY.md` (the 190 albedos).
 
 ## Original triangle notes
 

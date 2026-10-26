@@ -2,7 +2,7 @@
 
 ## Scope and status
 
-Status refreshed 2026-10-25. [PROGRESS.md](PROGRESS.md) is the authoritative resume record (installed
+Status refreshed 2026-10-26/27. [PROGRESS.md](PROGRESS.md) is the authoritative resume record (installed
 hashes, rollback chain, verified facts, next steps); its top "Checkpoint" section is the place to start.
 
 | Area | Status |
@@ -11,7 +11,8 @@ hashes, rollback chain, verified facts, next steps); its top "Checkpoint" sectio
 | Resolution upscaling | **Working:** Custom75 renders 2580x1080 and FSR4 upscales to 3440x1440 (user-confirmed). |
 | Startup settings | `NIER_RENDER.ini` selects Native / Custom75 for the next launch; honest startup status. |
 | In-game menu | **Installed, live-tested:** Insert panel, save-for-next-launch, mouse/camera blocked while open. |
-| RTX Remix | F9 whole-frame capture in the game; real NieR scenes path-traced offline in Remix (laptop + desktop Proton). Not live in the game. |
+| RTX Remix | **Textured** path-traced stills from one F9 capture (190 albedo textures, 2.74M triangles). Not live in the game. |
+| Remix live in NieR | **Feasibility reopened**: the runtime populates every interop entry point (`createD3D9`/`getSwapchain`/`getVkImage`/`copyOutput`) and NVIDIA ships a non-D3D9 host (Remix for Minecraft, `StartupInfo.interopImage`). Three unknowns left: cross-device image sharing under Proton, native framerate, UI replay. See the checkpoint in PROGRESS.md. |
 | Visual stack | LodMod + WAX texture injection; 289 textures active. Special K quarantined. |
 | DLSS 5 NR | Parked: blocked on a legitimately obtained `nvngx_dlssnr.dll`. |
 | Frame generation / FPS uncap | Not pursued; native 60 FPS cap kept (research in `analysis/FAR_*.md`). |
