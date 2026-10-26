@@ -2,6 +2,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cwchar>
 #include <stdexcept>
 #ifdef CAPTURED_MESH
@@ -10,6 +11,7 @@
 #endif
 #ifdef SCENE_FILE
 #include <cstring>
+#include <string>
 #include <vector>
 #endif
 
@@ -55,19 +57,51 @@ Fit fit_captured() {
 #ifdef SCENE_FILE
 // scene.bin from scene_from_frame.py: NieR's camera + world-space triangles (layout: parse() in
 // test_scene_from_frame.py). Validated fully before any of it reaches Remix.
-struct SceneDraw { std::uint32_t source, first, count, skinned; };
-constexpr std::size_t kTriFloats = 24;  // v2: 3 vertices x (position[3], normal[3], uv[2])
-struct Scene { float camera[14]; std::vector<SceneDraw> draws; std::vector<float> tris; };
+struct SceneDraw { std::uint32_t source, first, count, skinned, tex; };
+constexpr std::size_t kTriFloats = 24;  // 3 vertices x (position[3], normal[3], uv[2])
+constexpr std::size_t kNameBytes = 32;  // fixed albedo file-name field
+constexpr std::size_t kHeaderBytes = 20 + 56;  // NSCN + version/draws/tris/textures, then 14 camera floats
+struct SceneTexture { std::uint32_t id; std::string name; };
+struct Scene { float camera[14]; std::vector<SceneDraw> draws; std::vector<float> tris; std::vector<SceneTexture> textures; };
+// The converter writes a bare file name, never a path: reject anything that could escape scene_textures\\.
+bool valid_texture_name(const unsigned char* p, std::size_t n) {
+    if (!n) return false;
+    for (std::size_t i = 0; i < n; ++i) {
+        const unsigned char c = p[i];
+        if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '.' || c == '_' || c == '-'))
+            return false;
+    }
+    return true;
+}
 bool parse_scene(const std::vector<unsigned char>& b, Scene& s) {
-    if (b.size() < 72 || std::memcmp(b.data(), "NSCN", 4)) return false;
-    std::uint32_t h[3]; std::memcpy(h, b.data() + 4, 12);
-    if (h[0] != 2 || b.size() != 72ull + 16ull * h[1] + 4ull * kTriFloats * h[2]) return false;
-    std::memcpy(s.camera, b.data() + 16, 56);
+    if (b.size() < kHeaderBytes || std::memcmp(b.data(), "NSCN", 4)) return false;
+    std::uint32_t h[4]; std::memcpy(h, b.data() + 4, 16);
+    const std::uint64_t size = kHeaderBytes + 20ull * h[1] + 36ull * h[3] + 4ull * kTriFloats * h[2];
+    if (h[0] != 3 || b.size() != size) return false;
+    std::memcpy(s.camera, b.data() + 20, 56);
     s.draws.resize(h[1]);
-    if (h[1]) std::memcpy(s.draws.data(), b.data() + 72, 16ull * h[1]);
+    if (h[1]) std::memcpy(s.draws.data(), b.data() + kHeaderBytes, 20ull * h[1]);
+    std::size_t o = kHeaderBytes + 20ull * h[1];
+    s.textures.clear();
+    for (std::uint32_t i = 0; i < h[3]; ++i, o += 36) {
+        SceneTexture t;
+        std::memcpy(&t.id, b.data() + o, 4);
+        const unsigned char* name = b.data() + o + 4;
+        std::size_t n = 0;
+        while (n < kNameBytes && name[n]) ++n;
+        for (std::size_t k = n; k < kNameBytes; ++k) if (name[k]) return false;  // padding must be NUL
+        if (!valid_texture_name(name, n)) return false;
+        t.name.assign(reinterpret_cast<const char*>(name), n);
+        s.textures.push_back(t);
+    }
     s.tris.resize(kTriFloats * h[2]);
-    if (h[2]) std::memcpy(s.tris.data(), b.data() + 72 + 16ull * h[1], 4ull * kTriFloats * h[2]);
+    if (h[2]) std::memcpy(s.tris.data(), b.data() + o, 4ull * kTriFloats * h[2]);
     for (const auto& d : s.draws) if (d.first > h[2] || d.count > h[2] - d.first) return false;
+    for (const auto& d : s.draws) if (d.tex) {  // a draw may only reference a texture the table carries
+        bool found = false;
+        for (const auto& t : s.textures) found = found || t.id == d.tex;
+        if (!found) return false;
+    }
     for (float v : s.camera) if (!std::isfinite(v)) return false;
     for (float v : s.tris) if (!std::isfinite(v)) return false;
     return s.camera[12] > 0 && s.camera[12] < 180 && s.camera[13] > 0;
@@ -85,21 +119,30 @@ bool parse_scene(const std::vector<unsigned char>& b, Scene& s) {
 void selfcheck() {
 #ifdef SCENE_FILE
     {
-        std::vector<unsigned char> b(72 + 16 + 4 * kTriFloats);
+        std::vector<unsigned char> b(kHeaderBytes + 20 + 36 + 4 * kTriFloats);
         std::memcpy(b.data(), "NSCN", 4);
-        const std::uint32_t h[3] = {2, 1, 1}; std::memcpy(b.data() + 4, h, 12);
-        float cam[14] = {0,0,0, 0,0,1, 0,1,0, 1,0,0, 50, 2.4f}; std::memcpy(b.data() + 16, cam, 56);
-        const std::uint32_t row[4] = {7, 0, 1, 0}; std::memcpy(b.data() + 72, row, 16);
+        const std::uint32_t h[4] = {3, 1, 1, 1}; std::memcpy(b.data() + 4, h, 16);
+        float cam[14] = {0,0,0, 0,0,1, 0,1,0, 1,0,0, 50, 2.4f}; std::memcpy(b.data() + 20, cam, 56);
+        const std::uint32_t row[5] = {7, 0, 1, 0, 41}; std::memcpy(b.data() + kHeaderBytes, row, 20);
+        const std::uint32_t tid = 41; std::memcpy(b.data() + kHeaderBytes + 20, &tid, 4);
+        const char name[] = "tex_41.dds"; std::memcpy(b.data() + kHeaderBytes + 24, name, sizeof name);
         const float tri[kTriFloats] = {0,0,1, 0,0,-1, 0,0,  1,0,1, 0,0,-1, 1,0,  0,1,1, 0,0,-1, 0,1};
-        std::memcpy(b.data() + 88, tri, sizeof tri);
+        std::memcpy(b.data() + kHeaderBytes + 20 + 36, tri, sizeof tri);
         Scene sc;
-        require(parse_scene(b, sc) && sc.draws.size() == 1 && sc.tris.size() == kTriFloats && sc.draws[0].source == 7, "scene parse");
-        auto v1 = b; const std::uint32_t one = 1; std::memcpy(v1.data() + 4, &one, 4);
-        require(!parse_scene(v1, sc), "v1 scene accepted");
+        require(parse_scene(b, sc) && sc.draws.size() == 1 && sc.tris.size() == kTriFloats && sc.draws[0].source == 7 &&
+                sc.textures.size() == 1 && sc.textures[0].name == "tex_41.dds" && sc.draws[0].tex == 41, "scene parse");
+        auto v2 = b; const std::uint32_t two = 2; std::memcpy(v2.data() + 4, &two, 4);
+        require(!parse_scene(v2, sc), "v2 scene accepted");
         auto bad = b; bad.pop_back(); require(!parse_scene(bad, sc), "truncated scene accepted");
-        bad = b; const std::uint32_t over[4] = {7, 1, 1, 0}; std::memcpy(bad.data() + 72, over, 16);
+        bad = b; const std::uint32_t over[5] = {7, 1, 1, 0, 0}; std::memcpy(bad.data() + kHeaderBytes, over, 20);
         require(!parse_scene(bad, sc), "draw range past triangles accepted");
-        bad = b; const float nan = std::nanf(""); std::memcpy(bad.data() + 88, &nan, 4);
+        bad = b; const std::uint32_t ghost[5] = {7, 0, 1, 0, 99}; std::memcpy(bad.data() + kHeaderBytes, ghost, 20);
+        require(!parse_scene(bad, sc), "draw referencing a missing texture accepted");
+        bad = b; const char escaped[] = "../x.dds"; std::memcpy(bad.data() + kHeaderBytes + 24, escaped, sizeof escaped);
+        require(!parse_scene(bad, sc), "texture name with a path accepted");
+        bad = b; bad[kHeaderBytes + 24 + 11] = 'Z';  // text after the NUL in the fixed field
+        require(!parse_scene(bad, sc), "non-NUL name padding accepted");
+        bad = b; const float nan = std::nanf(""); std::memcpy(bad.data() + kHeaderBytes + 56, &nan, 4);
         require(!parse_scene(bad, sc), "non-finite triangle accepted");
         bad = b; bad[0] = 'X'; require(!parse_scene(bad, sc), "bad magic accepted");
     }
@@ -240,7 +283,16 @@ int render(const wchar_t* dll, bool hold) {
 #ifdef SCENE_FILE
     Scene scene;  // loaded before the runtime so a bad file fails fast
     if (!parse_scene(read_file("scene.bin"), scene)) { std::fprintf(stderr,"scene.bin missing or invalid\n"); return 1; }
-    const int window_w=static_cast<int>(540*scene.camera[13]+0.5f), window_h=540;  // game aspect
+    // Height is overridable so a diagnostic run does not have to path-trace a full-size window on the card
+    // that also drives the desktop.
+    const int window_h=getenv("REPROBE_HEIGHT") ? std::atoi(getenv("REPROBE_HEIGHT")) : 540;
+    const int window_w=static_cast<int>(window_h*scene.camera[13]+0.5f);  // game aspect
+    // Overridable: the right value depends on the runtime (Portal RTX vs Toolkit) and the tonemapper it ships.
+    const float sun_power=getenv("REPROBE_SUN") ? static_cast<float>(std::atof(getenv("REPROBE_SUN"))) : 2.f;
+    const float skip_max=getenv("REPROBE_SKIP_MAX") ? static_cast<float>(std::atof(getenv("REPROBE_SKIP_MAX"))) : 5000.f;
+    const float sun_angle=getenv("REPROBE_SUN_ANGLE") ? static_cast<float>(std::atof(getenv("REPROBE_SUN_ANGLE"))) : 20.f;
+
+
 #else
     const int window_w=512, window_h=512;
 #endif
@@ -251,6 +303,12 @@ int render(const wchar_t* dll, bool hold) {
     remixapi_HMODULE module = nullptr;
     stage("InitializeLibrary");
     if (!check(remixapi_lib_loadRemixDllAndInitialize(dll,&api,&module), "InitializeLibrary")) return 1;
+    // Which interop entry points did this runtime actually populate? Zero dxvk_* names appear in the export
+    // table, but these are interface members, so only the struct tells us whether the path exists at all.
+    std::printf("Interop: startup=%d createD3D9=%d registerD3D9=%d getSwapchain=%d getVkImage=%d copyOutput=%d setDefaultOutput=%d\n",
+                api.Startup != nullptr, api.dxvk_CreateD3D9 != nullptr, api.dxvk_RegisterD3D9Device != nullptr,
+                api.dxvk_GetExternalSwapchain != nullptr, api.dxvk_GetVkImage != nullptr,
+                api.dxvk_CopyRenderingOutput != nullptr, api.dxvk_SetDefaultOutput != nullptr);
     struct Runtime {
         remixapi_Interface& api; remixapi_HMODULE module; HWND& window;
         ~Runtime() {
@@ -289,6 +347,7 @@ int render(const wchar_t* dll, bool hold) {
     remixapi_MaterialInfoOpaqueEXT opaque{};
     opaque.sType=REMIXAPI_STRUCT_TYPE_MATERIAL_INFO_OPAQUE_EXT;
     opaque.albedoConstant={0.9f,0.35f,0.08f}; opaque.opacityConstant=1; opaque.roughnessConstant=0.6f;
+#ifndef SCENE_FILE
     remixapi_MaterialInfo material{};
     material.sType=REMIXAPI_STRUCT_TYPE_MATERIAL_INFO; material.pNext=&opaque; material.hash=1;
     // A weak emissive component keeps the triangle identifiable even if light conventions need adjustment.
@@ -296,6 +355,74 @@ int render(const wchar_t* dll, bool hold) {
     remixapi_MaterialHandle mat=nullptr;
     stage("CreateMaterial");
     if (!check(api.CreateMaterial(&material,&mat),"CreateMaterial") || !mat) return 1;
+#else
+    // One material per captured albedo. The runtime loads the DDS itself from albedoTexture, so no BC decoding
+    // happens here. Textures were copied next to scene.bin by scene_from_frame.py, into scene_textures/.
+    std::vector<std::wstring> tex_path;  // reserved, so the c_str() handed to Remix stays valid
+    std::vector<std::pair<std::uint32_t,remixapi_MaterialHandle>> tex_material;
+    tex_path.reserve(scene.textures.size()); tex_material.reserve(scene.textures.size());
+    wchar_t cwd[MAX_PATH]{}; const DWORD cwd_len=GetCurrentDirectoryW(MAX_PATH,cwd);
+    const bool have_cwd=cwd_len && cwd_len<MAX_PATH;
+    stage("CreateMaterial");
+    for (const auto& t : scene.textures) {
+        std::wstring name(t.name.begin(),t.name.end());
+        const char* ext=getenv("REPROBE_TEX_EXT");  // diagnostic: force png/jpg to test the loader
+        if (ext && *ext) { const std::size_t dot=name.rfind(L'.'); if (dot!=std::wstring::npos) name.resize(dot);
+                           for (const char* c=ext; *c; ++c) name.push_back(static_cast<wchar_t>(*c)); }
+        tex_path.push_back((have_cwd ? std::wstring(cwd)+L"\\" : std::wstring()) + L"scene_textures\\" + name);
+        remixapi_MaterialInfoOpaqueEXT op=opaque;
+        op.albedoConstant={1,1,1};  // the captured map is the albedo; per-material parameters are not captured yet
+        // NieR's diffuse maps carry cutout alpha and we do not model which draws are alpha-tested, so force the
+        // material opaque rather than letting Remix alpha-test every surface against its texture's alpha.
+        op.useDrawCallAlphaState=0; op.alphaTestType=0; op.alphaReferenceValue=0;
+        // Measured on both hosts: 0 renders fully transparent, 1 blends by the albedo texture alpha
+        // (NieR maps carry cutout alpha), 2 is opaque. Overridable for A/B.
+        op.blendType_hasvalue=1; op.blendType_value=getenv("REPROBE_BLEND") ? std::atoi(getenv("REPROBE_BLEND")) : 2;
+        op.invertedBlend=0;
+        remixapi_MaterialInfo mi{};
+        mi.sType=REMIXAPI_STRUCT_TYPE_MATERIAL_INFO; mi.pNext=&op; mi.hash=1000000ull+t.id;  // mesh=2, light=3
+        const char* albedo_mode=getenv("REPROBE_ALBEDO");  // "none" isolates the material from the texture
+        if (albedo_mode && !std::strcmp(albedo_mode,"none")) { op.albedoConstant={0.6f,0.6f,0.6f}; }
+        else { mi.albedoTexture=tex_path.back().c_str(); }
+        remixapi_MaterialHandle m=nullptr;
+        if (!check(api.CreateMaterial(&mi,&m),"CreateMaterial(texture)") || !m) return 1;
+        tex_material.emplace_back(t.id,m);
+    }
+    // blend-type bisect: identical materials that differ only in blendType_value, assigned round-robin, so one
+    // frame shows which enum value is actually opaque.
+    remixapi_MaterialHandle blend_mat[3]={nullptr,nullptr,nullptr};
+    if (getenv("REPROBE_MAT") && !std::strcmp(getenv("REPROBE_MAT"),"blendtest")) {
+        for (int b=0;b<3;++b) {
+            remixapi_MaterialInfoOpaqueEXT o{};
+            o.sType=REMIXAPI_STRUCT_TYPE_MATERIAL_INFO_OPAQUE_EXT;
+            o.albedoConstant={0.9f,0.5f,0.2f}; o.opacityConstant=1; o.roughnessConstant=0.6f;
+            o.useDrawCallAlphaState=0; o.alphaTestType=0; o.alphaReferenceValue=0;
+            o.blendType_hasvalue=1; o.blendType_value=b; o.invertedBlend=0;
+            remixapi_MaterialInfo mi{};
+            mi.sType=REMIXAPI_STRUCT_TYPE_MATERIAL_INFO; mi.pNext=&o; mi.hash=2000000ull+b;
+            stage("CreateBlendMaterial");
+            if (!check(api.CreateMaterial(&mi,&blend_mat[b]),"CreateBlendMaterial") || !blend_mat[b]) return 1;
+        }
+    }
+    const bool tri_material=getenv("REPROBE_MAT") && !std::strcmp(getenv("REPROBE_MAT"),"triangle");
+    remixapi_MaterialHandle tri_mat=nullptr;
+    if (tri_material) {  // the reference triangle's material, known to render on both hosts
+        remixapi_MaterialInfoOpaqueEXT t_op{};
+        t_op.sType=REMIXAPI_STRUCT_TYPE_MATERIAL_INFO_OPAQUE_EXT;
+        t_op.albedoConstant={0.9f,0.35f,0.08f}; t_op.opacityConstant=1; t_op.roughnessConstant=0.6f;
+        remixapi_MaterialInfo t_mi{};
+        t_mi.sType=REMIXAPI_STRUCT_TYPE_MATERIAL_INFO; t_mi.pNext=&t_op; t_mi.hash=1;
+        t_mi.emissiveIntensity=0.2f; t_mi.emissiveColorConstant={0.9f,0.35f,0.08f};
+        stage("CreateTriMaterial");
+        if (!check(api.CreateMaterial(&t_mi,&tri_mat),"CreateTriMaterial") || !tri_mat) return 1;
+    }
+    std::printf("Scene: modes mat=%s albedo=%s normal_flip=%d height=%d\n",
+                (getenv("REPROBE_MAT") ? getenv("REPROBE_MAT") : "on"),
+                (getenv("REPROBE_ALBEDO") ? getenv("REPROBE_ALBEDO") : "texture"),
+                getenv("REPROBE_NORMAL_FLIP") ? std::atoi(getenv("REPROBE_NORMAL_FLIP")) : 0, window_h);
+    std::printf("Scene: %zu albedo materials, first path %ls\n",tex_material.size(),
+                tex_path.empty() ? L"(none)" : tex_path.front().c_str());
+#endif
     static_assert(sizeof(remixapi_HardcodedVertex)==64, "pinned SDK vertex layout changed");
     remixapi_MeshInfoSurfaceTriangles surface{};
 #ifdef CAPTURED_MESH
@@ -317,16 +444,18 @@ int render(const wchar_t* dll, bool hold) {
     std::printf("Captured mesh: %u vertices, %u indices, scale %.3f\n",captured_vertex_count,captured_index_count,fit.scale);
 #elif defined(SCENE_FILE)
     const std::size_t triangles=scene.tris.size()/kTriFloats;
+    const bool flip_normals=getenv("REPROBE_NORMAL_FLIP") && std::atoi(getenv("REPROBE_NORMAL_FLIP"));
     std::vector<remixapi_HardcodedVertex> vertices(3*triangles);
     for (std::size_t t=0;t<triangles;++t) for (unsigned k=0;k<3;++k) {
         auto& v=vertices[3*t+k];
         const float* src=&scene.tris[kTriFloats*t+8*k];
         for (unsigned j=0;j<3;++j) { v.position[j]=src[j]; v.normal[j]=src[3+j]; }
+        if (flip_normals) { v.normal[0]=-v.normal[0]; v.normal[1]=-v.normal[1]; v.normal[2]=-v.normal[2]; }
         v.texcoord[0]=src[6]; v.texcoord[1]=src[7];
         v.color=0xffffffff;
     }
-    std::vector<remixapi_MeshInfoSurfaceTriangles> surfaces;  // one per captured draw, default material
-    unsigned sky_skipped=0;
+    std::vector<remixapi_MeshInfoSurfaceTriangles> surfaces;  // one per captured draw, with its albedo material
+    unsigned sky_skipped=0, untextured=0;
     for (const auto& d : scene.draws) if (d.count) {
         // NieR's sky dome / cloud shells (10-19 km wide, camera inside) are solid to Remix and block the sun:
         // the first full-frame render came out black. Skip anything wider than 5 km.
@@ -334,12 +463,20 @@ int render(const wchar_t* dll, bool hold) {
         for (std::size_t t=d.first;t<std::size_t(d.first)+d.count;++t) for (unsigned k=0;k<3;++k) for (unsigned j=0;j<3;++j) {
             const float v=scene.tris[kTriFloats*t+8*k+j]; lo[j]=std::fmin(lo[j],v); hi[j]=std::fmax(hi[j],v);
         }
-        if (std::fmax(hi[0]-lo[0],std::fmax(hi[1]-lo[1],hi[2]-lo[2]))>5000.f) { ++sky_skipped; continue; }
+        // NieR's sky dome/cloud shells are 10-19 km wide and enclose the camera; keeping them blocks the sun,
+        // so they are skipped by default. Raising this cap is how to get a real textured sky without a dome light.
+        if (std::fmax(hi[0]-lo[0],std::fmax(hi[1]-lo[1],hi[2]-lo[2]))>skip_max) { ++sky_skipped; continue; }
         remixapi_MeshInfoSurfaceTriangles s{};
         s.vertices_values=vertices.data()+3ull*d.first; s.vertices_count=3ull*d.count;
+        if (blend_mat[0]) { s.material=blend_mat[surfaces.size()%3]; surfaces.push_back(s); continue; }
+        if (tri_material) { s.material=tri_mat; surfaces.push_back(s); if (!d.tex) ++untextured; continue; }
+        const bool use_materials=!(getenv("REPROBE_MAT") && !std::strcmp(getenv("REPROBE_MAT"),"none"));
+        if (use_materials) for (const auto& m : tex_material) if (m.first==d.tex) { s.material=m.second; break; }
+        if (!s.material) ++untextured;  // draws with no sRGB albedo keep Remix's default material
         surfaces.push_back(s);
     }
-    std::printf("Scene: skipped %u sky-sized draws (>5 km)\n",sky_skipped);
+    std::printf("Scene: sun %.2f deg %.1f\n",static_cast<double>(sun_power),static_cast<double>(sun_angle));
+    std::printf("Scene: skipped %u draws wider than %.0f units, %u draws without albedo\n",sky_skipped,static_cast<double>(skip_max),untextured);
     std::printf("Scene: %zu draws, %zu triangles, camera (%.1f, %.1f, %.1f) fov %.1f aspect %.3f\n", scene.draws.size(),
                 triangles, scene.camera[0], scene.camera[1], scene.camera[2], scene.camera[12], scene.camera[13]);
 #else
@@ -371,8 +508,11 @@ int render(const wchar_t* dll, bool hold) {
     // A sun-like distant light for a world that spans hundreds of metres (direction normalized).
     remixapi_LightInfoDistantEXT sun{};
     sun.sType=REMIXAPI_STRUCT_TYPE_LIGHT_INFO_DISTANT_EXT;
-    sun.direction={0.3015113f,-0.9045340f,0.3015113f}; sun.angularDiameterDegrees=0.5f; sun.volumetricRadianceScale=1;
-    light_info.pNext=&sun; light_info.radiance={2,2,1.9f};  // 8 blew out the terrain on the first scene render
+    // A 0.5 deg disc samples radiance L/sin^2(alpha) ~ 1e6 for small L, which the runtime's firefly filter
+    // clamps; a wide disc keeps the same irradiance (E ~ pi*L) without tripping it.
+    sun.direction={0.3015113f,-0.9045340f,0.3015113f}; sun.angularDiameterDegrees=sun_angle; sun.volumetricRadianceScale=1;
+    light_info.pNext=&sun;
+    light_info.radiance.x=sun_power; light_info.radiance.y=sun_power; light_info.radiance.z=sun_power*0.95f;
 #else
     remixapi_LightInfoSphereEXT sphere{};
     sphere.sType=REMIXAPI_STRUCT_TYPE_LIGHT_INFO_SPHERE_EXT;
@@ -382,6 +522,33 @@ int render(const wchar_t* dll, bool hold) {
     remixapi_LightHandle light=nullptr;
     stage("CreateLight");
     if (!check(api.CreateLight(&light_info,&light),"CreateLight") || !light) return 1;
+#ifdef SCENE_FILE
+    // Ambient fill. Without it only surfaces facing the sun are lit at all, because the sky shells are skipped.
+    const float sky_power=getenv("REPROBE_SKY") ? static_cast<float>(std::atof(getenv("REPROBE_SKY"))) : 0.5f;
+    remixapi_LightInfoDomeEXT dome{};
+    dome.sType=REMIXAPI_STRUCT_TYPE_LIGHT_INFO_DOME_EXT;
+    for (unsigned i=0;i<3;++i) dome.transform.matrix[i][i]=1;
+    // The dome light is dead without a colour texture, so point it at the 1x1 grey DDS the converter writes.
+    std::wstring sky_path;
+    {
+        wchar_t cwd_sky[MAX_PATH]{}; const DWORD n=GetCurrentDirectoryW(MAX_PATH,cwd_sky);
+        sky_path.assign(cwd_sky,n);
+        sky_path += L"\\scene_sky.dds";
+        // Opt-in: attaching a dome texture makes this runtime crash (integer divide by zero inside Present),
+        // measured with both a 1x1 and an 8x8 mip-chained DDS. The file is still written so this can be retried.
+        const bool use_sky_tex=getenv("REPROBE_SKY_TEX") && std::atoi(getenv("REPROBE_SKY_TEX"));
+        if (use_sky_tex && GetFileAttributesW(sky_path.c_str())!=INVALID_FILE_ATTRIBUTES) dome.colorTexture=sky_path.c_str();
+        else std::printf("Scene: dome texture %s (REPROBE_SKY_TEX=1 to attach)\n",
+                         use_sky_tex ? "requested but missing" : "not attached");
+    }
+    remixapi_LightInfo sky_info{};
+    sky_info.sType=REMIXAPI_STRUCT_TYPE_LIGHT_INFO; sky_info.pNext=&dome; sky_info.hash=4;
+    sky_info.radiance.x=sky_power; sky_info.radiance.y=sky_power; sky_info.radiance.z=sky_power;
+    remixapi_LightHandle skylight=nullptr;
+    stage("CreateSky");
+    if (!check(api.CreateLight(&sky_info,&skylight),"CreateSky") || !skylight) return 1;
+    std::printf("Scene: sky %.2f\n",static_cast<double>(sky_power));
+#endif
     remixapi_CameraInfoParameterizedEXT params{};
     params.sType=REMIXAPI_STRUCT_TYPE_CAMERA_INFO_PARAMETERIZED_EXT;
 #ifdef SCENE_FILE
@@ -428,13 +595,26 @@ int render(const wchar_t* dll, bool hold) {
         stage("SetupCamera"); if (!check(api.SetupCamera(&camera),"SetupCamera")) return 1;
         stage("DrawInstance"); if (!check(api.DrawInstance(&instance),"DrawInstance")) return 1;
         stage("DrawLightInstance"); if (!check(api.DrawLightInstance(light),"DrawLightInstance")) return 1;
+#ifdef SCENE_FILE
+        if (!check(api.DrawLightInstance(skylight),"DrawSky")) return 1;
+#endif
         stage("Present"); if (!check(api.Present(nullptr),"Present")) return 1;
         Sleep(hold?hold_delay_ms:frame_delay_ms);
     }
     std::printf("Submitted %u Remix frames. API success is NOT visual correctness; inspect the window.\n",submitted);
+#ifdef SCENE_FILE
+    stage("DestroySky"); if (!check(api.DestroyLight(skylight),"DestroySky")) return 1;
+#endif
     stage("DestroyLight"); if (!check(api.DestroyLight(light),"DestroyLight")) return 1;
     stage("DestroyMesh"); if (!check(api.DestroyMesh(mesh),"DestroyMesh")) return 1;
-    stage("DestroyMaterial"); if (!check(api.DestroyMaterial(mat),"DestroyMaterial")) return 1;
+    stage("DestroyMaterial");
+#ifdef SCENE_FILE
+    if (tri_mat && !check(api.DestroyMaterial(tri_mat),"DestroyTriMaterial")) return 1;
+    for (auto m : blend_mat) if (m && !check(api.DestroyMaterial(m),"DestroyBlendMaterial")) return 1;
+    for (auto& m : tex_material) if (!check(api.DestroyMaterial(m.second),"DestroyMaterial")) return 1;
+#else
+    if (!check(api.DestroyMaterial(mat),"DestroyMaterial")) return 1;
+#endif
     return 0; // No assets/files are edited by this program.
 }
 } // namespace

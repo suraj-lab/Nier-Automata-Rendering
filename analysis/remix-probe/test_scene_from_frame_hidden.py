@@ -46,8 +46,42 @@ def vp_tie():
 def ib_range():
     f = frame('ibr'); d = t.draw(f, 0, cb11=t.mat34(0, (0, 0, 0))); t.draw(f, 1, cb11=t.mat34(0, (1, 0, 0)))
     patch(d, index_count=99); s = t.expect_ok(cand, f, work, 'ib range')[0]; assert s['rejected'] == 1, s
+def index_not_a_list():
+    f = frame('txdict'); d = t.draw(f, 0, cb11=t.mat34(0, (0, 0, 0)), ps_textures=[{'slot': 0, 'id': 5}])
+    (f/'textures').mkdir(); (f/'textures/index.json').write_text(json.dumps({'id': 5, 'format': 72, 'width': 64, 'height': 64}))
+    (f/'textures/tex_5.dds').write_bytes(b'DDS ' + bytes(200))
+    s = t.expect_ok(cand, f, work, 'index dict')[0]; assert s['textures'] == 0, s
+def zero_size_texture():
+    f = frame('txzero'); d = t.draw(f, 0, cb11=t.mat34(0, (0, 0, 0)), ps_textures=[{'slot': 0, 'id': 6}])
+    (f/'textures').mkdir(); (f/'textures/index.json').write_text(json.dumps([{'id': 6, 'format': 72, 'width': 0, 'height': 64}]))
+    (f/'textures/tex_6.dds').write_bytes(b'DDS ' + bytes(200))
+    s = t.expect_ok(cand, f, work, 'zero width')[0]; assert s['textures'] == 0, s
+def duplicate_index_entry():
+    f = frame('txdup'); d = t.draw(f, 0, cb11=t.mat34(0, (0, 0, 0)), ps_textures=[{'slot': 0, 'id': 7}])
+    (f/'textures').mkdir()
+    (f/'textures/index.json').write_text(json.dumps([{'id': 7, 'format': 71, 'width': 32, 'height': 32},
+                                                     {'id': 7, 'format': 72, 'width': 32, 'height': 32}]))
+    (f/'textures/tex_7.dds').write_bytes(b'DDS ' + bytes(200))
+    s, _, table, _ = t.expect_ok(cand, f, work, 'duplicate index entry')
+    assert s['textures'] == 1 and table[0][4] == 7, (s, table)
+def name_field_width():
+    f = frame('txwide'); d = t.draw(f, 0, cb11=t.mat34(0, (0, 0, 0)), ps_textures=[{'slot': 0, 'id': 4294967295}])
+    (f/'textures').mkdir(); (f/'textures/index.json').write_text(json.dumps([{'id': 4294967295, 'format': 72, 'width': 8, 'height': 8}]))
+    (f/'textures/tex_4294967295.dds').write_bytes(b'DDS ' + bytes(200))
+    s, _, table, _ = t.expect_ok(cand, f, work, 'max uint32 id')
+    assert s['textures'] == 1 and table[0][4] == 4294967295, (s, table)
+    assert (work/'scene_textures'/'tex_4294967295.dds').is_file(), 'long texture name not written'
+def missing_textures_dir():
+    f = frame('txnone'); d = t.draw(f, 0, cb11=t.mat34(0, (0, 0, 0)), ps_textures=[{'slot': 0, 'id': 8}])
+    s = t.expect_ok(cand, f, work, 'no textures dir')[0]; assert s['textures'] == 0, s
+
 for n, fn in [('R32 + ib_offset/start/base', r32_base), ('POSITION half4', half_pos), ('blend elements in slot 1', blend_slot1),
               ('zero-weight out-of-range bone ignored', zero_weight_oob), ('index remainder ignored', remainder),
-              ('viewport tie -> larger area', vp_tie), ('index buffer overrun -> reject draw', ib_range)]:
+              ('viewport tie -> larger area', vp_tie), ('index buffer overrun -> reject draw', ib_range),
+              ('index.json not a list -> no textures', index_not_a_list),
+              ('zero-width texture entry ignored', zero_size_texture),
+              ('duplicate index entry -> one texture', duplicate_index_entry),
+              ('max uint32 texture id fits the name field', name_field_width),
+              ('ps_textures without a textures dir -> 0', missing_textures_dir)]:
     case(n, fn)
 print(json.dumps({'passed': all(r[1] for r in res), 'results': res}, indent=1)); shutil.rmtree(work, ignore_errors=True)

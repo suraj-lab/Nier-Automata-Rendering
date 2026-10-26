@@ -30,6 +30,8 @@ struct Record {
     D3D11_VIEWPORT viewport{};
     geometry_capture::Capture geometry;
     std::vector<ConstantBuffer> vs_cbs;
+    std::vector<ConstantBuffer> ps_cbs;       // pixel-shader constants: where per-material parameters live
+    std::uint64_t vs_hash = 0, ps_hash = 0;  // shader identity, so draws can be grouped by shader family
     std::vector<texture_capture::Ref> ps_textures;  // material textures bound to the pixel shader
 };
 
@@ -52,25 +54,51 @@ inline std::size_t frame_bytes = 0;
 inline unsigned frame_skipped = 0;
 inline std::mutex mutex;
 
+// Pointer identity: stable for the life of one process, so one capture can group draws by shader family.
+// Deliberately not a hash of the bytecode, and not comparable across captures.
+inline std::uint64_t shader_id(ID3D11DeviceChild* shader) {
+    return shader ? static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(shader)) : 0;
+}
+
+// Read every constant buffer bound to one shader stage; shared by the VS and PS passes.
+inline bool read_cbs(ID3D11Device* device, ID3D11DeviceContext* context, bool pixel,
+                     std::vector<ConstantBuffer>& cbs) {
+    cbs.clear();
+    ID3D11Buffer* buffers[D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT] = {};
+    if (pixel) context->PSGetConstantBuffers(0, D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT, buffers);
+    else context->VSGetConstantBuffers(0, D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT, buffers);
+    for (UINT i = 0; i < D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT; ++i) {
+        if (!buffers[i]) continue;
+        ID3D11Buffer* buffer = buffers[i];
+        D3D11_BUFFER_DESC d{}; buffer->GetDesc(&d);
+        ConstantBuffer cb;
+        cb.slot = i; cb.byte_width = d.ByteWidth;  // first/num are only in the *1 variant; full bytes are what matter
+        if (!geometry_capture::read_buffer(device, context, buffer, 0, d.ByteWidth, cb.bytes)) {
+            buffer->Release(); return false;
+        }
+        cbs.push_back(std::move(cb));
+        buffer->Release();
+    }
+    return true;
+}
+
 inline bool capture_state(ID3D11Device* device, ID3D11DeviceContext* context, geometry_capture::Capture& geo,
-                          std::vector<ConstantBuffer>& cbs, D3D11_VIEWPORT& viewport, geometry_capture::Cache* cache = nullptr) {
+                          std::vector<ConstantBuffer>& cbs, D3D11_VIEWPORT& viewport, geometry_capture::Cache* cache = nullptr,
+                          std::vector<ConstantBuffer>* ps_cbs = nullptr, std::uint64_t* vs_hash = nullptr,
+                          std::uint64_t* ps_hash = nullptr) {
     if (!geometry_capture::capture(device, context, geo, cache)) return false;
     UINT num = 1;
     context->RSGetViewports(&num, &viewport);
-    cbs.clear();
-    ID3D11Buffer* buffers[D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT] = {};
-    context->VSGetConstantBuffers(0, D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT, buffers);
-    for (UINT i = 0; i < D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT; ++i) {
-        if (!buffers[i]) continue;
-        D3D11_BUFFER_DESC d{}; buffers[i]->GetDesc(&d);
-        ConstantBuffer cb;
-        cb.slot = i; cb.byte_width = d.ByteWidth;  // first/num are only in the *1 variant; full bytes are what matter
-        if (!geometry_capture::read_buffer(device, context, buffers[i], 0, d.ByteWidth, cb.bytes)) {
-            buffers[i]->Release(); return false;
-        }
-        cbs.push_back(std::move(cb));
-        buffers[i]->Release();
-    }
+    if (!read_cbs(device, context, false, cbs)) return false;
+    if (ps_cbs && !read_cbs(device, context, true, *ps_cbs)) return false;
+    ID3D11VertexShader* vs = nullptr;
+    ID3D11PixelShader* ps = nullptr;
+    context->VSGetShader(&vs, nullptr, nullptr);
+    context->PSGetShader(&ps, nullptr, nullptr);
+    if (vs_hash) *vs_hash = shader_id(vs);
+    if (ps_hash) *ps_hash = shader_id(ps);
+    if (vs) vs->Release();
+    if (ps) ps->Release();
     return true;
 }
 
@@ -101,11 +129,12 @@ inline void record_draw(ID3D11DeviceContext* self, bool instanced, UINT index_co
     r.index_count = index_count; r.start_index = start_index; r.base_vertex = base_vertex;
     r.instanced = instanced; r.instance_count = instance_count; r.start_instance = start_instance;
     const std::size_t before = cache.read_bytes;
-    if (capture_state(device, self, r.geometry, r.vs_cbs, r.viewport, &cache)) {
+    if (capture_state(device, self, r.geometry, r.vs_cbs, r.viewport, &cache, &r.ps_cbs, &r.vs_hash, &r.ps_hash)) {
         r.valid = true;
         texture_capture::capture(device, self, texture_cache, r.ps_textures, max_texture_bytes);
         frame_bytes += cache.read_bytes - before;
         for (const auto& cb : r.vs_cbs) frame_bytes += cb.bytes.size();
+        for (const auto& cb : r.ps_cbs) frame_bytes += cb.bytes.size();
         frame.push_back(std::move(r));
     } else {
         ++frame_skipped;

@@ -118,6 +118,15 @@ def inside():
         assert cap['vp_width'] == 64 and cap['vp_height'] == 64
         assert cap['layout_found'] == 1 and [(e['semantic'], e['offset'], e['slot']) for e in cap['layout']] == [('POSITION', 0, 0), ('COLOR', 12, 0)]
         assert cap['vs_cbs'] == [{'slot': 0, 'bytes': 64}]
+        # v4: shader identity + pixel-shader constants, so a converter can group draws by shader and reach
+        # per-material parameters instead of guessing the albedo slot from texture formats.
+        assert cap['ps_cbs'] == [{'slot': 0, 'bytes': 64}], cap['ps_cbs']
+        assert cap['vs_hash'] and cap['ps_hash'], (cap['vs_hash'], cap['ps_hash'])
+        assert cap['vs_hash'] != cap['ps_hash'], 'vertex and pixel shader must not collide'
+        ps_cb = (cd / 'ps_cb_0.bin').read_bytes()
+        assert len(ps_cb) == 64 and ps_cb == bytes(((i * 17 + 3) & 0xff) for i in range(64)), ps_cb[:8].hex()
+        # the VS buffer keeps its own name, so a shared slot cannot overwrite either file
+        assert (cd / 'cb_0.bin').read_bytes() == ps_cb
         assert len((cd / 'vb_0.bin').read_bytes()) == 65 * 16 and len((cd / 'ib.bin').read_bytes()) == 192 * 2
         results['repair'] = {'passed': True, 'foreground': r['foreground'], 'dir': str(d.relative_to(A.parent))}
 

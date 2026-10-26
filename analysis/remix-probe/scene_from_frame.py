@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Convert a whole-frame D3D11 capture directory into a world-space NSCN scene binary (v2)."""
+"""Convert a whole-frame D3D11 capture directory into a world-space NSCN scene binary (v3)."""
 import hashlib
 import json
 import math
+import shutil
 import struct
 import sys
 from collections import Counter
@@ -12,6 +13,9 @@ import numpy as np
 
 MAX_INDEX_COUNT = 1 << 24  # per draw; NieR's largest seen is 705K. Bounds memory on hostile captures.
 MAX_INSTANCES = 4096
+NAME_BYTES = 32  # fixed DDS file name field in the texture table
+# DXGI *_UNORM_SRGB formats: the game's diffuse maps are stored sRGB, its masks/normals linear.
+SRGB_FORMATS = {72, 75, 78, 90, 91}
 
 
 class Reject(Exception):
@@ -29,6 +33,8 @@ def read_indices(d, c):
     size = {57: 2, 42: 4}.get(c.get('ib_format'))
     if c.get('has_index') != 1 or size is None or not 0 <= c['index_count'] <= MAX_INDEX_COUNT:
         raise Reject('index')
+    if not -(2 ** 32) <= c['base_vertex'] < 2 ** 32:  # bounds the int64 product below
+        raise Reject('base_vertex')
     ib = (d / 'ib.bin').read_bytes()
     first, n = c['ib_offset'] + c['start_index'] * size, c['index_count']
     if first < 0 or first + n * size > len(ib):
@@ -72,6 +78,87 @@ def texcoords(d, c, e, ids):  # TEXCOORD: 34 = float16 x2, 16 = float32 x2
 
 def mats(cb11, count):
     return np.frombuffer(cb11, dtype='<f4', count=count * 12).astype(np.float64).reshape(count, 3, 4)
+
+
+def tex_index(frame):
+    """textures/index.json -> {id: entry}; a missing or malformed index means no textures."""
+    try:
+        raw = json.loads((frame / 'textures' / 'index.json').read_text())
+    except ERR:
+        return {}
+    if not isinstance(raw, list):
+        return {}
+    return {t['id']: t for t in raw if isinstance(t, dict) and type(t.get('id')) is int
+            and 0 <= t['id'] < 2 ** 32  # the table field is uint32; anything else would fail to pack
+            and type(t.get('format')) is int and type(t.get('width')) is int and type(t.get('height')) is int}
+
+
+def albedo(c, index, frame):
+    """Id of the draw's diffuse map: the largest-area sRGB texture bound to the pixel shader, lowest slot on
+    a tie (strictly greater keeps the first of two equal entries). 0 when the draw has none or its DDS was
+    not written."""
+    ranked = []
+    for p in c.get('ps_textures') or []:
+        if not isinstance(p, dict) or type(p.get('slot')) is not int or p['slot'] < 0:
+            continue
+        t = index.get(p.get('id'))
+        if t is None or t['format'] not in SRGB_FORMATS or t['width'] <= 0 or t['height'] <= 0:
+            continue
+        ranked.append(((t['width'] * t['height'], -p['slot']), t['id']))
+    for _, tid in sorted(ranked, reverse=True):
+        dds = frame / 'textures' / f'tex_{tid}.dds'
+        if dds.is_file() and not mostly_black(dds):  # fall through to the next candidate, do not give up
+            return tid
+    return 0  # nothing usable: leave the surface on its constant albedo instead of painting it black
+
+
+def mostly_black(path):
+    """True when an atlas is mostly black, i.e. a detail/mask map rather than a diffuse map.
+
+    Reads only the block colour endpoints (BC1: bytes 0-3; BC2/BC3: bytes 8-11, after the alpha block), so it
+    needs no decode. NieR's mask atlases are black with sparse motifs; a diffuse map is not.
+    """
+    b = Path(path).read_bytes()
+    if len(b) < 148 or b[:4] != b'DDS ':
+        return False
+    stride = {71: 8, 72: 8, 75: 16, 77: 16, 78: 16}.get(struct.unpack_from('<I', b, 128)[0])
+    if stride is None:
+        return False
+    n = (len(b) - 148) // stride
+    if n <= 0:
+        return False
+    off = stride - 8  # BC1 keeps the colour endpoints at 0; BC2/BC3 store an 8-byte alpha block first
+    blocks = np.frombuffer(b[148:148 + n * stride], dtype=np.uint8).reshape(n, stride)[:, off:off + 4]
+    c = np.frombuffer(np.ascontiguousarray(blocks).tobytes(), dtype='<u2').reshape(n, 2).astype(np.uint32)
+    rgb = np.stack([((c >> 11) & 31) / 31, ((c >> 5) & 63) / 63, (c & 31) / 31], axis=2)  # n,2,3
+    dark = rgb.max(axis=2).max(axis=1) < 0.10  # both endpoints black -> the whole block is black
+    # 0.9, not 0.5: on the real capture a legitimate cutout diffuse (a green banner, 0.54) overlaps a
+    # detail mask (0.66), and this statistic cannot tell them apart. Only near-empty atlases are rejected
+    # here; telling a mask from a diffuse needs the shader identity, which the capture does not record yet.
+    # shortcut: a mask atlas that is 50-90% black is still used as albedo and paints its surface black.
+    return float(dark.mean()) > 0.9
+
+
+def sky_dds(level=255, size=8):
+    """A small uniform-grey DDS for the dome light: a sky colour with no sky geometry.
+
+    The runtime uploads asset textures as VK_IMAGE_TYPE_2D and samples them lat-long, so this must be a plain
+    2D image, never a cubemap. A 1x1 texture crashes the runtime (integer divide by zero inside Present), and a
+    full mip chain avoids the "suboptimal replacement texture" warning, so this writes 8x8 down to 1x1.
+    The dome light multiplies its radiance by this texel.
+    """
+    mips = []
+    n = size
+    while n >= 1:
+        mips.append(bytes((level, level, level, 255)) * (n * n))
+        n //= 2
+    h = bytearray(124)
+    struct.pack_into('<7I', h, 0, 124, 0x1 | 0x2 | 0x4 | 0x1000 | 0x20000, size, size, 4 * size, 0, len(mips))
+    struct.pack_into('<I', h, 72, 32)             # DDS_PIXELFORMAT.dwSize
+    h[80:84] = b'DX10'                            # dwFourCC: DX10 header follows the 124-byte header
+    struct.pack_into('<I', h, 104, 0x1000 | 0x400000)  # DDSCAPS_TEXTURE | DDSCAPS_MIPMAP
+    dx10 = struct.pack('<5I', 28, 3, 0, 1, 0)     # DXGI_FORMAT_R8G8B8A8_UNORM, TEXTURE2D, 1 array slice
+    return b'DDS ' + bytes(h) + dx10 + b''.join(mips)
 
 
 def first(layout, semantic, formats):
@@ -149,9 +236,10 @@ def valid_meta(c):
 
 
 def build(frame):
+    index = tex_index(frame)
     # draw_<digits> fitting the uint32 table field; other folder names are ignored entirely.
-    draws = sorted(p for p in frame.iterdir() if p.is_dir() and p.name.startswith('draw_') and p.name[5:].isdigit()
-                   and int(p.name[5:]) < 2 ** 32)
+    draws = sorted(p for p in frame.iterdir() if p.is_dir() and p.name.startswith('draw_') and p.name[5:].isascii()
+                   and p.name[5:].isdigit() and int(p.name[5:]) < 2 ** 32)
     metas = {}
     for d in draws:
         try:
@@ -191,7 +279,11 @@ def build(frame):
     table, tris, first_kept = [], [], None
     for key in order:
         # richest first (score descending), draw name breaks ties; a failed decode falls back to the next
-        cands = sorted(groups[key], key=lambda d: tuple(-int(x) for x in score(metas[d])) + (d.name,))
+        try:  # score() reaches into the layout: a malformed entry rejects these draws, not the whole frame
+            cands = sorted(groups[key], key=lambda d: tuple(-int(x) for x in score(metas[d])) + (d.name,))
+        except ERR:
+            stats['rejected'] += len(groups[key])
+            continue
         for i, d in enumerate(cands):
             c = metas[d]
             try:
@@ -214,7 +306,8 @@ def build(frame):
                 v = wp[inv].reshape(-1, 3, 3)
                 face = np.cross(v[:, 2] - v[:, 0], v[:, 1] - v[:, 0])  # NieR/D3D front faces are clockwise
                 length = np.linalg.norm(face, axis=1)
-                keep = distinct & (length > 0) & np.isfinite(v).all(axis=(1, 2)) & np.isfinite(length)
+                fits = np.isfinite(v.astype(np.float32)).all(axis=(1, 2))  # the file stores float32
+                keep = distinct & (length > 0) & np.isfinite(v).all(axis=(1, 2)) & np.isfinite(length) & fits
                 face = face[keep] / length[keep, None]
                 v = v[keep]
                 if wn is not None:
@@ -227,7 +320,8 @@ def build(frame):
                 t = uv[inv].reshape(-1, 3, 2)[keep]
                 t = np.where(np.isfinite(t), t, 0.0)
                 tris.append(np.concatenate([v, vn, t], axis=2).reshape(-1, 24))
-            table.append((int(d.name[5:]), start, sum(len(x) for x in tris) - start, int(skinned)))
+            table.append((int(d.name[5:]), start, sum(len(x) for x in tris) - start, int(skinned),
+                          albedo(c, index, frame)))
             stats['kept'] += 1
             break
     if first_kept is None:
@@ -248,17 +342,39 @@ def main():
     except Exception as e:
         print(f'error: {e}', file=sys.stderr)
         sys.exit(2)
+    tex = sorted({row[4] for row in table if row[4]})
     blob = bytearray()
-    blob += b'NSCN' + struct.pack('<3I', 2, len(table), len(allt))
+    blob += b'NSCN' + struct.pack('<4I', 3, len(table), len(allt), len(tex))
     blob += struct.pack('<14f', *[float(x) for x in cam])
     for row in table:
-        blob += struct.pack('<4I', *row)
+        blob += struct.pack('<5I', *row)
+    for tid in tex:  # the probe resolves these names inside <out>_textures/
+        name = f'tex_{tid}.dds'.encode()
+        blob += struct.pack('<I', tid) + name.ljust(NAME_BYTES, b'\0')
     if allt.size:
         blob += np.ascontiguousarray(allt, dtype='<f4').tobytes()
-    out.write_bytes(bytes(blob))
+    # Textures go into a fresh directory that then replaces the old one, so a re-run never merges stale files
+    # and a failed copy never leaves a scene.bin pointing at textures that are not there.
+    dest = out.parent / (out.stem + '_textures')
+    tmp = out.parent / (out.stem + '_textures.tmp')
+    try:
+        shutil.rmtree(tmp, ignore_errors=True)
+        tmp.mkdir()
+        for tid in tex:
+            (tmp / f'tex_{tid}.dds').write_bytes((frame / 'textures' / f'tex_{tid}.dds').read_bytes())
+        if dest.is_dir():
+            shutil.rmtree(dest)
+        elif dest.exists():
+            dest.unlink()
+        tmp.rename(dest)
+        out.write_bytes(bytes(blob))
+        (out.parent / 'scene_sky.dds').write_bytes(sky_dds())  # the probe points the dome light at this
+    except OSError as e:
+        print(f'error: {e}', file=sys.stderr)
+        sys.exit(2)
     print(json.dumps({'kept': stats['kept'], 'duplicates': stats['duplicates'], 'rejected': stats['rejected'],
                       'other_viewport': stats['other_viewport'], 'triangles': len(allt),
-                      'main_viewport': list(main)}))
+                      'main_viewport': list(main), 'textures': len(tex)}))
 
 
 if __name__ == '__main__':

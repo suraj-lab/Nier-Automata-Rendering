@@ -203,6 +203,8 @@ bool write_capture(const draw_capture::Record& r, const std::wstring& dir, const
     }
     if (r.geometry.has_index) place_buffer(dir + L"ib.bin", r.geometry.index.bytes, r.geometry.index.shared_id, frame_dir);
     for (const auto& cb : r.vs_cbs) write_bytes(dir + L"cb_" + std::to_wstring(cb.slot) + L".bin", cb.bytes);
+    // PS constants use their own prefix so a slot shared with a VS buffer cannot overwrite it.
+    for (const auto& cb : r.ps_cbs) write_bytes(dir + L"ps_cb_" + std::to_wstring(cb.slot) + L".bin", cb.bytes);
     input_layout_hook::Layout els;
     const bool have_layout = input_layout_hook::lookup(r.geometry.layout, els);
     FILE* f = _wfopen((dir + L"capture.json").c_str(), L"w");
@@ -219,7 +221,9 @@ bool write_capture(const draw_capture::Record& r, const std::wstring& dir, const
         std::fprintf(f, "%s{\"slot\":%u,\"stride\":%u,\"offset\":%u,\"bytes\":%zu}", i ? "," : "",
                      v.slot, v.stride, v.offset, v.bytes ? v.bytes->size() : std::size_t(0));
     }
-    std::fprintf(f, "],\"layout_found\":%d,\"layout\":[", have_layout ? 1 : 0);
+    std::fprintf(f, "],\"vs_hash\":%llu,\"ps_hash\":%llu,\"layout_found\":%d,\"layout\":[",
+                 static_cast<unsigned long long>(r.vs_hash), static_cast<unsigned long long>(r.ps_hash),
+                 have_layout ? 1 : 0);
     for (std::size_t i = 0; i < els.elements.size(); ++i) {
         const auto& e = els.elements[i];
         std::fprintf(f, "%s{\"semantic\":", i ? "," : "");
@@ -242,6 +246,9 @@ bool write_capture(const draw_capture::Record& r, const std::wstring& dir, const
     std::fprintf(f, "],\"vs_cbs\":[");
     for (std::size_t i = 0; i < r.vs_cbs.size(); ++i)
         std::fprintf(f, "%s{\"slot\":%u,\"bytes\":%zu}", i ? "," : "", r.vs_cbs[i].slot, r.vs_cbs[i].bytes.size());
+    std::fprintf(f, "],\"ps_cbs\":[");
+    for (std::size_t i = 0; i < r.ps_cbs.size(); ++i)
+        std::fprintf(f, "%s{\"slot\":%u,\"bytes\":%zu}", i ? "," : "", r.ps_cbs[i].slot, r.ps_cbs[i].bytes.size());
     std::fprintf(f, "],\"ps_textures\":[");  // ids refer to <frame>\\textures\\tex_<id>.dds
     for (std::size_t i = 0; i < r.ps_textures.size(); ++i)
         std::fprintf(f, "%s{\"slot\":%u,\"id\":%u}", i ? "," : "", r.ps_textures[i].slot, r.ps_textures[i].id);

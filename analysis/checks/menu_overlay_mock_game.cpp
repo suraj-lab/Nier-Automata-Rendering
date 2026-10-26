@@ -168,6 +168,7 @@ int wmain(int argc, wchar_t** argv) {
         context->VSSetShader(mesh_vs, nullptr, 0);
         context->PSSetShader(mesh_ps, nullptr, 0);
         context->VSSetConstantBuffers(0, 1, &mesh_cb_buf);
+        context->PSSetConstantBuffers(0, 1, &mesh_cb_buf);  // one PS buffer at a slot the VS also uses
         context->PSSetShaderResources(0, 3, mesh_srvs);
         context->DrawIndexed(192, 0, 0);
     };
