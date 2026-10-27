@@ -37,10 +37,16 @@ wrong.** Full write-up and measurements: [LIVE_TRANSFER.md](analysis/LIVE_TRANSF
   by clustered overdraw in view (47/26/34 fps at N=100/300/1000, non-monotonic), and with instances moved behind the
   camera to isolate submit cost the probe **dies before its first report at N>=500** (0-byte metrics.txt, no stray
   processes). Next session starts there.
+- Per-draw submission cost: **measured, cheap**. 3000 instances behind the camera cost 0.73 ms total (~0.24 us per
+  `DrawInstance`) at 430x180 under plain wine, so one instance per game draw is affordable and batching is an
+  optimisation. Caveat on the vehicle: under Proton at 1080p with N>=500 the probe died before its first report
+  while plain wine ran the same configuration fine - use wine when stdout or small-N behaviour matters.
 - FSR SDK 2.3 (Redstone) is **DX12 + Windows only**: Upscaling 4.1.1 (already in-game here via the D3D11<->D3D12
-  bridge), Frame Generation 4.0.1 and Ray Regeneration 1.2.0 on RDNA4, Radiance Caching preview. FG additionally
-  needs a DX12 swapchain, which NieR (D3D11) does not have - so desktop gets XeSS + FSR4 upscaling, and frame
-  generation + DLSS/RR live on the Windows/NVIDIA laptop.
+  bridge), Frame Generation 4.0.1 and Ray Regeneration 1.2.0 on RDNA4, Radiance Caching preview. The earlier
+  conclusion that this rules out frame generation on the desktop was **wrong**: lsfg-vk provides Lossless Scaling
+  frame gen as a Vulkan layer for any Vulkan app (NieR via DXVK included), OptiScaler 0.9 documents FSR4-FG on Linux
+  with Proton 11+/Mesa 25.2+, and FSR 3.1 FG works in DX12 titles under vkd3d-proton. For NieR the native route is a
+  DX12 present takeover in our proxy, which already owns Present and has colour/depth/motion vectors for FSR4.
 
 **What live now needs, in order:** (1) feed NieR's live draw stream instead of a converted capture — cache
 materials/meshes/textures by hash, update camera and instance transforms per frame (the probe already submits

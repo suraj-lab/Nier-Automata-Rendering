@@ -118,6 +118,22 @@ NieR's HUD and menus are D3D11 draws in the game frame; Remix's output has no UI
 - **GUI buffer copy**: `CopyRenderingOutput(GUI)` exists but is refused when `combineGuiInFinalColor` is set,
   and it refers to *Remix's* ImGui overlay, not the game's UI. Not a solution for NieR's HUD.
 
+## Per-draw submission cost: measured, and it is cheap (2026-10-27 late)
+
+`REPROBE_INSTANCES=N` submits N extra small instances per frame, placed behind the camera so they reach no ray.
+Measured under **plain wine** (which preserves stdout; under Proton at 1080p with N>=500 the same configuration
+died before its first report - a Proton-path artefact, not an instance limit):
+
+| N instances | fps @ 430x180 |
+|---|---|
+| 0 | 42.10 |
+| 3000 | 40.82 |
+
+**3000 instances cost 0.73 ms total, ~0.24 us per DrawInstance.** One instance per game draw is therefore
+affordable, and merging static geometry per material is an optimisation rather than a requirement. An earlier
+in-view attempt gave non-monotonic numbers (47/26/34 fps at 100/300/1000) because clustered triangles multiply
+per-pixel ray work; that measurement was confounded, not the design.
+
 ## FSR SDK (AMD) — what the desktop can and cannot have
 
 AMD FSR "Redstone" SDK 2.3 ships: FSR Upscaling 4.1.1, **FSR Frame Generation 4.0.1**, FSR FG (SwapChain) 3.1.7,
@@ -136,11 +152,27 @@ Constraints that decide our split:
 Our in-game FSR 4.1.1 already rides the D3D11<->D3D12 interop bridge under vkd3d-proton, so "DX12 only" is not by
 itself a blocker on Linux; the *swapchain* requirement is.
 
+Frame generation on the desktop is **not** ruled out - that earlier claim was wrong. Working Linux/AMD routes:
+
+- **lsfg-vk** (https://lsfg-vk.dev): Lossless Scaling frame generation as a **Vulkan layer** for every Vulkan
+  application, including games running through DXVK. Requires the user's Lossless Scaling (Steam) install and its
+  `lsfg-vk` branch. Cheapest route, applies to NieR today and to the Remix host later.
+- **OptiScaler 0.9+**: documents FSR4-FG on Linux via DX12 interop, requiring Proton 11+ / GE-Proton 10-34,
+  **Mesa 25.2+** and a Windows 11 prefix. Its upscaler replacement needs a game that already exposes
+  DLSS2+/FSR2+/XeSS, which NieR (D3D11, 2017) does not, and OptiFG targets DX12 games - so it fits a future DX12
+  host, not NieR as it stands.
+- **FSR 3.1 FG in-engine under vkd3d-proton**: confirmed working in DX12 titles, so a DX12 swapchain under Proton
+  is viable; FSR SDK FG 3.1.6 (analytical, RDNA2+) or FG 4.0.1 (ML, RDNA4) could drive it.
+
+The principled route for NieR is a **DX12 present takeover in our proxy**: it already owns Present and already has
+colour, depth and motion vectors plumbed for FSR4, so the real FSR FG API could run on the composite. Real work,
+but vendor-native rather than a layer on top.
+
 Resulting split on purpose:
-- **Desktop (Linux, RX 9070 XT):** Remix path with XeSS (measured 60.65 fps at Performance preset = the game's own
-  60 fps cap), FSR 4.1.1 upscaling at the game layer as today. No frame generation, no DLSS, no DLSS-RR.
-- **Laptop (Windows, RTX Spark N1X):** Remix path with DLSS + DLSS Ray Reconstruction + DL frame generation — the
-  only host where "best looking with frame gen" exists.
+- **Desktop (Linux, RX 9070 XT):** Remix with XeSS (60.65 fps at Performance preset = the game's own cap), FSR 4.1.1
+  upscaling at the game layer, frame generation via lsfg-vk now and FSR FG via a DX12 takeover as the native route.
+- **Laptop (Windows, RTX Spark N1X):** Remix with DLSS + DLSS Ray Reconstruction + DL frame generation - one
+  integrated stack.
 
 ## Safety
 
