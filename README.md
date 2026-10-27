@@ -2,10 +2,9 @@
 
 ## Scope and status
 
-Status refreshed 2026-10-27 (late evening). Intent and per-platform plan: [VISION.md](VISION.md).
-
-Status refreshed 2026-10-27 (evening). [PROGRESS.md](PROGRESS.md) is the authoritative resume record (installed
-hashes, rollback chain, verified facts, next steps); its top "Checkpoint" section is the place to start.
+Status refreshed 2026-10-27 (late evening). Intent, scope and the desktop/laptop split: [VISION.md](VISION.md).
+[PROGRESS.md](PROGRESS.md) is the authoritative resume record (installed hashes, rollback chain, verified facts,
+next steps); its top "Checkpoint" section is the place to start.
 
 | Area | Status |
 | --- | --- |
