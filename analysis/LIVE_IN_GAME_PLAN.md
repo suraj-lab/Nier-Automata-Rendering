@@ -96,15 +96,23 @@ reaches 53 fps, so per-frame submission is not the risk. The new work is the cac
 
 ## Order of work
 
-1. `remix_live.cpp` host only (init, device order, `Present` loop) with a **single hard-coded triangle**. Gate:
-   mock game shows a path-traced triangle instead of the game's colour. This proves in-process hosting, which
-   is the whole risk.
-2. Geometry cache behind a flag; render a *static* frame from a warm cache. Gate: compare against the offline
-   still for the same capture (same camera, same textures).
-3. Per-frame transform updates from the VS constant buffers → the scene animates.
-4. Composite at the game's real resolution; measure end-to-end fps in NieR at 2580x1080 (upscaling path) and at
-   3440x1440.
-5. Only then: UI.
+Aligned with [VISION.md](../../VISION.md) "Next goals"; each step names what makes it done.
+
+1. **In-game host, static scene** (`NIER_REMIX=1`): load the runtime, `dxvk_CreateD3D9`, create the device at the
+   game's backbuffer size on a hidden popup window, register it, `Startup` (expect `ALREADY_EXISTS`), submit a
+   converted F9 capture, copy, upload, draw as a fullscreen quad in the existing Present hook.
+   *Done when:* the game window shows a path-traced NieR still, the game does not crash, and `NIER_REMIX=0` is
+   byte-for-byte today's behaviour.
+2. **Live draw stream**: hash-keyed cache for mesh/material/texture (create once), per-frame camera and instance
+   transforms from the captured VS constant buffers. Submission is cheap (0.24 us/draw measured), so this is
+   bookkeeping. *Done when:* the scene animates with the game and a 10-minute run leaks nothing.
+3. **UI fallback**: present the game's own frame while a menu is open. *Done when:* menus, the in-game menu mod and
+   cutscenes behave normally.
+4. **Presets**: RT-only default (`pathMaxBounces` low), PT option, stock fallback, wired through `NIER_RENDER.ini`.
+5. **Frame generation** (last, optional): DX12 present takeover with the real FSR FG API. Not `lsfg-vk`.
+
+Run the **quality pass** (sky/ambient/emissive/streaks, see PROGRESS.md and LIVE_TRANSFER.md) in parallel from now:
+it needs no game and it decides whether the result looks modern at all.
 
 ## UI — the one unsolved design problem
 

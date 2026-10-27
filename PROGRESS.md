@@ -2,6 +2,35 @@
 
 Last updated: 2026-10-27 (evening). **Read the first checkpoint: the transfer blocker is gone.**
 
+## Checkpoint — 2026-10-27 late: pipeline proven end to end; build starts at the in-game host
+
+Intent, scope and the desktop/laptop split now live in [VISION.md](VISION.md). This section is the evidence and the
+next goals; [LIVE_IN_GAME_PLAN.md](analysis/LIVE_IN_GAME_PLAN.md) has the implementation order.
+
+**All four structural unknowns are closed, all measured on the desktop (RX 9070 XT, RADV, GE-Proton):**
+
+| link | result |
+|---|---|
+| frame leaves the runtime | `CopyRenderingOutput(FINAL_COLOR)` works, 0.49 ms @2580x1080, identical to a direct backbuffer read |
+| frame reaches D3D11, same process | `d3d11_bridge_probe`: Remix and DXVK each own a VkDevice, frame uploads to a D3D11 texture, 1.78 ms |
+| per-draw submission | 3000 instances behind the camera cost 0.73 ms (~0.24 us/draw) under plain wine; batching is an optimisation |
+| render rate | 21 fps native, 48 XeSS Quality, 60.65 XeSS Performance (= game cap) at 2580x1080 |
+
+**Corrections recorded against earlier entries in this file** (all were measurement or setup errors, not API limits):
+- "All three extraction routes fail" was wrong: our probe registered its own swapchain-less device *after* `Startup`,
+  displacing the presenting device, so `FINAL_COLOR` copied an empty backbuffer. Order and sizing rules are in
+  LIVE_TRANSFER.md.
+- "53 fps at 2580x1080" was the silent DLSS-on-AMD fallback, i.e. already upscaled. Native is 21 fps.
+- "Config has no effect" was a filename problem: the runtime resolves `rtx.conf`/`dxvk.conf`/`user.conf` relative to
+  its CWD, or `DXVK_CONFIG_FILE`. Most earlier option experiments were run against a conf that was never read.
+- "Frame generation is impossible on Linux/AMD" was wrong. `lsfg-vk` and OptiScaler/FSR4-FG exist; per the vision,
+  `lsfg-vk` is excluded and the desktop route is a DX12 present takeover (unbuilt).
+- The install record's hash was stale: the game's `d3d11.dll` is `a16e820e…`, byte-identical to a fresh build of HEAD.
+
+**Next goals** (acceptance criteria in VISION.md): (1) in-game host with a static scene behind `NIER_REMIX=1`;
+(2) live draw stream with a hash-keyed cache; (3) UI fallback; (4) quality pass — sky/ambient/emissive/streaks, which
+needs no game and should run in parallel; (5) desktop presets (RT default, PT option); (6) frame generation last.
+
 ## Checkpoint — 2026-10-27 evening: the frame can leave the runtime, and it was our bug
 
 **Live Remix unknown (a) is answered — yes, and the previous session's "all copy routes fail" conclusion is
