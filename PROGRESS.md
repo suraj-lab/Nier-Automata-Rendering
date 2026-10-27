@@ -17,9 +17,11 @@ wrong.** Full write-up and measurements: [LIVE_TRANSFER.md](analysis/LIVE_TRANSF
 - Measured: copy `ok=1`, mean luma 0.4522, non-black 0.9996 at 2580x1080; identical to a direct backbuffer
   read; readback control (`ColorFill` green) reads exactly 0.7152, so the instrument is trustworthy;
   copy+readback **0.49 ms/frame** at 11.1 MB (0.21 ms at 3.8 MB).
-- **Native framerate, first valid number at a real resolution: 53 fps** for the textured camp scene
-  (2.7M triangles, 190 textures, 2580x1080, no denoise). 57 fps at 430x180 where the probe's own 16 ms hold
-  caps it. Live is viable on this card.
+- **Framerate, corrected the same evening: native 2580x1080 is 21 fps**, not 53. The 53-60 fps figures came
+  from runs with no conf applied, where `rtx.dlssPreset = On` requests DLSS, DLSS does not exist on AMD, and the
+  runtime silently falls back to a lower internal render resolution - they were already upscaled. With conf
+  verified applied (`DXVK_LOG_LEVEL=debug`): **native 21 fps, XeSS Quality (preset 3) 48 fps** on the textured
+  camp scene (2.7M triangles, 190 textures). Live is still viable, but at XeSS-level render scale, not native.
 - Runtime version question settled: Portal RTX's `.trex/d3d9.dll` and public **remix-1.6.1** are the same
   build family (same size, 322 differing 4K blocks). The 1.6.1 PDB names `CopyRenderingOutput`,
   `GetExternalSwapchain`, `GetVkImage`, `SetDefaultOutput`, `RegisterD3D9Device` and has **no**

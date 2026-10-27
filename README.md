@@ -12,7 +12,7 @@ hashes, rollback chain, verified facts, next steps); its top "Checkpoint" sectio
 | Startup settings | `NIER_RENDER.ini` selects Native / Custom75 for the next launch; honest startup status. |
 | In-game menu | **Installed, live-tested:** Insert panel, save-for-next-launch, mouse/camera blocked while open. |
 | RTX Remix | **Textured** path-traced stills from one F9 capture (190 albedo textures, 2.74M triangles). Not live in the game. |
-| Remix live in NieR | **Transfer solved** (2026-10-27 evening): `dxvk_CopyRenderingOutput(FINAL_COLOR)` returns the real frame at 0.49 ms/frame (1080p) once our own D3D9 device is created *and registered before* `Startup`; **53 fps** path-traced at 2580x1080. See [LIVE_TRANSFER.md](analysis/LIVE_TRANSFER.md). Remaining: live draw stream, compositing, UI. |
+| Remix live in NieR | **Transfer solved** (2026-10-27 evening): `dxvk_CopyRenderingOutput(FINAL_COLOR)` returns the real frame at 0.49 ms/frame (1080p) once our own D3D9 device is created *and registered before* `Startup`; **21 fps native / 48 fps with XeSS Quality** at 2580x1080. See [LIVE_TRANSFER.md](analysis/LIVE_TRANSFER.md). Remaining: live draw stream, compositing, UI. |
 | Visual stack | LodMod + WAX texture injection; 289 textures active. Special K quarantined. |
 | DLSS 5 NR | Parked: blocked on a legitimately obtained `nvngx_dlssnr.dll`. |
 | Frame generation / FPS uncap | Not pursued; native 60 FPS cap kept (research in `analysis/FAR_*.md`). |

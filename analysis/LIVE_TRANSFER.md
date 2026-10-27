@@ -52,7 +52,9 @@ Order that works: **create D3D9 → `CreateDeviceEx` with a real swapchain at th
 | readback control (`ColorFill` green, then read) | luma 0.7152 = exactly green's Rec.709 luma |
 | copy + readback cost, 3.8 MB | 0.21 ms/frame |
 | copy + readback cost, 11.1 MB (2580x1080) | 0.49 ms/frame |
-| path-traced scene fps, 2580x1080, 2.7M tris, 190 textures | **53 fps** |
+| path-traced scene fps, output 2580x1080, 2.7M tris, 190 textures, **native** (upscalerType=0) | **21 fps** |
+| same scene, XeSS Quality (preset 3) | **48 fps** |
+| same scene, no conf (= DLSS requested, unavailable on AMD, silently falling back to a lower internal render resolution) | ~60 fps, i.e. **already upscaled** |
 | path-traced scene fps, 430x180 | 57 fps (probe's 16 ms hold floor) |
 
 The readback control matters: without it, "the copy is black" and "our readback is broken" are
@@ -61,6 +63,13 @@ indistinguishable, and that ambiguity is what produced the wrong conclusion last
 Probe controls added (all opt-in, default output unchanged): `REPROBE_PRE_REGISTER`,
 `REPROBE_INTEROP_CONTROL`, `REPROBE_INTEROP_BACKBUFFER`, `REPROBE_INTEROP_LOOP`, `REPROBE_INTEROP_CLEAR`,
 `REPROBE_INTEROP_REGISTER` (default off now). Exe: `5b70560f…`.
+
+### Correction (2026-10-27 late): the 53 fps figure was upscaled
+
+The first fps numbers in this file were taken with no conf file applied, where `rtx.dlssPreset = On` requests
+DLSS, DLSS is unavailable on AMD, and the runtime falls back to a lower internal render resolution. So 53-60 fps
+was **not** native. Measured properly (conf verified applied via `DXVK_LOG_LEVEL=debug`): native 2580x1080 is
+21 fps, XeSS Quality is 48 fps. The transfer cost (0.49 ms) and everything else in this file are unaffected.
 
 ## The runtime version question, settled
 

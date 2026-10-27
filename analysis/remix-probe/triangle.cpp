@@ -444,6 +444,41 @@ bool pre_register_device(remixapi_Interface& api, HWND hwnd, unsigned w, unsigne
     interop_pre_registered=api.dxvk_RegisterD3D9Device(device)==0;
     return interop_pre_registered;
 }
+// SetConfigVariable is the API route to options, and the one the in-game path needs. Note the file route does
+// work: the runtime resolves its option layers as paths relative to its own CWD ("Attempting to parse option
+// layer: rtx.conf" in the debug log), so a conf only applies if it is literally named rtx.conf/dxvk.conf/
+// user.conf there, or DXVK_CONFIG_FILE points at it. Confirmed 2026-10-27: rtx.conf in the run dir applied,
+// the same file renamed probe.conf did nothing.
+int apply_conf_file(remixapi_Interface& api) {
+    const char* path=getenv("REPROBE_CONF");
+    if (!path || !api.SetConfigVariable) return -1;
+    FILE* in=std::fopen(path,"r");
+    if (!in) return -1;
+    FILE* log=std::fopen("conf.txt","w");
+    int applied=0, lines=0;
+    char line[512];
+    while (std::fgets(line,sizeof(line),in)) {
+        ++lines;
+        char* hash=std::strchr(line,'#'); if (hash) *hash='\0';
+        char* eq=std::strchr(line,'=');  if (!eq) continue;
+        *eq='\0';
+        std::string key(line), value(eq+1);
+        auto trim=[](std::string& t) {
+            const auto b=t.find_first_not_of(" \t\r\n");
+            const auto e=t.find_last_not_of(" \t\r\n");
+            t = (b==std::string::npos) ? std::string() : t.substr(b,e-b+1);
+        };
+        trim(key); trim(value);
+        if (key.empty()) continue;
+        const int rc=static_cast<int>(api.SetConfigVariable(key.c_str(), value.c_str()));
+        if (log) std::fprintf(log,"%s = %s -> %d\n",key.c_str(),value.c_str(),rc);
+        if (!rc) ++applied;
+    }
+    std::fclose(in);
+    if (log) { std::fprintf(log,"# %d/%d lines applied from %s\n",applied,lines,path); std::fclose(log); }
+    return applied;
+}
+
 // Does the runtime hand us an image we could present ourselves? Only meaningful after Startup with
 // forceNoVkSwapchain=1; with the flag off this returns success and a NULL image, so judge by the handle.
 void run_swapchain_probe(remixapi_Interface& api) {
@@ -620,6 +655,12 @@ int render(const wchar_t* dll, bool hold) {
     if (getenv("REPROBE_PRE_REGISTER")) {
         const bool ok=pre_register_device(api,window.handle,static_cast<unsigned>(window_w),static_cast<unsigned>(window_h));
         stage("pre-register"); std::printf("pre-register %s\n",ok?"ok":"FAILED");
+    }
+    // Config first: several options are read when the device and options resolve, and the file route proved
+    // inert, so everything goes through SetConfigVariable.
+    if (const char* conf=getenv("REPROBE_CONF")) {
+        const int applied=apply_conf_file(api);
+        stage("config"); std::printf("config: %d keys applied from %s\n",applied,conf);
     }
     stage("Startup");
     const remixapi_ErrorCode startup_rc=api.Startup(&startup);

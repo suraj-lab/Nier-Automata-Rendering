@@ -13,10 +13,19 @@ export XAUTHORITY="${XAUTHORITY:-$HOME/.Xauthority}"
 WS=${WS:-10}; SHOT_FRAME=${SHOT_FRAME:-60}; HEIGHT=${HEIGHT:-540}
 [ -f "$RUNTIME" ] || { echo "missing Remix runtime: $RUNTIME" >&2; exit 2; }
 here=$(cd "$(dirname "$0")" && pwd); A=$(cd "$here/.." && pwd)
+# Until 2026-10-27 evening this script copied NO conf, so every desktop run silently used the runtime's
+# defaults (upscalerType=1=DLSS, which cannot work on this AMD card, and no NRD fix). CONF selects one.
+CONF=${CONF:-$here/rtx.no-ngx.conf}
 run=$A/runtime/remix-probe/desktop-run
 scene=$1; hold=${2:-40}
 rm -rf "$run"; mkdir -p "$run/Screenshots"
 cp "$A/runtime/remix-probe/remix-scene.exe" "$run/"; cp "$scene" "$run/scene.bin"
+# rtx.conf next to the exe is not read by this runtime; the probe applies these keys through
+# remixapi_SetConfigVariable instead (REPROBE_CONF, relative to the run dir).
+[ -f "$CONF" ] && { cp "$CONF" "$run/probe.conf"; echo "conf: $(basename "$CONF")"; } || echo "WARNING: no conf at $CONF"
+# The runtime resolves option layers as paths relative to its CWD (log: "Attempting to parse option layer:
+# rtx.conf" -> "No config file found"), so DXVK_CONFIG_FILE with an absolute Windows path is the reliable route.
+[ -f "$CONF" ] && export DXVK_CONFIG_FILE="Z:$(printf '%s' "$run/probe.conf" | sed 's|/|\\|g')"
 [ -d "${scene%.bin}_textures" ] && cp -r "${scene%.bin}_textures" "$run/scene_textures"
 echo "run dir: $run ($(find "$run/scene_textures" -name '*.dds' 2>/dev/null | wc -l) textures)"
 cd "$run"
