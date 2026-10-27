@@ -1,8 +1,104 @@
 # NieR:Automata Rendering — Progress & Resume
 
-Last updated: 2026-10-26/27. **Start at the checkpoint below.** Two things changed this session: Remix now renders
-NieR geometry *with the game's own textures*, and "live Remix in NieR" went from "judged not viable" to "architecture
-proven to exist, three unknowns left".
+Last updated: 2026-10-27 (evening). **Read the first checkpoint: the transfer blocker is gone.**
+
+## Checkpoint — 2026-10-27 evening: the frame can leave the runtime, and it was our bug
+
+**Live Remix unknown (a) is answered — yes, and the previous session's "all copy routes fail" conclusion is
+wrong.** Full write-up and measurements: [LIVE_TRANSFER.md](analysis/LIVE_TRANSFER.md). Summary:
+
+- `dxvk_CopyRenderingOutput(FINAL_COLOR)` copies the **registered device's backbuffer**
+  (`rtx_remix_api.cpp`, `copyRenderingOutput`), and `dxvk_RegisterD3D9Device` **replaces** the presenting device.
+  Our probe called `Startup` first (which creates and registers the presenting device), then registered a
+  second, never-presented device with a 64x64 swapchain. The copy faithfully copied an empty backbuffer.
+- Working order: `dxvk_CreateD3D9` -> `CreateDeviceEx` with a real swapchain at render size ->
+  `RegisterD3D9Device` -> `Startup` (returns `ALREADY_EXISTS`, expected) -> submit -> `Present` -> copy into a
+  target **sized from `GetBackBuffer()->GetDesc()`**.
+- Measured: copy `ok=1`, mean luma 0.4522, non-black 0.9996 at 2580x1080; identical to a direct backbuffer
+  read; readback control (`ColorFill` green) reads exactly 0.7152, so the instrument is trustworthy;
+  copy+readback **0.49 ms/frame** at 11.1 MB (0.21 ms at 3.8 MB).
+- **Native framerate, first valid number at a real resolution: 53 fps** for the textured camp scene
+  (2.7M triangles, 190 textures, 2580x1080, no denoise). 57 fps at 430x180 where the probe's own 16 ms hold
+  caps it. Live is viable on this card.
+- Runtime version question settled: Portal RTX's `.trex/d3d9.dll` and public **remix-1.6.1** are the same
+  build family (same size, 322 differing 4K blocks). The 1.6.1 PDB names `CopyRenderingOutput`,
+  `GetExternalSwapchain`, `GetVkImage`, `SetDefaultOutput`, `RegisterD3D9Device` and has **no**
+  `GetInteropInfo`/`clientDoneSemaphore`: the interop-image path is the **NVIDIA-internal** runtime
+  (`rtx-remix-minecraft` compiles against remixapi **0.16.0**; ours is 0.6.5), not the public release.
+  Remix **1.6 added Windows-on-Arm** runtime support with public ARM64/ARM64EC artifacts, which makes the
+  laptop (RTX Spark N1X) a native-NVIDIA Remix host for the first time.
+- Probe controls added (opt-in, defaults unchanged): `REPROBE_PRE_REGISTER`, `REPROBE_INTEROP_CONTROL`,
+  `REPROBE_INTEROP_BACKBUFFER`, `REPROBE_INTEROP_LOOP`, `REPROBE_INTEROP_CLEAR`; `REPROBE_INTEROP_REGISTER` now
+  defaults **off**. Exe `5b70560f…`, 27 CPU gates + the probe build green.
+
+**What live now needs, in order:** (1) feed NieR's live draw stream instead of a converted capture — cache
+materials/meshes/textures by hash, update camera and instance transforms per frame (the probe already submits
+2.7M triangles per frame at 53 fps, so the renderer side is proven); (2) composite: copy -> sysmem -> D3D11
+texture -> fullscreen quad in our own Present hook (cost measured above); (3) the one unsolved design problem
+is **UI**, which is D3D11 in the game frame and absent from Remix's output.
+
+## Checkpoint — 2026-10-27 (CPU-only session: interop API decoded; desktop runs restricted)
+
+No game, no GPU. Everything below came from reading the shipped binary and its reference implementation.
+Full write-up: [INTEROP_API.md](analysis/INTEROP_API.md). Host constraint that shaped the session: the
+desktop shares monitors with the user's work machine, so desktop runs must be scheduled with them.
+
+**The interop-image route is not available in the runtime we render with.** `remixapi_InitializeLibrary`
+(`0x180214d40`, 0x160 bytes) fills exactly **22** interface pointers, `+0x00..+0xa8`, matching the public
+header 1:1 and ending at `SetCameraMediumMaterial`. Slot `+0xb0` (`dxvk_GetInteropInfo`) is never written,
+and the same function only accepts `InitializeLibraryInfo.version` with major 6
+(`(version & 0xffffffff0000) == 0x60000`). So `dxvk_GetInteropInfo` and `StartupInfo.interopImage` — the two
+extensions the Minecraft bridge relies on (runtime API 0.16.0) — cannot exist here. The 2026-10-26 note
+"architecture proven to exist, three unknowns left" is right about the architecture and wrong about
+availability: that path needs a newer runtime (Toolkit or the Minecraft mod's), not more code from us.
+
+**The copy route is confirmed as the available one, and its contract is now known**
+(`dxvk_CopyRenderingOutput` @ `0x18020eeb0`): returns 7 before `Startup`, 3 for a null/invalid surface,
+pulls the DXVK device out of the destination surface (`[surface+0x48] -> [+0x40]`) so the surface must come
+from the device `dxvk_CreateD3D9` returned; accepts types 0/1/2/4, gates 3 behind a one-shot flag, and
+**refuses GUI (4) when `combineGuiInFinalColor` was set**; synchronous, takes an internal mutex, retries
+once. `interop_probe.h` already orders the calls this way.
+
+**`dxvk_GetExternalSwapchain` succeeds with a null image** unless `forceNoVkSwapchain` was set at Startup:
+it writes the semaphores regardless and returns 0. Judge that route by the handle, not the error code.
+`dxvk_GetVkImage` (`0x18020f400`) returns the *surface's* backing VkImage (same-`VkDevice` hosts only), so
+it cannot hand a second `VkDevice` Remix's final image.
+
+**Denoise: root cause found, and it was our own config — see the section below.** NRD.dll is loaded
+dynamically (one `"NRD.dll"` string at `0x190c26f48`, std::filesystem path, loader call through the IAT
+slot `0x1806b32b8` at `0x1804e2bf8`), and it loads successfully: the runtime logs `Unable to load NRD` or
+`Incorrect version of NRD` at error level on failure, and neither appears in any of the 61 stored run
+dumps. The real blocker is `rtx.useDenoiserReferenceMode = True` in `rtx.no-ngx.conf`, which the source's
+guide-allocation gate treats as "do not denoise".
+
+**New tools** (both CPU-only, no third-party modules):
+- `analysis/tools/pe_info.py` — exports, imported DLLs, and resolved import slots
+  (`--imports=<substr>`), since the box has no pefile and the REA MCP is not wired to Ghidra here.
+- `analysis/tools/xref.py` — RIP-relative cross-references to a string or VA, each hit re-decoded with
+  objdump so a false positive is visible. This is how `useDenoiser` (only reachable in the option-registry
+  initialiser) and the `NRD.dll` load site were found.
+
+**`run_desktop.sh` teardown fixed.** Killing the process group left `wineserver` alive with its windows
+still mapped on the user's screen (observed twice on 2026-10-27). Teardown now stops the prefix's
+wineserver and prints an explicit warning if a probe window survived; it also prints `metrics.txt` and
+`interop.txt` after every run.
+
+**Environment facts to not rediscover** (each cost time on 2026-10-27):
+- Proton on this desktop **drops the child's stdout entirely** — a 12-line `hello.exe` printing to both
+  stdout and stderr produced nothing, `rc=0`. Hence `metrics.txt`/`interop.txt`; never debug via stdout.
+- **Wine maps its window on the focused monitor.** `xrandr --primary` does not influence placement (it only
+  affects the mode list a Wine game offers), so it cannot keep a probe window off a physical monitor.
+- **`hyprctl keyword` is unavailable on this Lua-parser Hyprland** ("keyword can't work with non-legacy
+  parsers. Use eval"), so a window rule cannot be added from a shell; it needs the Lua config or `eval`.
+- A **headless Hyprland output works** (`hyprctl output create headless` → `HEADLESS-1`, layout unchanged,
+  physical modes byte-identical, removed cleanly with `hyprctl output remove HEADLESS-1`) — but a window is
+  still placed on the focused physical monitor, so it does not isolate a run by itself.
+- The desktop session can be **locked**, in which case a probe run creates `metrics.txt` and exits with no
+  window and no rtx-remix log. That is the fingerprint of "locked", not of a broken probe.
+
+**Queued, needs one GPU run each, in this order:** (1) native fps — `metrics.txt` already emits
+`FPS <n> frames / <s> = <fps>` every 30 frames; (2) `REPROBE_INTEROP=1` for the copy route;
+(3) the `forceNoVkSwapchain` + `GetExternalSwapchain` route, judged by a non-zero handle.
 
 ## Checkpoint — 2026-10-26/27 (start here)
 
@@ -823,6 +919,706 @@ cross-device import) -> replay NieR's UI draws on top -> present through the gam
 **Unknowns, in order of risk:** (a) two Vulkan devices in one process under Proton sharing an image at all;
 (b) framerate once it runs — no native measurement exists yet, the 0.52 fps figure came from the ARM laptop and is
 not evidence; (c) UI replay cost and correctness.
+
+## Denoise root cause found (2026-10-27) — our own config disabled it
+
+The two-session mystery ("NRD never engages, five configurations, noise unchanged") is a single line in
+`rtx.no-ngx.conf`, the file every documented run uses: **`rtx.useDenoiserReferenceMode = True`**.
+
+From dxvk-remix source (sparse clone of `main`, `src/dxvk/rtx_render/`):
+
+```cpp
+bool Resources::needsNrdDenoisingGuideResources() const {   // rtx_resources.cpp:469
+  return !device()->getCommon()->metaRayReconstruction().useRayReconstruction() &&
+         RtxOptions::useDenoiser() &&
+         !RtxOptions::useDenoiserReferenceMode();
+}
+```
+
+and `RtxContext::dispatchDenoise` (rtx_context.cpp:1712) gates on the *allocated* resources:
+
+```cpp
+const bool shouldDenoise = getResourceManager().areNrdDenoisingGuideResourcesAllocated();
+if (!shouldDenoise) { denoiser0.releaseResources(); ... return; }
+```
+
+So with reference mode on, the guides are never allocated, every denoiser is released and the function
+returns before any dispatch. `rtx.useDenoiser` then has no observable effect — exactly the 1-float16-ULP
+difference recorded on 2026-10-26. `useDenoiserReferenceMode` appears at 12 sites and *every* one of them
+disables the realtime/NRD path (`rtx_resources.cpp:472`, `rtx_context.cpp:1076` and `:1886`,
+`rtx_rtxdi_rayquery.cpp:399` and `:429`, `rtx_composite.cpp:430`), so no configuration that kept it True
+could ever have denoised. The 2026-10-26 tests that "changed nothing" all ran with it True.
+
+Two things this rules out, for the record: NRD.dll does load. `rtx_nrd_context.cpp` logs
+`Unable to load NRD` or `Incorrect version of NRD` at error level on failure, and **neither appears in any
+of the 61 stored run dumps** (checked across all fields, not just stderr). So the DLL load and the NRD
+version check both passed; only the option gate was closed.
+
+Fixed in `rtx.no-ngx.conf` (`useDenoiserReferenceMode = False`), with the reason inline. **Unverified
+until one GPU run**; the check is that the still's noise drops below the 0.28 measured on the v3 frame,
+since `noise.py` now defines the number to compare against.
+
+## Material and alpha semantics, from the API implementation (2026-10-27)
+
+`rtx_remix_api.cpp:429-434` is the whole story for how the API's opaque material is built:
+
+```cpp
+tobool(extOpaque->useDrawCallAlphaState),   // OpaqueMaterial::UseLegacyAlphaState
+tobool(extOpaque->blendType_hasvalue),
+extOpaque->blendType_hasvalue ? static_cast<BlendType>(extOpaque->blendType_value)
+                              : BlendType::kAlpha,          // <- default is ALPHA, not opaque
+tobool(extOpaque->invertedBlend),
+static_cast<AlphaTestType>(extOpaque->alphaTestType),
+extOpaque->alphaReferenceValue,
+```
+
+Consequences for the stills path:
+
+- **Leaving `blendType_hasvalue` at 0 does not mean opaque** — it means `kAlpha`, i.e. blend by the
+  albedo texture's alpha. That is why an unset material can render invisible when the map's alpha is
+  mostly zero, and it is consistent with the measured 0/1/2 behaviour (0 transparent, 1 alpha-blend,
+  2 opaque) recorded on 2026-10-26.
+- `useDrawCallAlphaState` only makes sense for a D3D9 client, where the draw's own alpha state exists.
+  An API-only client has no draw state, so it must stay 0 and everything must be stated explicitly —
+  which is what `scene_from_frame.py` → `blendType_value = 2` currently does for every draw.
+- Cutouts (foliage, hair, grilles) should therefore be `blendType` opaque **plus** `alphaTestType` and
+  `alphaReferenceValue`, not blend 1. Blend 1 on a cutout card gives soft, sorting-dependent edges and
+  the overdraw streaks visible in the v3 still; alpha test gives hard cutouts, which is what NieR's
+  draws actually do in the game.
+- **`AlphaTestType` values are now pinned** — `rtx_materials.h:77-84` asserts them equal to `VkCompareOp`:
+  `kNever=0, kLess=1, kEqual=2, kLessOrEqual=3, kGreater=4, kNotEqual=5, kGreaterOrEqual=6, kAlways=7`,
+  and the default is `kAlways` (7), i.e. no test. A cutout therefore wants `alphaTestType = 4` (Greater)
+  with a sensible `alphaReferenceValue`, not blend 1.
+- `blendType` / `alphaTestType` / `useDrawCallAlphaState` are **material fields, not conf keys** — confirmed
+  against the recovered option list below, where all three are absent. They can only be set through the C
+  API, so the fix belongs in `scene_from_frame.py` and the probe, not in `rtx.conf`.
+
+## Shader blobs no longer depend on launch options (2026-10-27, late)
+
+`shader_capture.h` now defaults its output directory to **`<exe dir>\NIER_CAPTURE\shaders`** instead of
+requiring `NIER_SHADER_DIR`. The 14:0x game capture produced 3 185 draws but **zero** blobs because the
+variable never reached the process — the hook was fine, the delivery method was not. Behaviour now:
+`NIER_SHADER_DIR=<path>` still overrides, `NIER_SHADER_DIR=off` disables the hook, and with neither set a
+normal Steam launch records bytecode.
+
+Verified two ways before deploying: the gate `test_shader_capture.py` passes, and a manual mock run with
+`NIER_SHADER_DIR` **removed from the environment** wrote 2 blobs into `<work>/NIER_CAPTURE/shaders/`
+(`ps_56944128.dxbc` 376 B, `ps_2380208.dxbc` 660 B).
+
+**Installed in the game: `d3d11.dll` = `a16e820e39db4786…`** (was `f8a416d8…`). Receipt and previous DLL in
+`backups/ingame-menu-shaderdefault-20261027T143734Z/`; `d3d11_dlaa.dll` unchanged (`3d628eb5…`).
+
+**So the next game run needs nothing but F9** — no launch options, no env. It will produce draws, per-draw
+state, `ps_hash`, **and** `ps_*.dxbc` in one go, which is everything the cutout path and the black-dress albedo
+work were waiting on.
+
+## Session end state (2026-10-27) — read this first
+
+**Installed in the game:** `d3d11.dll` = **`f8a416d8…`** (menu + capture + per-draw state + PS bytecode hook),
+`d3d11_dlaa.dll` = `3d628eb5…` untouched. Rollback: `backups/ingame-menu-state-20261027T140214Z/` with
+`receipt.json`. Two game captures exist under
+`/mnt/second/SteamLibrary/steamapps/common/NieRAutomata/NIER_CAPTURE/frame_21396979` and `frame_21565698`
+(3 276 / 3 185 draws, ~50 GB each, `ps_hash` **and** `state` present). **No `ps_*.dxbc` blobs yet** —
+`NIER_SHADER_DIR` did not reach the process, so the cutout/discard half of that capture is still unused.
+
+**Copy-type sweep — the copy path is dead for a foreign D3D9 device, not merely empty:**
+
+| `CopyRenderingOutput` type | result |
+|---|---|
+| 0 `FINAL_COLOR` | black |
+| 1 `DEPTH` | black |
+| 2 `NORMALS` | black |
+| 4 `GUI` | **fails at the copy call**, returns `vk_image=0x0` |
+
+Type 4 failing is the expected refusal (`combineGuiInFinalColor=1` makes the GUI copy illegal — decoded earlier
+from `0x18020eeb0`), which is a nice independent confirmation that the disassembly reading was right. All
+three legal types returning pure black on a surface that `dxvk_GetVkImage` maps to a real VkImage means the
+copy is not delivering content for a device we created, even after `dxvk_RegisterD3D9Device` (rc accepted) and
+`dxvk_SetDefaultOutput` (rc accepted).
+
+**New probe controls added this session** (`triangle.cpp`, exe `4d8f792f…`, rebuilt and built clean):
+`REPROBE_INTEROP_TYPE` (which copy type to request), `REPROBE_SWAPCHAIN` +
+`REPROBE_NO_VKSWAPCHAIN` (external-swapchain probe; this route **crashes**), and `dxvk_RegisterD3D9Device` is
+now called after `CreateDeviceEx` and reported as `registered=`.
+
+**Probe must be run under plain `wine`, not `proton run`, with `DISPLAY=:1` and `XAUTHORITY` set** — Proton
+drops the child's stdout and Wine needs X to create its window (`CreateWindow error 1400` otherwise). Both are
+now handled by `run_desktop.sh`.
+
+**Gates:** 28 green (19 checks + 8 probe + `test_scene_cutout.py`), `build.py --scene` clean at `4d8f792f…`.
+Nothing is committed to git — 29 files modified/untracked.
+
+**Next, in order:** (1) run the identical interop probe on the Spark (NVIDIA RTX + ARM64 runtime) — needs an
+aarch64 Windows toolchain, which is **not installed** here, so it starts with `llvm-mingw`/`lld` setup; that one
+test decides whether the copy failure is AMD/Proton-specific or inherent to the API. (2) Re-capture with
+`NIER_SHADER_DIR` reaching the process, to unblock cutouts. (3) If (1) also fails, live Remix is blocked at the
+transfer step on every documented route and the honest answer to "live" is "not with this API build".
+
+## Interop: all three documented extraction routes fail on this build (2026-10-27, measured)
+
+Three experiments, all on the desktop (9070 XT, RADV, plain wine, 430x180, textured camp scene):
+
+| route | call sequence | result |
+|---|---|---|
+| A1 | `dxvk_CreateD3D9` → `CreateDeviceEx` → render target → `CopyRenderingOutput(FINAL_COLOR)` → `GetRenderTargetData` | **ok=0, image entirely black** (mean_luma 0.0000, nonblack 0.0000) |
+| A2 | A1 + `dxvk_SetDefaultOutput(FINAL_COLOR, black)` first | `set_default_output_rc=0` (accepted), **still black** |
+| A3 | A2 + `dxvk_RegisterD3D9Device(device)` | `registered=1` (accepted), **still black** |
+| B | `StartupInfo.forceNoVkSwapchain=1` + `dxvk_GetExternalSwapchain(image, semDone, semResume)` | **crashes** — stack `remix-scene.exe+0x1456 / kernel32+0x11709 / ntdll+0x1116f`, no `swapchain.txt` written |
+
+`dxvk_GetVkImage(surface)` **does** return a non-zero handle every run (`0x5555…`), so the surface is a real
+Vk-backed D3D9 surface; only the *content* of the copy is absent.
+
+**Side effect worth noting, unverified:** registering the D3D9 device changed the measured rate from ~42 fps to
+**~59 fps** at 180p, which is suspiciously close to the probe's own 62 fps submit cap. A plausible reading is
+that Remix stopped rendering into its own swapchain once a foreign device was registered, and simply
+free-ran. That would also explain the black copy. If true it means the copy route requires Remix to keep
+owning presentation, and the *destination* surface must be one it knows about.
+
+**What this means for live Remix:** the blocker is now precisely the transfer step, not scene submission and
+not presentation. Every documented way to get the composited frame out — copy to a D3D9 surface, copy with a
+default output set, copy after registering the device, or take the external VkImage — fails or crashes on
+this runtime build.
+
+**Next discriminators:** (1) try `CopyRenderingOutput` with the other types (DEPTH, NORMALS, GUI) into the same
+surface, to see whether *any* type produces pixels — that separates "copy is broken" from "FINAL_COLOR has no
+content"; (2) run the identical probe on the Spark (NVIDIA + ARM64 runtime) to decide whether this is an
+AMD/Proton/Wine-wrapper limitation or a property of the API itself.
+
+## Desktop probe works again — and the interop probe returns its first real answer (2026-10-27)
+
+**Why every desktop run today silently produced nothing:** this shell has no `DISPLAY`/`XAUTHORITY`, so Wine
+failed with `CreateWindow error 1400` *after* initialising the runtime fine — and Proton drops the child's
+stdout, so the message never surfaced. `run_desktop.sh` now exports `DISPLAY=${DISPLAY:-:1}` and
+`XAUTHORITY=${XAUTHORITY:-$HOME/.Xauthority}`. **Run the probe under plain `wine`, not `proton run`:** wine
+preserves stdout, so `stage()` lines and the `Interop:` line are visible live (1429 lines captured vs none).
+
+**First native desktop numbers** (`remix-scene.exe`, textured camp scene, 2.7M triangles, 430x180):
+**~42 fps steady** (41.3 -> 42.1 over 90 s). Note the probe's own `hold_delay_ms=16` floors it near 62 fps, so
+42 fps is real GPU-bound throughput at 180p — the first valid framerate datapoint for this card, and the
+baseline for "is live viable" once scaled to the real resolution.
+
+**Interop probe result — the mechanism works, the pixels do not (yet):**
+
+```
+ok=0 stage=copied image is black vk_image=0x5555725649d0 mean_luma=0.0000 nonblack=0.0000 size=430x180
+```
+
+Reading it precisely: `dxvk_CreateD3D9`, `CreateDeviceEx`, `CreateRenderTarget`, `CreateOffscreenPlainSurface`,
+`dxvk_CopyRenderingOutput(target, FINAL_COLOR)`, and `dxvk_GetVkImage` **all succeeded** — and `GetVkImage`
+returned a **non-zero handle** (`0x5555725649d0`). The only failure is that the copied surface is entirely
+black. So the cross-API plumbing is real; what is missing is content in the copy.
+
+**Two concrete next experiments, in order:**
+1. Call `dxvk_SetDefaultOutput(FINAL_COLOR, …)` before Present — the API's member exists and has never been
+   exercised by us; the copy may only be valid once the runtime knows what its default output is.
+2. Start with `StartupInfo.forceNoVkSwapchain = 1` and use `dxvk_GetExternalSwapchain(out_vkImage,
+   semRenderingDone, semResume)`, judging success by a **non-zero image** (it returns success with a null
+   image when the flag was not set).
+
+## Deployed: today's capture build is now installed in the game (2026-10-27T14:02Z)
+
+`d3d11.dll` in the game is now **`f8a416d858cf3001e66b2d17…`** (was `b32f6f5f76e0d773…`). It adds, over the
+previous install: per-draw **blend / depth-stencil / rasterizer state + DSV format** (`draw_capture.h`
+`Record::State`, read with ordinary context getters — no vtable hooks) and the **pixel-shader bytecode hook**
+(`shader_capture.h`, opt-in via `NIER_SHADER_DIR`). `d3d11_dlaa.dll` is unchanged (`3d628eb5…`).
+
+Rollback chain: `backups/ingame-menu-state-20261027T140214Z/` with `receipt.json` (hashes of the replaced
+`d3d11.dll` `b32f6f5f…`, `NIER_RENDER.ini`, `NIER_DLAA.ini`). Restore is one copy:
+
+    cp backups/ingame-menu-state-20261027T140214Z/d3d11.dll \
+       /mnt/second/SteamLibrary/steamapps/common/NieRAutomata/d3d11.dll
+
+Capture environment: shader blobs are written only when `NIER_SHADER_DIR` is set, and because the hook runs
+inside Wine it needs a **Windows path** — Steam launch options:
+`NIER_SHADER_DIR=Z:\home\suraj\Projects\Nier-Automata-Rendering\analysis\runtime\shader-capture %command%`.
+Host dir already created. F9 captures keep landing in the game directory as `frame_<tick>/`.
+
+**Risk to watch on the first run:** `shader_capture` installs a vtable hook on `CreatePixelShader`, which has
+only been exercised against wined3d in the mock, never against DXVK or the real game. If the game fails to
+start or crashes early, the rollback above is the first thing to try — and that result is itself informative.
+
+## NieR graphics bootstrap located via REA snapshot (2026-10-27)
+
+Snapshot of the **game** now exists (`analysis/snapshots/NIER_game_20261027.json`, `target.sha256 = 44ee2dc0…`,
+`entries: 0` by design — REA stores the binding, the dossiers are cached in the provider). Each `rea function`
+query takes ~170 s and writes ~0.5–1.2 MB to `analysis/runtime/rea/fn_<addr>.json`.
+
+**Found, with decompiled evidence:**
+
+- `FUN_14025c590` = **device bootstrap**. Its callees include `D3D11.DLL::D3D11CreateDevice` and
+  `DXGI.DLL::CreateDXGIFactory`; it takes an **HWND** parameter; it reads `%sGraphic.ini` with
+  `GetPrivateProfileStructA("Graphic","VideoCard",…)` and `("Graphic","Output",…)`, i.e. the same ini the
+  display work touched. Caller chain: `0x14025c590` ← `FUN_1402530f0` ← `FUN_1402496f0`.
+- `FUN_14025e300` = **adapter selection**, decoded from its vtable offsets (no symbols needed):
+  `(**(code **)(**(longlong **)(param_1 + 0x50) + 0x38))(factory, i, &adapter)` loops until
+  `-0x7785fffe` (**DXGI_ERROR_NOT_FOUND**) — offset **0x38 = slot 7 = IDXGIFactory::EnumAdapters**; then
+  `(**(code **)(*adapter + 0x40))(adapter, &desc)` — offset **0x40 = slot 8 = IDXGIAdapter::GetDesc**, filling
+  a `DXGI_ADAPTER_DESC` to match the `VideoCard` ini entry. `param_1 + 0x50` holds the DXGIFactory.
+- Eliminated: `FUN_14025bf50` (16 instrs), `FUN_140253040` (40 instrs), `FUN_14025e4f0` (no indirect calls) —
+  none touch graphics.
+
+**Not yet found: swapchain creation and the Present call site.** `FUN_14025c590` contains exactly one indirect
+call (a release-style `(**(code **)*obj)(obj,1)`), so the swapchain is **not** created there; the remaining
+candidates are its other callees (`0x1402586f0`, `0x14025c360`, `0x140255600`, `0x1402615f0`, `0x14026ef00`).
+The next cheapest signal is an indirect call at factory vtable offset **0x50 = slot 10 = IDXGIFactory::CreateSwapChain**.
+
+**Method cost, for planning:** hand-walking a 37 856-procedure graph at ~170 s per query is not viable. Batch
+3–4 candidate functions per call, and prefer vtable-offset decoding in the pseudocode over name searching —
+no symbol in this binary is named `SwapChain` or `Present`, so name search returns zero by construction.
+
+## Prior art: nobody has done this, and the closest attempt fails at presentation (2026-10-27, researched)
+
+A sourced research pass (tags: EVIDENCE / INFERENCE / NO EVIDENCE) settles the "has anyone done it" question:
+
+- **The only published non-D3D9 Remix host is NVIDIA's own `rtx-remix-minecraft`** — a Fabric mod reaching the C
+  API through a JNI shim. It is **Windows-only and RTX-only**: "the JNI bridge is compiled with MSVC, so there is
+  no Linux or macOS build", and it requires "an NVIDIA RTX GPU, 30-series or newer"
+  (`docs/GETTING_STARTED.md`). Not a route for AMD or Proton.
+- **No D3D11 or D3D12 host exists, official or community**, and NVIDIA closed the request **not planned**
+  (rtx-remix issue #322): "needing to be able to reconstruct a scene based on the data passed to a game's
+  arbitrary shaders" and "our current priority is to keep focus on DX9 games". Our capture approach sidesteps
+  exactly the objection they name — worth remembering, because it is the only reason this is not simply
+  disallowed by design.
+- Every other public `remixapi` consumer found is D3D9 (l4d2-rtx/p2-rtx via `bridge_initRemixApi`,
+  NVIDIA's bridge-remix, Kim2091's wrappers), and the Toolkit is an asset authoring app, not a host.
+- **The proposed presentation route is D3D9-shaped by construction.** `dxvk_CopyRenderingOutput` takes an
+  `IDirect3DSurface9*`, so pixels must land in a surface from a Remix-created D3D9 device and then cross to the
+  game's DXVK D3D11 device — a combination no source documents (**INFERENCE**, moderate).
+- **The closest existing attempt fails at presentation, before AMD is even involved:** under Proton on NVIDIA, the
+  Minecraft host initialises, loads NGX and draws the Remix UI, but "the game scene is black"; the reporter asks
+  what the runtime needs from the presentation path under Wine/Proton (issue #1122). The single AMD-on-Linux
+  datapoint is a startup crash on an RX 7900 XTX, closed not planned (issue #1029) — a fork that "does not
+  support Linux", so neither side is a controlled test.
+- **NO EVIDENCE** anywhere of Remix path tracing succeeding under Wine/Proton on AMD, or of a D3D11-injected Remix
+  feed. **Demonstrated working under Proton:** D3D11 proxy/overlay hooks (ReShade), and D3D9 Remix mods on NVIDIA.
+
+**What that changes:** the D3D11 `Present` hook is the cheap, well-precedented step (ReShade, SpecialK, and for
+this game specifically `xkk-i/nier-mod-loader` already ships a `d3d11.dll` proxy). The chain that is most likely
+to die is scene → frame → **cross-device transfer** → backbuffer, and we are attempting it on hardware where the
+one prior attempt already stalls. That should be priced in to any decision to pursue live Remix rather than
+stills.
+
+## Snapshot provenance: corrected, and NieR's graphics-init anchors found (2026-10-27)
+
+**Correction to a premise I introduced this session.** I briefly treated `analysis/snapshots/*.json` as snapshots
+of the *game* and built a hash gate to check them against `NieRAutomata_win10.unpacked.exe`. They are not:
+both record `target.sha256 = f1c77c58…` and `executable_role: shared-library`, and they are named
+`NIER_DLAA_*` because they are snapshots of the **closed mod DLL**. That is what earlier sessions used them
+for (shader extraction, camera/motion continuation, FSR4 routing, the upscaling patch), so **those conclusions
+are unaffected and stand**. The real consequence is narrower: **there is no snapshot of the game exe**, so any
+NieR-side question (present/HUD) needs a fresh analysis rather than a `--snapshot` query.
+
+Also worth knowing: passing `--snapshot` **rewrote** `NIER_DLAA_upscaling_offline_20261019.json` (mtime
+2026-10-27 11:55, 24 452 904 → 24 461 085 bytes). `analysis/snapshots/` is gitignored so git is unaffected, but
+that file is no longer byte-identical to what earlier sessions analysed.
+
+**NieR graphics-init anchors (verified by disassembly, not by report).** The exe imports exactly two graphics
+entry points and no `Present` — Present is a COM vtable call, so it has no IAT entry:
+
+| import | IAT slot | call site | instruction |
+|---|---|---|---|
+| `dxgi.dll!CreateDXGIFactory` | `0x140c1b720` | **`0x14025c6b8`** | `call [rip+0x9bf062]`, preceded by `lea rcx,[0x140db1478]` (an IID) and `lea edx,[rsi+0x50]`, followed by `test eax,eax; js` |
+| `d3d11.dll!D3D11CreateDevice` | `0x140c1b710` | **`0x14025c95c`** | `call [rip+0x9bedae]`, after `mov QWORD PTR [rsp+0x68],1` and `xor edx,edx` |
+
+Both live in one function region (`0x14025c6xx-0x14025c9xx`), i.e. a single graphics-init routine creates the
+DXGI factory and then the device. The swapchain and the Present call hang off that, and must be found by
+following the factory's vtable, not by import xref.
+
+**Tool bug fixed:** `analysis/tools/xref.py` assumed every rip-relative operand belonged to a 3-byte `lea` and
+therefore reported **off-by-one** addresses when the reference was a 2-byte `call [rip+..]` (`FF 15`). It now
+picks the prefix from the preceding opcode bytes and re-decoded correctly to `0x14025c95c` / `0x14025c6b8`.
+
+## HDR sky + NRD inventory applied (2026-10-27)
+
+**Equirectangular RGBA16F sky shipped.** `scene_from_frame.py` gained `sky_dds_hdr()` (128x64, full 8-level mip
+chain, `DXGI_FORMAT_R16G16B16A16_FLOAT = 10`, TEXTURE2D, one array slice, zenith-to-horizon gradient), selected
+by `REPROBE_SKY_HDR=1`; the existing 8x8 RGBA8 writer and its assertions are untouched. Gate assertion added and
+passing. A cloud scout validated it before I applied it by running the patched converter against a real capture
+with and without the flag - and caught that `os` was not imported in that file. **Purpose: this variant tests
+whether the dome crash is about the texture (size/format/mips) rather than the textured-dome path.**
+
+**NRD inventory (for the first real denoise run).** NRD is disabled outright if `GetLibraryDesc`'s
+major/minor/build disagree with `NRD_VERSION_MAJOR/MINOR/BUILD` (`rtx_nrd_context.cpp:86-89`). Those constants are
+**not** in the public repo - they come from the external `NRD.h`, which is not vendored - but the package pin is
+**`rtx-remix-nrd` 4.13** (`packman-external.xml:38-39`), so major/minor are almost certainly 4/13 with the build
+number unknown (INFERENCE). The UI prints the loaded version as `NRD v%u.%u.%u`
+(`rtx_nrd_settings.cpp:278`), which makes the first run's log a free way to confirm it without touching anything.
+
+## Built offline (2026-10-27, this session) — two of three workstreams done, all gates green
+
+**1. Rect-light ambient — DONE, builds clean (`0025f9c2…` then `30f2c6fc…` successive).**
+`triangle.cpp` creates a `remixapi_LightInfoRectEXT` (400x400, 60 units up, aimed down) as an opt-in ambient
+stand-in, submitted with `DrawLightInstance` every frame and destroyed on teardown. Enabled with
+`REPROBE_AMBIENT=<radiance>`; off by default so nothing changes for existing runs. Comment records that the
+emit direction convention and the radiance units are both undocumented and must be swept on the GPU.
+
+**2. Cutout classification end to end — DONE, gated.** The scene format stayed **v3**: the cutout flag rides
+in **bit 1 of the `skinned` table field**, which was safe to reuse because the probe has never read that
+field at all. Net effect:
+- `scene_from_frame.py` gained `load_discard()` (accepts `dxbc_disasm` stdout verbatim: `DISCARD ps_<id> 1`,
+  or plain `ps_<id> <0|1>`) and a `--discard-file` flag. Flagged draws get `skinned |= 2`.
+- `triangle.cpp` builds an **alpha-tested twin material** per albedo (`alphaTestType = 4` = `kGreater`,
+  `alphaReferenceValue = 128`, `blendType` unchanged) and picks it when `d.skinned & 2`.
+- Default output is **byte-identical**: a stale or absent discard list leaves the scene bytes unchanged, so
+  every existing fixture, capture and the byte-exact scene gate are unaffected. Verified by test.
+- New gate `test_scene_cutout.py` (3 checks): discard-list formats and junk rejection, byte-identity under a
+  stale list, and that converter and probe agree on bit 1. It caught a real bug immediately — `ps_-3`
+  parsed to a negative id — which is fixed.
+
+**3. Blend/depth state capture — NOT STARTED.** Slots are verified (`OMGetBlendState` 91,
+`OMGetDepthStencilState` 92, `RSGetState` 94, from `d3d11.h:6200`, independently recounted by the lead), but
+the hook, the per-draw struct, the JSON fields and the mock-game assertions are all still to write. This is
+the one piece of the three that was not built.
+
+**Gate status: 19 checks + 8 probe gates green (27 total).** `test_scene_cutout.py` is the 27th.
+
+**What the first real F9 capture unlocks immediately:** `scene_from_frame.py <frame> scene.bin
+--discard-file <dxbc_disasm output>` now produces a scene whose foliage and hair are alpha-tested in the
+probe, with no further code.
+
+## Three implementation plans ready to apply (2026-10-27, end of session)
+
+Cloud scouts produced read-only plans; **the lead verified the ABI facts independently** before trusting
+them. Artifacts live under
+`~/.pi/agent/sessions/--home-suraj-Projects-Nier-Automata-Rendering--/subagent-artifacts/`
+(`57da386d…_scout_output.md` cutouts, `7a067642…_scout_output.md` rect light, `05ed55bf…_scout_output.md`
+vtable slots).
+
+**D3D11 slots — verified by my own count of `d3d11.h`, not accepted on report.** Block opens at
+`d3d11.h:6200` (`ID3D11DeviceContext : public ID3D11DeviceChild`), 108 methods, first is slot 7
+(IUnknown 0-2, DeviceChild 3-6):
+
+| method | idx | slot | header |
+|---|---|---|---|
+| VSGetConstantBuffers | 66 | **72** | 6520 |
+| PSGetShader | 68 | **74** | 6530 |
+| VSGetShader | 70 | **76** | 6540 |
+| PSGetConstantBuffers | 71 | **77** | 6545 |
+| OMGetBlendState | 85 | **91** | 6615 |
+| OMGetDepthStencilState | 86 | **92** | 6620 |
+| RSGetState | 88 | **94** | 6628 |
+
+**Gotchas found by the plans that will bite if missed:**
+
+- The shader blobs land in a **flat directory from `NIER_SHADER_DIR`**, *outside* the frame tree
+  (`shader_capture.h:41-51`), so the converter cannot assume `frame_dir/shaders/`; the walk needs the env
+  path or a captured manifest.
+- `dxbc_disasm` **exits non-zero on the first unreadable or undisassemblable blob**
+  (`dxbc_disasm.cpp`), so one corrupt shader aborts a batch — the converter must tolerate per-shader failure
+  rather than treat a non-zero exit as "no cutouts anywhere".
+- `alphaTestType` is a bare `int` and `alphaReferenceValue` a `uint8_t` (`vendor/remix_c.h:255-256`); the
+  vendored header does **not** name the enum values, which are pinned in this file as `VkCompareOp`
+  (Greater = 4, default Always = 7).
+- `remixapi_LightInfoRectEXT` carries **geometry only** — no radiance. Radiance lives on the parent
+  `remixapi_LightInfo` (`{sType, pNext, hash, radiance}`, `vendor/remix_c.h:700-707`), and its **units are
+  not documented anywhere reachable** — must be found empirically, which is another reason the next GPU run
+  should sweep rect-light radiance.
+
+**Next action:** apply the cutout wiring (converter + NSCN v4 + probe), then the rect light, then the state
+capture using the verified slots. All offline; the GPU sitting is unchanged.
+
+## The four divisions, analysed (2026-10-27, final state of the session)
+
+Two agents ran on the extracted disassembly; the lead re-verified the mechanical half.
+
+**Ranking from the analysis** (fixed schema per site):
+
+| site | divisor | how zero arises | likelihood it is our fault |
+|---|---|---|---|
+| `0x18021befc` | `([rdi+0x10] - [rdi+0x8]) >> 3` — **element count of a `std::vector`** | **empty container** — the most ordinary divide-by-zero shape | **moderate-high** |
+| `0x1802196a7` | `[rcx+0x114]` struct field | field never populated on this path | low-moderate |
+| `0x18021cd13` | `[rbp-0x48] + 1` | only via `-1` wrap on the source | not read in full |
+| `0x18021d9cd` | `[rcx+0x18]` struct field | field zero | not read in full |
+
+Worth recording: in all four the `inc` sits on the **dividend**, not the divisor, so it neither protects the
+divide nor creates the zero — my earlier "`-1` → `inc` → `0`" hypothesis for site 3 is not supported by the
+instruction placement.
+
+**Real function starts** (the naive "last `int3` before the address" heuristic is wrong here): the `int3`
+bytes at `0x18021be5f`, `0x18021c4xx` and `0x18021d0ex` are **assert/fail trampolines inside a function**, of
+the shape `jbe <cont>; call [0x1806b41f0]; int3; <cont>: ...`. Verified by disassembly. True starts:
+`0x18021bc00` (site 2), `0x18021c420` (site 3), `0x18021d0f0` (site 4), `0x180219670` (site 1).
+
+**Next step, bounded:** identify what the vector at `0x18021befc` holds by tracing the enclosing function
+`0x18021bc00` — if it is a per-frame light or sky-image list, then a dome light whose texture registration
+produced no entries is a concrete, testable explanation for the crash.
+
+## Sky, corrected twice: the C API cannot fill the sky probe (2026-10-27, later)
+
+The previous section in this file says "the fix is geometry, not a light: submit the sky as SKY-tagged
+instances". **That is wrong**, and the local source proves it:
+
+- `RtxContext::commitExternalGeometryToRT` (`rtx_context.cpp:1060-1061`) calls only
+  `SceneManager::submitExternalDraw`. It does **not** call `tryHandleSky`.
+- `tryHandleSky` is reached only from the D3D9 geometry path (`commitGeometryToRT`, `rtx_context.cpp:1018`)
+  and, with nulls, from `flushCommandList` where it can only flush a delayed reprojection.
+- The API's `REMIXAPI_INSTANCE_CATEGORY_BIT_SKY` bit therefore selects **which camera** the instance is
+  transformed by (`convert::categoryToCameraType`, `rtx_remix_api.cpp:661-668`), not whether the sky probe
+  is rasterised.
+
+**So an API-only client cannot populate the sky probe at all.** That retires both "use NieR's sky shells via
+`REPROBE_SKIP_MAX`" and "tag instances as SKY" as answers to the *ambient* problem. They remain useful for
+drawing sky geometry, not for lighting the scene.
+
+**What the one pure-API NVIDIA client actually does** (rtx-remix-minecraft): it publishes a
+`LightInfoDomeEXT` with an **equirectangular HDR** texture for the visible sky, plus a **very large
+`LightInfoRectEXT`** as a stand-in for sky ambient, and flags only sun/moon/star quads as SKY. That is the
+shape our probe should copy:
+
+- `remixapi_LightInfoRectEXT` **exists in our vendored header** (struct type 10, `vendor/remix_c.h:614`,
+  with X/Y axis and direction fields), and `rectLight` appears 3160 times in the shipped runtime, so area
+  lights are supported by this build.
+- A large, dim rect light (or a few) is therefore the cheapest route to ambient without the probe, and it
+  does not touch the dome-texture path that crashes.
+
+**Consequence for the next run:** compare (a) current: sun only, no ambient; (b) sun + large dim rect light;
+(c) sun + rect + dome with an equirect HDR DDS. That A/B answers the ambient question without needing the
+probe, and skips the crash path entirely.
+
+## Sky: the dome was never going to light the scene (2026-10-27)
+
+A sourced research pass changes the plan. Remix's sky has two separate pieces, and we only ever drove the
+wrong one:
+
+- **`COMPOSITE_SKY_LIGHT_TEXTURE`** (a `SAMPLER2D`) is bound from the dome light's `colorTexture`. It paints
+  **sky pixels on primary misses only**.
+- **`COMPOSITE_SKY_PROBE_TEXTURE`** (a `SAMPLERCUBE`) is the thing that provides **ambient / indirect light**,
+  and it is rasterised **only from geometry tagged `REMIXAPI_INSTANCE_CATEGORY_BIT_SKY`** (via
+  `categoryToCameraType` → `RtxContext::tryHandleSky` → `rasterizeSky()`), never from a light.
+
+That explains both recorded failures: a dome with a NULL `colorTexture` yields no texture-table entry, so
+the dome is inactive and there is **no sky light at all**; and even a working dome leaves indirect lighting
+reading an empty sky probe, which is why the stills look ambient-less and washed out.
+
+**So the fix is geometry, not a light:** submit the sky as SKY-tagged instances. We already have real sky
+geometry in the capture — NieR's own 10-19 km sky shells that `REPROBE_SKIP_MAX` currently discards — and the
+community workaround in `rtx-remix` issue #525 is the same idea (a large prop-anchored sphere marked as sky).
+Sky-side knobs that exist and are now worth setting: `rtx.skyBrightness`, `rtx.skyProbeSide` (default 1024),
+`rtx.skyForceHDR`, `rtx.skyUseProbeForPrimaryRays`, `rtx.skyAutoDetect`, `rtx.skyDrawcallIdThreshold`,
+`rtx.skyMinZThreshold`. There is **no** `rtx.atmosphere` sky/IBL feature —
+`rtx.volumetrics.enableAtmosphere` only makes the volumetric fog shell finite.
+
+**The dome crash is not the known upstream bug.** The runtime's PE timestamp is **2026-10-21**, i.e. after
+REMIX-5443 ("Fix getDomeLightArgs returning active if dome light does not exist", June 2026), so this
+divide-by-zero is a *different* fault and still unexplained. A division scan of the Present-region range
+`0x18020e000-0x180240000` finds **10** divisions: six are chrono/timing (`imul ... 0x3b9aca00` / `0x64`
+beforehand), and four sit in the render region at `0x1802196a7`, `0x18021befc`, `0x18021cd13`,
+`0x18021d9cd`, each preceded by `xor edx,edx` and an `inc`. **Next step: identify the divisor register at
+those four** — that is a bounded, offline job.
+
+**Delegation note:** the desktop worker was given this scan as a fixed-schema task and returned nothing
+usable (its artifact held one line, "Delivered. Final answer above"). Recorded in the ledger as a failed
+deliverable; the lead ran the scan instead. The cloud researcher's report was strong and is the basis of
+this section.
+
+## Dome-light crash: not memory, not the DDS parser (2026-10-27)
+
+The recorded explanation for the dome-light crash — "`0xC0000094` inside Present, probably memory, source's
+only divisor on that path is the DDS parser's `(extent + blockExtent - 1) / blockExtent`" — is **wrong**,
+and the stored run dumps prove it. In both crashing runs (`sky-v3`, `sky-v4`, exit
+`0xC0000094` = EXCEPTION_INT_DIVIDE_BY_ZERO, no thread dump because the process died instantly) stdout reads:
+
+```
+end CreateSky -> 0            <- the dome DDS parsed and the light was created successfully
+Frame 0
+end SetupCamera -> 0 ... end DrawInstance -> 0 ... end DrawLightInstance -> 0
+end DrawSky -> 0              <- the frame was submitted
+begin Present                 <- fault here
+```
+
+So the DDS parse succeeded, the scene submitted, and the divide-by-zero is a **Present-path bug**, not a
+texture-format or memory problem. It is deterministic and reproduces with a 1x1 texture, which also rules
+out the "too big / out of unified memory" theory.
+
+The only code that runs *additionally* when a dome light carries a colour texture is at
+`rtx_composite.cpp:390-397`: the composite samples `COMPOSITE_SKY_LIGHT_TEXTURE` from the texture table when
+`domeLightArgs.active && textureIndex != BINDING_INDEX_INVALID`, and otherwise falls back to `getSkyMatte`.
+That branch has no division of its own, so the divisor is downstream in the composite dispatch. Next step:
+disassemble `Present` (interface `+0xa0` → `0x18020e3e0`) into the composite dispatch and find the `idiv`
+reached only on the textured-dome path. **Cheaper alternative that avoids the bug entirely:** include
+NieR's own sky shells as geometry via `REPROBE_SKIP_MAX`, which needs no dome texture at all.
+
+## Source-vs-binary calibration (2026-10-27) — the source conclusions transfer
+
+Every conclusion in this document that came from reading the public dxvk-remix source is only valid for
+the installed runtime if that runtime contains the same logic. Ten exact strings were probed in
+`.trex/d3d9.dll`, and **all ten are present**:
+
+| string | what it calibrates |
+|---|---|
+| `Neural Radiance Cache is not supported` | the NRC fallback path exists in this build |
+| `Switching indirect illumination mode to ReSTIR GI` | the fallback target is ReSTIR GI, as read in source |
+| `SHaRC requires shaderInt64` | the SHaRC gate |
+| `Unsupported indirect illumination mode selected` | the mode-range guard |
+| `Required extension not supported` / `VK_NVX_binary_import` | the NRC vendor/extension gate |
+| `Unable to load NRD` / `Incorrect version of NRD` | the NRD load and version gates |
+| `useDenoiserReferenceMode` | the flag that disabled denoising |
+| `DLSS 3D-Guided Neural Rendering` (x10) | DLSS-NR is a real feature of this build |
+
+So the shipped runtime is *recent* (it carries DLSS-NR, NRC, NRD) even though its remixapi version is
+0.6.5 — the API version does not track source recency, and the public source is a safe oracle for behaviour
+here. It also means the runtime's own warnings are usable as an oracle during a run: if NRC were requested
+we would see the ReSTIR GI warning, and the absence of any NRD error means the DLL loaded fine (as
+established earlier).
+
+## Research round: NRC is unavailable here, and the fallback is not what was claimed (2026-10-27)
+
+Three agents were sent at the open questions; every load-bearing claim was then re-checked against the
+source on this disk. **One agent claim was wrong and one of my own recommendations died.**
+
+**NRC cannot run on this hardware.** `NrcContext::checkIsSupported` (`rtx_nrc_context.cpp:140`) requires
+`VK_NVX_binary_import` and `VK_NVX_image_view_handle` — NVIDIA-only Vulkan extensions that RADV does not
+implement — plus an NVIDIA driver >= 565.90 for the CUDA runtime in the NRC SDK. So my earlier "NRC is the
+most promising untested noise lever" was wrong, and it is now closed rather than queued.
+
+**The fallback is ReSTIR GI, not ImportanceSampled.** An agent reported that asking for NRC on AMD silently
+rewrites `rtx.integrateIndirectMode` to `ImportanceSampled` (mode 0, the noisiest, reference-only mode). The
+code says otherwise — `RtxContext::checkIndirectLightingSupport` (`rtx_context.cpp:1598`):
+
+```cpp
+if (integrateMode == IntegrateIndirectMode::NeuralRadianceCache && !NeuralRadianceCache::checkIsSupported(...)) {
+  Logger::warn("[RTX] Neural Radiance Cache is not supported. Switching indirect illumination mode to ReSTIR GI.");
+  RtxOptions::integrateIndirectMode.setImmediately(IntegrateIndirectMode::ReSTIRGI, RtxOptionLayer::getQualityLayer());
+}
+```
+
+It is a *warning*, not silent, and the fallback is **ReSTIR GI (1)**. The practical conclusion survives in
+weaker form: the default mode is **SHaRC (3)** (`rtx_options.h:496`), so setting NRC on this host would
+downgrade to ReSTIR GI. **Do not set `rtx.integrateIndirectMode = 2` here.** Enum order verified:
+`ImportanceSampled=0, ReSTIRGI=1, NeuralRadianceCache=2, SHaRC=3`.
+
+**Verified option facts** (source-confirmed, no longer guesses): `rtx.autoExposure.evMinValue` float default
+**-2.0**, `rtx.autoExposure.evMaxValue` float default **5.0** (GUI slider clamps to ±24; the shader receives
+`evMax - evMin`); `rtx.enableCullingInSecondaryRays` bool default **false**;
+`rtx.denoiseDirectAndIndirectLightingSeparately` and `rtx.useDenoiserReferenceMode` both default **false**.
+Note the separate, differently-scoped `rtx.debugView.evMinValue` is an int (-4..4) — not the exposure knob.
+
+**Interop research (reported, only partly verifiable here).** For live Remix the claimed working path is not
+a cross-device `VkImage` handoff: DXVK's D3D9 shared surfaces are created with the legacy
+`VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_KMT_BIT` global handle rather than an NT handle, and the
+`dxvk_GetVkImage` handle is only meaningful inside Remix's own device — which matches what the disassembly of
+`dxvk_GetVkImage` showed (it returns the surface's backing image, not Remix's output). The suggested route is
+therefore: Remix copies into **a shared D3D9Ex render target we create**, and the game's DXVK D3D11 device
+opens it with `OpenSharedResource`. DXVK's own wiki labels cross-device sharing "partially supported", and
+the D3D9 side in Remix exposes no keyed mutex, so synchronisation is the weak point. A ~19.8 MB per-frame
+host readback is a fallback, not a plan (several ms plus a stall).
+
+**Net effect on the next GPU run:** the candidate list is now `enableCullingInSecondaryRays = true` (default
+is false, so this is untested and cheap), the corrected NRD conf, and the exposure knobs with known defaults.
+NRC is out; DLSS-NR is out (NGX needs an NVIDIA card).
+
+## What this runtime can do, straight from its exports (2026-10-27, static)
+
+**API version: 0.6.5, definitively.** `QueryFeatureVersion` (export `0xf9990`) switches on its first
+argument: id 2 returns 1, id 1 returns **0x60005** (major 6, minor 0, patch 5), id 0 returns 2, and any
+other id takes an error path that formats the string at `0x1806c5f80`
+(`"Could not find feature version for: "`). That independently confirms the 22-member interface and the
+`major 6` gate decoded earlier from `remixapi_InitializeLibrary`.
+
+**The status exports are global reads**, not calls into a library — cheap to query and easy to reason about:
+- `remixinternal_GetDlssNeuralRenderingStatus` = `return *(int*)0x190d672b0;`
+- `remixinternal_GetNrcStatus` reads a pointer at `0x190d9abc0` and returns **-1** when it is null.
+`xref.py --va 0x190d672b0` found three writers of the DLSS-NR status global, and the values written are
+**only `-1` and `0`** — `mov r14,-1` then `mov [global],r14d` at `0x1802bf895` (an early failure path, taken
+when a byte of the feature's argument struct is zero), and `xor r12d,r12d` then `mov [global],r12d` at
+`0x1802c0e89` (a teardown/reset path). So the honest reading is: **-1 = feature creation failed, 0 = not
+initialised**; nothing in the reachable code writes a positive "ready" value without NGX. That is
+consistent with NGX being required and with this host being an AMD card, but it is *not* proof — the
+cheap decisive check is one line of code at the next run: read
+`remixinternal_GetDlssNeuralRenderingStatus()` and print it.
+
+**Two levers for noise that do not need NGX, both already installed:**
+- `NRC_Vulkan.dll` (5.5 MB) is a **static import** of the runtime (`import NRC_Vulkan.dll`), so the Neural
+  Radiance Cache is linked in at load time, and `rtx.neuralRadianceCache` exists in this build. Unlike NRD
+  it is not gated behind the option we broke, and unlike DLSS it does not require NGX or an NVIDIA GPU.
+  **This is the most promising untested noise lever and the top candidate for the next GPU run.**
+- `nvngx_dlssnr.dll` (254.1 MB) also ships in `.trex`, so the note "DLSS 5 NR still needs a legitimately
+  obtained nvngx_dlssnr.dll" is **out of date**: the file arrives with Portal RTX, which the user owns.
+  It is still unusable here because NGX requires an NVIDIA GPU and this host is a 9070 XT.
+
+Options confirmed present in this build by the recovered name list: `rtx.dlssNeuralRendering`,
+`rtx.neuralRadianceCache` (plus `neuralRadianceCache.resetSceneBoundsOnCameraCut`), with descriptions in
+the binary describing DLSS 3D-Guided Neural Rendering and NRC respectively.
+
+## Capture now records pixel-shader bytecode, so cutouts are decidable (2026-10-27, no GPU)
+
+The next in-game run should answer everything at once, so the capture was extended now rather than after
+it. `analysis/checks/shader_capture.h` hooks `ID3D11Device::CreatePixelShader` (vtable slot 15) and writes
+each shader as `ps_<id>.dxbc`, where `<id>` is the pointer identity that `draw_capture.h` already records
+as `ps_hash` — so shader blobs join to draws with no extra index. Writes only when `NIER_SHADER_DIR` is
+set, so an ordinary run never litters the game directory. Installed in `menu_overlay.cpp` next to the
+existing input-layout hook; the DLL rebuilds with 51 exports intact and no forbidden imports.
+
+**How `discard` is detected — and how it is not.** Parsing the DXBC token stream by hand was tried and
+abandoned in this session: the instruction-length field is not a length for declaration opcodes, an
+aligned walk stalls on the first `dcl_*` at `opcode 0x19`, and a plain token scan matched **five**
+different opcode values (6, 13, 18, 49, 2038) on the same three fixtures. Any of those would have been a
+guess. Instead `analysis/checks/dxbc_disasm.cpp` calls `d3dcompiler_47!D3DDisassemble` — the vendor's own
+decoder — and the answer is a text search for `discard` in the disassembly.
+
+Two new gates, both CPU-only, both green:
+- `analysis/checks/test_dxbc_discard.py` — compiles three fixtures with D3DCompile in Wine (opaque, one
+  discard, two discards), disassembles them, and asserts classification 0/1/1 *and* that the token appears
+  0/1/2 times. A garbage `.dxbc` must exit non-zero with a reason.
+- `analysis/checks/test_shader_capture.py` — builds the mock game (which now creates a cutout pixel
+  shader), runs it against the built DLL under Wine + Xvfb with `NIER_SHADER_DIR` set, and asserts a blob
+  was written from a live D3D11 device, that it disassembles as a *cutout*, and that it is a complete
+  DXBC container (660 bytes, identical to the fixture).
+
+Also learned and worth not repeating: **Wine refuses a WINEPREFIX under a directory it does not own** —
+`/tmp` is root-owned here, so a prefix must live in `$HOME` ("wine: '/tmp' is not owned by you").
+
+The hand-written, unverified `analysis/tools/dxbc.py` was **deleted** rather than left to be trusted.
+
+## Option names recovered from the build (2026-10-27, no GPU)
+
+`RtxOptions.md` only exists after a run and the 2026-10-26 dump is gone, so the option registry was read
+straight out of the binary: `analysis/tools/rtx_options.py` (with `--self-check`) recovers the name list
+from the description/name stream in `.rdata`, and writes `analysis/RTX_OPTIONS_THIS_BUILD.txt` —
+**949 names**, self-check green against nine independently known keys.
+
+What it settles: every key we intend to set exists in this build — `enableCullingInSecondaryRays`,
+`useDenoiser`, `useDenoiserReferenceMode`, `evMinValue`, `evMaxValue`, `enableAtmosphere`, `blendMode` —
+and `alphaTestType`, `useDrawCallAlphaState` and `blendType` are **not** in the list, which confirms from a
+second direction that they are C-API material fields rather than conf keys.
+
+What it does not give: types, defaults, ranges and the `rtx.`-prefixed path. Those still need
+`RtxOptions.md`, i.e. a run with `DXVK_DOCUMENTATION_WRITE_RTX_OPTIONS_MD=1`, or a call to the runtime's
+`writeAllMarkdownDocs` export. Names alone answer "does this key exist", which is the question that has
+been guessed at repeatedly.
+
+## Denoise, measured again offline (2026-10-27)
+
+ — the filter is not the win
+
+New tooling, all CPU-only and gate-tested: `analysis/remix-probe/noise.py` (the metric), `denoise.py`
+(methods `box`, `atrous`, `firefly`, `firefly+atrous`), `test_denoise.py` (6 checks). The metric is now
+defined in code: mean within-8px-tile luma std, Rec.709 luma, normalised by mean luma. **The historical
+0.084 / 0.62x / 0.53x numbers came from an unstated definition and are not comparable to it**; only
+ratios within this metric are valid.
+
+Measured on the real v3 textured still (`captures-still-v1-20261026T223556Z`, noise 0.2801):
+
+| method | noise | ratio |
+|---|---|---|
+| box 3x3 | 0.143 | 0.48x |
+| box 5x5 | 0.102 | 0.34x |
+| atrous sigma 0.12 | 0.110 | 0.39x |
+| firefly only | 0.226 | 0.81x |
+| firefly + atrous 0.06 | 0.101 | 0.36x |
+
+Looking at the output decided the question the numbers could not. `atrous` alone smooths the large
+fields but **keeps bright speckle**, because an edge-stopping filter treats a firefly as an edge; adding
+outlier rejection first fixes that, and the result at 0.36x noise is still grainy *and* now mushy. The
+reason is that this frame's dominant defects are not noise: they are the thin-geometry overdraw streaks
+and the absent sky (the dome light is still void). So a spatial filter cannot rescue it, and the cheap
+renderer-side options matter more than any post-filter:
+
+1. `rtx.enableCullingInSecondaryRays = True` for the streaks,
+2. alpha-test/cutout handling for foliage and hair (`blendType` is currently forced to 2),
+3. a real sky (NieR's own sky shells via `REPROBE_SKIP_MAX`, or a legacy-DDS dome light).
+
+`dds_stack.py` also refused a single frame although its usage advertises it (fixed: `len(argv) < 2`).
 
 ## Denoise: parked, with the evidence (2026-10-26 late)
 

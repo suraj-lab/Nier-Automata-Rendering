@@ -118,6 +118,13 @@ def inside():
         assert cap['vp_width'] == 64 and cap['vp_height'] == 64
         assert cap['layout_found'] == 1 and [(e['semantic'], e['offset'], e['slot']) for e in cap['layout']] == [('POSITION', 0, 0), ('COLOR', 12, 0)]
         assert cap['vs_cbs'] == [{'slot': 0, 'bytes': 64}]
+        # Fixed render state, captured so a material decision never needs another game run. The mock binds
+        # these deliberately; the numbers are the D3D11 enum values, not guesses -- COMPARISON_GREATER is 5
+        # and CULL_FRONT is 2 (the lead's first expectations of 4 and 3 were wrong and the capture corrected
+        # them). If this fails, either the getters or the JSON field order changed.
+        assert cap['state'] == {'blend_enable': 1, 'src_blend': 5, 'dest_blend': 6, 'blend_op': 1,
+                                'write_mask': 255, 'depth_enable': 1, 'depth_write': 0, 'depth_func': 5,
+                                'cull_mode': 2, 'fill_mode': 2, 'dsv_format': 0}, cap.get('state')
         # v4: shader identity + pixel-shader constants, so a converter can group draws by shader and reach
         # per-material parameters instead of guessing the albedo slot from texture formats.
         assert cap['ps_cbs'] == [{'slot': 0, 'bytes': 64}], cap['ps_cbs']

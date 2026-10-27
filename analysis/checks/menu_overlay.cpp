@@ -10,6 +10,7 @@
 #include "menu_session.h"
 #include "menu_settings_io.h"
 #include "input_layout_hook.h"
+#include "shader_capture.h"
 #include "draw_capture.h"
 #include "input_capture.h"
 #include "../menu-preview/panel.h"
@@ -221,9 +222,15 @@ bool write_capture(const draw_capture::Record& r, const std::wstring& dir, const
         std::fprintf(f, "%s{\"slot\":%u,\"stride\":%u,\"offset\":%u,\"bytes\":%zu}", i ? "," : "",
                      v.slot, v.stride, v.offset, v.bytes ? v.bytes->size() : std::size_t(0));
     }
-    std::fprintf(f, "],\"vs_hash\":%llu,\"ps_hash\":%llu,\"layout_found\":%d,\"layout\":[",
+    std::fprintf(f, "],\"vs_hash\":%llu,\"ps_hash\":%llu,\"layout_found\":%d,"
+                 "\"state\":{\"blend_enable\":%u,\"src_blend\":%u,\"dest_blend\":%u,\"blend_op\":%u,"
+                 "\"write_mask\":%u,\"depth_enable\":%u,\"depth_write\":%u,\"depth_func\":%u,"
+                 "\"cull_mode\":%u,\"fill_mode\":%u,\"dsv_format\":%u},\"layout\":[",
                  static_cast<unsigned long long>(r.vs_hash), static_cast<unsigned long long>(r.ps_hash),
-                 have_layout ? 1 : 0);
+                 have_layout ? 1 : 0,
+                 r.state.blend_enable, r.state.src_blend, r.state.dest_blend, r.state.blend_op,
+                 r.state.write_mask, r.state.depth_enable, r.state.depth_write, r.state.depth_func,
+                 r.state.cull_mode, r.state.fill_mode, r.state.dsv_format);
     for (std::size_t i = 0; i < els.elements.size(); ++i) {
         const auto& e = els.elements[i];
         std::fprintf(f, "%s{\"semantic\":", i ? "," : "");
@@ -436,6 +443,9 @@ void install(ID3D11Device* dev, IDXGISwapChain* swapchain, const Host& h) {
     if (!installed.exchange(true)) {
         host = h;
         input_layout_hook::install(dev);
+        // Pixel-shader bytecode, so an offline tool can answer "is this draw a cutout" (see
+        // test_dxbc_discard.py). Writes only when NIER_SHADER_DIR is set.
+        if (shader_capture::install(dev)) host.log("menu: pixel-shader capture hook installed");
         ID3D11DeviceContext* ctx = nullptr;
         dev->GetImmediateContext(&ctx);
         if (ctx) { draw_capture::install(ctx); ctx->Release(); host.log("menu: capture hooks installed (F9 = capture next frame)"); }

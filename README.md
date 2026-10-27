@@ -2,7 +2,7 @@
 
 ## Scope and status
 
-Status refreshed 2026-10-26/27. [PROGRESS.md](PROGRESS.md) is the authoritative resume record (installed
+Status refreshed 2026-10-27 (evening). [PROGRESS.md](PROGRESS.md) is the authoritative resume record (installed
 hashes, rollback chain, verified facts, next steps); its top "Checkpoint" section is the place to start.
 
 | Area | Status |
@@ -12,7 +12,7 @@ hashes, rollback chain, verified facts, next steps); its top "Checkpoint" sectio
 | Startup settings | `NIER_RENDER.ini` selects Native / Custom75 for the next launch; honest startup status. |
 | In-game menu | **Installed, live-tested:** Insert panel, save-for-next-launch, mouse/camera blocked while open. |
 | RTX Remix | **Textured** path-traced stills from one F9 capture (190 albedo textures, 2.74M triangles). Not live in the game. |
-| Remix live in NieR | **Feasibility reopened**: the runtime populates every interop entry point (`createD3D9`/`getSwapchain`/`getVkImage`/`copyOutput`) and NVIDIA ships a non-D3D9 host (Remix for Minecraft, `StartupInfo.interopImage`). Three unknowns left: cross-device image sharing under Proton, native framerate, UI replay. See the checkpoint in PROGRESS.md. |
+| Remix live in NieR | **Transfer solved** (2026-10-27 evening): `dxvk_CopyRenderingOutput(FINAL_COLOR)` returns the real frame at 0.49 ms/frame (1080p) once our own D3D9 device is created *and registered before* `Startup`; **53 fps** path-traced at 2580x1080. See [LIVE_TRANSFER.md](analysis/LIVE_TRANSFER.md). Remaining: live draw stream, compositing, UI. |
 | Visual stack | LodMod + WAX texture injection; 289 textures active. Special K quarantined. |
 | DLSS 5 NR | Parked: blocked on a legitimately obtained `nvngx_dlssnr.dll`. |
 | Frame generation / FPS uncap | Not pursued; native 60 FPS cap kept (research in `analysis/FAR_*.md`). |
@@ -29,6 +29,8 @@ hashes, rollback chain, verified facts, next steps); its top "Checkpoint" sectio
 6. In-game menu, mouse fix, F9 capture (with install history): `analysis/IN_GAME_MENU.md`.
 7. RTX Remix (feasibility -> first mesh -> scenes, verified transforms): `analysis/REMIX_FEASIBILITY.md`,
    `analysis/remix-probe/README.md`.
+   Live transfer (solved, with measurements and the API-order rules): `analysis/LIVE_TRANSFER.md`,
+   `analysis/INTEROP_API.md`.
 8. Frame-rate research (parked): `analysis/FAR_RESEARCH.md`, `FAR_UNCAP_FOLLOWUP.md`.
 
 Use **GE-Proton11-7-x86_64**, in-game Anti-Aliasing **Off**, Motion Blur **On**:

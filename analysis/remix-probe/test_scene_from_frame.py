@@ -621,6 +621,29 @@ def main():
         assert len(raw) == 148 + sum(4 * (size * size >> (2 * i)) for i in range(mips)), 'sky dds payload size'
         assert set(raw[148:]) == {0xFF}, 'sky mips are not opaque white'
         checks.append('scene_sky.dds is an 8x8 mip-chained RGBA8 lat-long DDS')
+        # REPROBE_SKY_HDR=1 swaps that same dome-light texture for an equirectangular RGBA16F gradient, to test
+        # whether the dome crash is about the texture (size/format/mips) rather than the textured-dome path.
+        hdrdir = work / 'hdr_sky'
+        hdrdir.mkdir()
+        ph = subprocess.run([sys.executable, str(candidate), str(second), str(hdrdir / 'scene.bin')],
+                            capture_output=True, text=True, timeout=900,
+                            env={**os.environ, 'REPROBE_SKY_HDR': '1'})
+        assert ph.returncode == 0, f'hdr sky run: exit {ph.returncode}: {ph.stderr[-800:]}'
+        hraw = (hdrdir / 'scene_sky.dds').read_bytes()
+        assert hraw[:4] == b'DDS ' and hraw[84:88] == b'DX10', 'HDR sky dds missing DDS/DX10 header'
+        hw, hh, hmips = (struct.unpack_from('<I', hraw, o)[0] for o in (16, 12, 28))
+        assert (hw, hh) == (128, 64), f'HDR sky is {hw}x{hh}, want 128x64 equirectangular'
+        assert hmips == 8, f'HDR sky has {hmips} mips, want a full 8-level chain for 128x64'
+        assert struct.unpack_from('<I', hraw, 128)[0] == 10, 'HDR sky is not R16G16B16A16_FLOAT'
+        assert struct.unpack_from('<I', hraw, 132)[0] == 3, 'HDR sky is not a TEXTURE2D'
+        assert struct.unpack_from('<I', hraw, 140)[0] == 1, 'HDR sky must be one array slice (2D, never a cubemap)'
+        assert struct.unpack_from('<I', hraw, 20)[0] == 8 * hw, 'HDR sky row pitch is not 8 bytes per texel'
+        want = 148 + 8 * sum(max(hw >> i, 1) * max(hh >> i, 1) for i in range(hmips))
+        assert len(hraw) == want, f'HDR sky is {len(hraw)} bytes, want {want}'
+        px = np.frombuffer(hraw[148:], dtype='<f2').reshape(-1, 4)
+        assert np.isfinite(px).all() and (px[:, 3] == 1.0).all(), 'HDR sky has non-finite or non-opaque texels'
+        assert px[0, :3].tolist() != px[(hh - 1) * hw, :3].tolist(), 'HDR sky is uniform, not a gradient'
+        checks.append('REPROBE_SKY_HDR=1 writes a 128x64 mip-chained RGBA16F equirect sky')
         # An unusable output path is a clean exit 2, not a traceback.
         p3 = subprocess.run([sys.executable, str(candidate), str(second), str(work / 'missing-dir' / 'scene.bin')],
                             capture_output=True, text=True, timeout=900)

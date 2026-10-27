@@ -6,6 +6,10 @@
 set -u   # no set -e: a failing hyprctl probe must not abort the run before teardown
 PROTON=${PROTON:-/usr/share/steam/compatibilitytools.d/proton-cachyos-slr/proton}
 RUNTIME=${RUNTIME:-/mnt/second/SteamLibrary/steamapps/common/PortalRTX/bin/.trex/d3d9.dll}
+# Wine creates an X window, so it needs a display and the cookie. Without them the probe dies with
+# "CreateWindow error 1400" and Proton swallows the message, which looks exactly like a silent no-op.
+export DISPLAY="${DISPLAY:-:1}"
+export XAUTHORITY="${XAUTHORITY:-$HOME/.Xauthority}"
 WS=${WS:-10}; SHOT_FRAME=${SHOT_FRAME:-60}; HEIGHT=${HEIGHT:-540}
 [ -f "$RUNTIME" ] || { echo "missing Remix runtime: $RUNTIME" >&2; exit 2; }
 here=$(cd "$(dirname "$0")" && pwd); A=$(cd "$here/.." && pwd)
@@ -59,5 +63,22 @@ fi
 sleep "$hold"
 kill -- -"$pid" 2>/dev/null || true
 sleep 2; kill -9 -- -"$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true
+# Killing the process group does NOT close the windows: wineserver outlives it and keeps them mapped on the
+# user's screen (2026-10-27: two Wine windows sat on DP-2 for minutes after such a kill). Stop the wineserver
+# for this prefix, then say out loud if anything of ours is still visible.
+WS_BIN="$(dirname "$PROTON")/files/bin/wineserver"
+if [ -x "$WS_BIN" ]; then
+  WINEPREFIX="$STEAM_COMPAT_DATA_PATH/pfx" "$WS_BIN" -k 2>/dev/null || true
+else
+  echo "WARNING: no wineserver at $WS_BIN; windows may survive the kill" >&2
+fi
+leftover=$(hyprctl clients -j 2>/dev/null | python3 -c '
+import json,sys
+try: clients=json.load(sys.stdin)
+except Exception: raise SystemExit
+print(", ".join(c.get("title","?") for c in clients if "Remix" in c.get("title","") or "remix-scene" in c.get("title","")))' 2>/dev/null)
+if [ -n "$leftover" ]; then echo "WARNING: window still on screen: $leftover" >&2; else echo "teardown: no probe window left on screen"; fi
 echo "--- probe stdout (last 12) ---"; grep -vE "radv is not|ProtonFixes|ntsync" probe.log | tail -12
+echo "--- metrics (fps lines; stdout is dropped by Proton) ---"; cat metrics.txt 2>/dev/null || echo "(none)"
+echo "--- interop (REPROBE_INTEROP=1) ---"; cat interop.txt 2>/dev/null || echo "(not run)"
 echo "--- screenshots ---"; ls -1 Screenshots/ 2>/dev/null || echo "(none: DXVK screenshot did not fire)"

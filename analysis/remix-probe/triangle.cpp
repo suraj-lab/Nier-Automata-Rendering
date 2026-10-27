@@ -13,6 +13,7 @@
 #include <cstring>
 #include <string>
 #include <vector>
+#include <chrono>
 #endif
 
 namespace {
@@ -189,6 +190,276 @@ void selfcheck() {
 // Keep the upstream Windows-only header unmodified; native CPU checks above do not include it.
 #include <remix_c.h>
 
+#if defined(SCENE_FILE)
+#include <d3d9.h>
+#include "interop_probe.h"
+namespace {
+// The interop question, wired to the runtime: Remix hands back its own D3D9 device, we own the surface it
+// copies FINAL_COLOR into, we read the pixels back. The sequence itself lives in interop_probe.h, where
+// test_interop_probe.py drives every step on CPU; nothing below decides anything the gate does not pin.
+remixapi_Interface* interop_api=nullptr;
+HWND interop_hwnd=nullptr;
+IDirect3DDevice9Ex* interop_device=nullptr;
+bool interop_registered=false;  // whether dxvk_RegisterD3D9Device accepted our device
+IDirect3DSurface9* interop_target=nullptr;    // what Remix copies into (DEFAULT pool, A8R8G8B8)
+IDirect3DSurface9* interop_readback=nullptr;  // SYSTEMMEM mirror we can lock
+unsigned interop_w=0, interop_h=0;            // render size, so our swapchain matches the destination
+
+int io_create_d3d9(void** out) {
+    if (!interop_api->dxvk_CreateD3D9) return 1;
+    IDirect3D9Ex* d3d9=nullptr;
+    if (interop_api->dxvk_CreateD3D9(0,&d3d9) || !d3d9) return 1;
+    *out=d3d9;
+    return 0;
+}
+int io_create_device(void* d3d9v, void** out) {
+    auto* d3d9=static_cast<IDirect3D9Ex*>(d3d9v);
+    D3DPRESENT_PARAMETERS pp{};
+    pp.BackBufferWidth=interop_w; pp.BackBufferHeight=interop_h; pp.BackBufferFormat=D3DFMT_A8R8G8B8;
+    pp.BackBufferCount=1; pp.SwapEffect=D3DSWAPEFFECT_DISCARD; pp.Windowed=TRUE;
+    pp.hDeviceWindow=interop_hwnd; pp.PresentationInterval=D3DPRESENT_INTERVAL_IMMEDIATE;
+    IDirect3DDevice9Ex* device=nullptr;
+    const HRESULT hr=d3d9->CreateDeviceEx(D3DADAPTER_DEFAULT,D3DDEVTYPE_HAL,interop_hwnd,
+        D3DCREATE_HARDWARE_VERTEXPROCESSING|D3DCREATE_MULTITHREADED,&pp,nullptr,&device);
+    d3d9->Release();
+    if (FAILED(hr) || !device) return 1;
+    // Registering REPLACES the device the runtime presents with (rtx_remix_api.cpp:1410-1440 sets
+    // s_dxvkDevice), and CopyRenderingOutput copies that device's backbuffer -- so registering a device that
+    // was never presented into is exactly how the copy came back black. Default off; opt in to re-test.
+    const bool registered=getenv("REPROBE_INTEROP_REGISTER") &&
+                          std::atoi(getenv("REPROBE_INTEROP_REGISTER")) &&
+                          interop_api->dxvk_RegisterD3D9Device &&
+                          interop_api->dxvk_RegisterD3D9Device(device)==0;
+    interop_registered=registered;
+    interop_device=device; *out=device;
+    return 0;
+}
+int io_create_render_target(void* device, unsigned w, unsigned h, void** out) {
+    (void)device;
+    if (FAILED(interop_device->CreateRenderTarget(w,h,D3DFMT_A8R8G8B8,D3DMULTISAMPLE_NONE,0,FALSE,&interop_target,nullptr)) ||
+        !interop_target) return 1;
+    *out=interop_target;
+    return 0;
+}
+int io_create_readback(void* device, unsigned w, unsigned h, void** out) {
+    (void)device;
+    if (FAILED(interop_device->CreateOffscreenPlainSurface(w,h,D3DFMT_A8R8G8B8,D3DPOOL_SYSTEMMEM,&interop_readback,nullptr)) ||
+        !interop_readback) return 1;
+    *out=interop_readback;
+    return 0;
+}
+int interop_copy_type_override=-1;  // -1 = use the type the sequence asked for
+// Readback control: fill the destination ourselves so a black report can be attributed to the copy rather
+// than to GetRenderTargetData. Without this, "the copy is black" and "our readback is broken" look alike.
+double interop_control_luma=-1;  // -1 = control not run
+IDirect3D9Ex* interop_d3d9=nullptr;
+bool interop_pre_registered=false;  // our device is the runtime's presenting device (REPROBE_PRE_REGISTER)
+int io_create_d3d9_pre(void** out) { if (!interop_d3d9) return 1; *out=interop_d3d9; return 0; }
+int io_create_device_pre(void*, void** out) { if (!interop_device) return 1; *out=interop_device; return 0; }
+
+// Read the presenter's own backbuffer directly, bypassing dxvk_CopyRenderingOutput entirely: separates an
+// artifact in the copy from an artifact in presentation, and reports the true render size.
+void run_backbuffer_probe(unsigned w, unsigned h) {
+    if (!interop_device) return;
+    IDirect3DSurface9* bb=nullptr;
+    if (FAILED(interop_device->GetBackBuffer(0,0,D3DBACKBUFFER_TYPE_MONO,&bb)) || !bb) return;
+    D3DSURFACE_DESC d{};
+    if (FAILED(bb->GetDesc(&d))) { bb->Release(); return; }
+    IDirect3DSurface9* sys=nullptr;
+    FILE* f=std::fopen("backbuffer.txt","w");
+    if (f) std::fprintf(f,"backbuffer=%ux%u format=%d probe=%ux%u\n",d.Width,d.Height,static_cast<int>(d.Format),w,h);
+    if (SUCCEEDED(interop_device->CreateOffscreenPlainSurface(d.Width,d.Height,d.Format,D3DPOOL_SYSTEMMEM,&sys,nullptr)) && sys) {
+        if (SUCCEEDED(interop_device->GetRenderTargetData(bb,sys))) {
+            D3DLOCKED_RECT l{};
+            if (SUCCEEDED(sys->LockRect(&l,nullptr,D3DLOCK_READONLY))) {
+                if (f) std::fprintf(f,"pitch=%ld lock_ok=1\n",static_cast<long>(l.Pitch));
+                if (FILE* o=std::fopen("backbuffer.ppm","wb")) {
+                    std::fprintf(o,"P6\n%u %u\n255\n",d.Width,d.Height);
+                    for (unsigned y=0;y<d.Height;++y) {
+                        const unsigned char* row=static_cast<const unsigned char*>(l.pBits)+static_cast<std::size_t>(y)*l.Pitch;
+                        for (unsigned x=0;x<d.Width;++x) {
+                            const unsigned char rgb[3]={row[x*4+2],row[x*4+1],row[x*4]};
+                            std::fwrite(rgb,1,3,o);
+                        }
+                    }
+                    std::fclose(o);
+                }
+                sys->UnlockRect();
+            }
+        }
+        sys->Release();
+    }
+    bb->Release();
+    if (f) std::fclose(f);
+}
+
+void run_readback_control(unsigned w, unsigned h) {
+    if (!interop_device || !interop_target || !interop_readback) return;
+    // ColorFill, not Clear: D3D9's Clear operates on the CURRENT render target, so it would fill the
+    // swapchain backbuffer and prove nothing about this surface.
+    const D3DCOLOR green=D3DCOLOR_ARGB(255,0,255,0);
+    if (FAILED(interop_device->ColorFill(interop_target,nullptr,green))) return;
+    if (FAILED(interop_device->GetRenderTargetData(interop_target,interop_readback))) return;
+    D3DLOCKED_RECT locked{};
+    if (FAILED(interop_readback->LockRect(&locked,nullptr,D3DLOCK_READONLY))) return;
+    const unsigned char* row=static_cast<const unsigned char*>(locked.pBits)+static_cast<std::size_t>(h/2)*locked.Pitch;
+    const unsigned char* px=row+static_cast<std::size_t>(w/2)*4;  // centre pixel: B,G,R,A
+    interop_control_luma=(0.0722*px[0]+0.7152*px[1]+0.2126*px[2])/255.0;
+    interop_readback->UnlockRect();
+}
+int io_copy_output(void* surface, int handle) {
+    const int type=interop_copy_type_override>=0 ? interop_copy_type_override : handle;
+    const int rc=interop_api->dxvk_CopyRenderingOutput(static_cast<IDirect3DSurface9*>(surface),
+        static_cast<remixapi_dxvk_CopyRenderingOutputType>(type)) ? 1 : 0;
+    // The copy is queued on the render thread (remixDevice->EmitCs), so an immediate GetRenderTargetData can
+    // read the surface before the blit lands. Flush and let frames go by first: REPROBE_INTEROP_SETTLE=1.
+    if (!rc && getenv("REPROBE_INTEROP_SETTLE") && interop_device) {
+        for (int i=0;i<4;++i) { interop_device->Present(nullptr,nullptr,interop_hwnd,nullptr); Sleep(100); }
+    }
+    return rc;
+}
+int io_get_vk_image(void* surface, std::uint64_t* out) {
+    if (!interop_api->dxvk_GetVkImage) return 1;
+    return interop_api->dxvk_GetVkImage(static_cast<IDirect3DSurface9*>(surface),out) ? 1 : 0;
+}
+int io_read_pixels(void* readback, unsigned char* dst, unsigned w, unsigned h) {
+    auto* sys=static_cast<IDirect3DSurface9*>(readback);
+    if (!interop_device || !interop_target) return 1;
+    if (FAILED(interop_device->GetRenderTargetData(interop_target,sys))) return 1;
+    D3DLOCKED_RECT locked{};
+    if (FAILED(sys->LockRect(&locked,nullptr,D3DLOCK_READONLY))) return 1;
+    for (unsigned y=0;y<h;++y)
+        std::memcpy(dst+static_cast<std::size_t>(y)*w*4,
+                    static_cast<const unsigned char*>(locked.pBits)+static_cast<std::size_t>(y)*locked.Pitch,
+                    static_cast<std::size_t>(w)*4);
+    sys->UnlockRect();
+    return 0;
+}
+
+// One shot, mid-run. Everything goes to files: under Proton the child's stdout never reaches the parent.
+void run_interop_probe(remixapi_Interface& api, HWND hwnd, unsigned w, unsigned h) {
+    interop_api=&api; interop_hwnd=hwnd;
+    // The presenter's backbuffer is what FINAL_COLOR copies from, and the presentation path resets it to the
+    // window's real client size. Copying into a differently sized target scales the image (seen 2026-10-27:
+    // 928x1028 source into 430x180 gave a squeezed, tiled frame). Size the destination from the source.
+    if (interop_device) {
+        IDirect3DSurface9* bb=nullptr;
+        if (SUCCEEDED(interop_device->GetBackBuffer(0,0,D3DBACKBUFFER_TYPE_MONO,&bb)) && bb) {
+            D3DSURFACE_DESC d{};
+            if (SUCCEEDED(bb->GetDesc(&d)) && d.Width && d.Height) { w=d.Width; h=d.Height; }
+            bb->Release();
+        }
+    }
+    interop_w=w; interop_h=h;
+    // REPROBE_INTEROP_TYPE selects which CopyRenderingOutput type to ask for (0 FINAL_COLOR, 1 DEPTH,
+    // 2 NORMALS, 4 GUI), so one process can tell "the copy is broken" from "FINAL_COLOR has no content".
+    interop_copy_type_override=getenv("REPROBE_INTEROP_TYPE") ? std::atoi(getenv("REPROBE_INTEROP_TYPE")) : -1;
+    // The copy succeeded but produced an all-black image on 2026-10-27. dxvk_SetDefaultOutput was never
+    // exercised by us, and the copy may only be meaningful once the runtime knows what its default output is;
+    // calling it is the cheapest way to test that.
+    int set_default_rc=-1;
+    if (api.dxvk_SetDefaultOutput) {
+        // Not black by default any more: a distinct clear colour proves whether the copied image is the
+        // runtime's composited output at all. REPROBE_INTEROP_CLEAR=r,g,b (default 0.5,0,0.5 magenta).
+        float r=0.5f,g=0.f,b=0.5f;
+        if (const char* e=getenv("REPROBE_INTEROP_CLEAR")) std::sscanf(e,"%f,%f,%f",&r,&g,&b);
+        remixapi_Float4D clear{r,g,b,1.f};
+        set_default_rc=static_cast<int>(api.dxvk_SetDefaultOutput(
+            REMIXAPI_DXVK_COPY_RENDERING_OUTPUT_TYPE_FINAL_COLOR,&clear));
+    }
+    std::vector<unsigned char> pixels(static_cast<std::size_t>(w)*h*4);
+    const InteropOps ops_base{io_create_d3d9,io_create_device,io_create_render_target,io_create_readback,
+                         io_copy_output,io_get_vk_image,io_read_pixels};
+    InteropOps ops=ops_base;
+    if (interop_pre_registered) { ops.create_d3d9=io_create_d3d9_pre; ops.create_device=io_create_device_pre; }
+    const InteropReport r=run_interop(ops,w,h,pixels.data());
+    // One copy+readback per frame is the in-game budget. Measure it, because a still proves the transfer
+    // exists and says nothing about whether it fits in a frame. REPROBE_INTEROP_LOOP=<n>
+    double transfer_ms=-1;
+    if (const char* e=getenv("REPROBE_INTEROP_LOOP")) {
+        const int n=std::atoi(e);
+        std::vector<unsigned char> frame(static_cast<std::size_t>(w)*h*4);
+        const auto t0=std::chrono::steady_clock::now();
+        int done=0;
+        for (int i=0;i<n;++i) {
+            // LockRect is what makes the readback synchronous (DXVK defers until the resource is mapped), so a
+            // timing loop without it measures nothing. Read one pixel to force the sync.
+            if (api.dxvk_CopyRenderingOutput && interop_target && interop_readback &&
+                api.dxvk_CopyRenderingOutput(interop_target,REMIXAPI_DXVK_COPY_RENDERING_OUTPUT_TYPE_FINAL_COLOR)==0 &&
+                interop_device->GetRenderTargetData(interop_target,interop_readback)==0) {
+                D3DLOCKED_RECT l{};
+                if (SUCCEEDED(interop_readback->LockRect(&l,nullptr,D3DLOCK_READONLY))) {
+                    const unsigned char* px=static_cast<const unsigned char*>(l.pBits)+static_cast<std::size_t>(h/2)*l.Pitch+static_cast<std::size_t>(w/2)*4;
+                    if (px[0]|px[1]|px[2]) ++done;
+                    interop_readback->UnlockRect();
+                }
+            }
+        }
+        const double ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-t0).count();
+        transfer_ms=done?ms/done:-1;
+        std::printf("Interop transfer: %d/%d frames, %.2f ms/frame (%.1f fps) at %ux%u\n",
+                    done,n,transfer_ms,transfer_ms>0?1000.0/transfer_ms:0.0,w,h);
+    }
+    if (getenv("REPROBE_INTEROP_CONTROL")) run_readback_control(w,h);
+    if (getenv("REPROBE_INTEROP_BACKBUFFER")) run_backbuffer_probe(w,h);
+    if (FILE* f=std::fopen("interop.txt","w")) {
+        std::fprintf(f,"ok=%d stage=%s vk_image=0x%llx mean_luma=%.4f nonblack=%.4f size=%ux%u set_default_output_rc=%d registered=%d pre_registered=%d control_luma=%.4f transfer_ms=%.2f\n",
+            static_cast<int>(r.ok), r.failed_stage?r.failed_stage:"-",
+            static_cast<unsigned long long>(r.vk_image), r.mean_luma, r.nonblack_fraction, w, h, set_default_rc,
+            interop_registered?1:0, interop_pre_registered?1:0, interop_control_luma, transfer_ms);
+        std::fclose(f);
+    }
+    if (r.ok) {  // a PPM, so the copied image can be looked at like any other still
+        if (FILE* f=std::fopen("interop.ppm","wb")) {
+            std::fprintf(f,"P6\n%u %u\n255\n",w,h);
+            for (std::size_t i=0;i<static_cast<std::size_t>(w)*h;++i) {
+                const unsigned char rgb[3]={pixels[i*4+2],pixels[i*4+1],pixels[i*4]};  // BGRA -> RGB
+                std::fwrite(rgb,1,3,f);
+            }
+            std::fclose(f);
+        }
+    }
+    if (interop_readback) { interop_readback->Release(); interop_readback=nullptr; }
+    if (interop_target) { interop_target->Release(); interop_target=nullptr; }
+    // Not released when pre-registered: that device is presenting, and Runtime's Shutdown owns it.
+    if (interop_device && !interop_pre_registered) { interop_device->Release(); interop_device=nullptr; }
+}
+
+// Create D3D9 + a device with a real swapchain on our own window and register it, so OUR device is the one
+// the runtime presents into and FINAL_COLOR's copy source (its backbuffer) is ours. Must run before Startup:
+// Startup refuses with ALREADY_EXISTS once a device is registered, and it creates+registers its own otherwise.
+bool pre_register_device(remixapi_Interface& api, HWND hwnd, unsigned w, unsigned h) {
+    if (!api.dxvk_CreateD3D9 || !api.dxvk_RegisterD3D9Device) return false;
+    IDirect3D9Ex* d3d9=nullptr;
+    if (api.dxvk_CreateD3D9(0,&d3d9) || !d3d9) return false;
+    interop_d3d9=d3d9; interop_w=w; interop_h=h; interop_hwnd=hwnd;
+    D3DPRESENT_PARAMETERS pp{};
+    pp.BackBufferWidth=w; pp.BackBufferHeight=h; pp.BackBufferFormat=D3DFMT_A8R8G8B8;
+    pp.BackBufferCount=1; pp.SwapEffect=D3DSWAPEFFECT_DISCARD; pp.Windowed=TRUE;
+    pp.hDeviceWindow=hwnd; pp.PresentationInterval=D3DPRESENT_INTERVAL_IMMEDIATE;
+    IDirect3DDevice9Ex* device=nullptr;
+    if (FAILED(d3d9->CreateDeviceEx(D3DADAPTER_DEFAULT,D3DDEVTYPE_HAL,hwnd,
+            D3DCREATE_HARDWARE_VERTEXPROCESSING|D3DCREATE_MULTITHREADED,&pp,nullptr,&device)) || !device) return false;
+    interop_device=device;
+    interop_pre_registered=api.dxvk_RegisterD3D9Device(device)==0;
+    return interop_pre_registered;
+}
+// Does the runtime hand us an image we could present ourselves? Only meaningful after Startup with
+// forceNoVkSwapchain=1; with the flag off this returns success and a NULL image, so judge by the handle.
+void run_swapchain_probe(remixapi_Interface& api) {
+    std::uint64_t image=0, sem_done=0, sem_resume=0;
+    int rc=-1;
+    if (api.dxvk_GetExternalSwapchain) rc=static_cast<int>(api.dxvk_GetExternalSwapchain(&image,&sem_done,&sem_resume));
+    if (FILE* f=std::fopen("swapchain.txt","w")) {
+        std::fprintf(f,"rc=%d vk_image=0x%llx sem_render_done=0x%llx sem_resume=0x%llx image_present=%d\n",
+            rc, static_cast<unsigned long long>(image), static_cast<unsigned long long>(sem_done),
+            static_cast<unsigned long long>(sem_resume), image?1:0);
+        std::fclose(f);
+    }
+}
+}  // namespace
+#endif
+
 namespace {
 // Diagnostic: find threads burning CPU and record where they are. Addresses are captured while the
 // thread is suspended WITHOUT taking locks or allocating; names are resolved only after resuming it.
@@ -341,8 +612,19 @@ int render(const wchar_t* dll, bool hold) {
     remixapi_StartupInfo startup{};
     startup.sType=REMIXAPI_STRUCT_TYPE_STARTUP_INFO; startup.hwnd=window.handle;
     startup.combineGuiInFinalColor=1;
+    // Opt-in: tell the runtime not to own a VkSwapchain, so dxvk_GetExternalSwapchain becomes meaningful.
+    // It returns success with a NULL image when this flag is off, so success must be judged by the handle.
+    startup.forceNoVkSwapchain=getenv("REPROBE_NO_VKSWAPCHAIN") ? std::atoi(getenv("REPROBE_NO_VKSWAPCHAIN")) : 0;
+    // With REPROBE_PRE_REGISTER the device is already registered, so Startup cannot help and refuses with
+    // ALREADY_EXISTS. That refusal is the expected outcome of this flow, not a failure.
+    if (getenv("REPROBE_PRE_REGISTER")) {
+        const bool ok=pre_register_device(api,window.handle,static_cast<unsigned>(window_w),static_cast<unsigned>(window_h));
+        stage("pre-register"); std::printf("pre-register %s\n",ok?"ok":"FAILED");
+    }
     stage("Startup");
-    if (!check(api.Startup(&startup),"Startup")) return 1;
+    const remixapi_ErrorCode startup_rc=api.Startup(&startup);
+    if (startup_rc && !interop_pre_registered) { check(startup_rc,"Startup"); return 1; }
+    if (startup_rc) std::printf("Startup refused (%d) after pre-register; continuing\n",static_cast<int>(startup_rc));
 
     remixapi_MaterialInfoOpaqueEXT opaque{};
     opaque.sType=REMIXAPI_STRUCT_TYPE_MATERIAL_INFO_OPAQUE_EXT;
@@ -360,7 +642,9 @@ int render(const wchar_t* dll, bool hold) {
     // happens here. Textures were copied next to scene.bin by scene_from_frame.py, into scene_textures/.
     std::vector<std::wstring> tex_path;  // reserved, so the c_str() handed to Remix stays valid
     std::vector<std::pair<std::uint32_t,remixapi_MaterialHandle>> tex_material;
+    std::vector<std::pair<std::uint32_t,remixapi_MaterialHandle>> tex_material_cutout;  // alpha-tested twins
     tex_path.reserve(scene.textures.size()); tex_material.reserve(scene.textures.size());
+    tex_material_cutout.reserve(scene.textures.size());
     wchar_t cwd[MAX_PATH]{}; const DWORD cwd_len=GetCurrentDirectoryW(MAX_PATH,cwd);
     const bool have_cwd=cwd_len && cwd_len<MAX_PATH;
     stage("CreateMaterial");
@@ -387,6 +671,18 @@ int render(const wchar_t* dll, bool hold) {
         remixapi_MaterialHandle m=nullptr;
         if (!check(api.CreateMaterial(&mi,&m),"CreateMaterial(texture)") || !m) return 1;
         tex_material.emplace_back(t.id,m);
+        // Cutout twin of the same albedo. A scene draw flagged as a discard shader (bit 1 of `skinned`) gets
+        // this one so foliage and hair cut holes instead of rendering as solid cards. AlphaTestType is
+        // VkCompareOp: 0 Never, 4 Greater, 6 GreaterOrEqual, 7 Always (default), so 4 keeps texels whose
+        // alpha exceeds the reference.
+        remixapi_MaterialInfoOpaqueEXT cop=op;
+        cop.useDrawCallAlphaState=0; cop.alphaTestType=4; cop.alphaReferenceValue=128;
+        remixapi_MaterialInfo cmi{};
+        cmi.sType=REMIXAPI_STRUCT_TYPE_MATERIAL_INFO; cmi.pNext=&cop; cmi.hash=2000000ull+t.id;
+        if (mi.albedoTexture) cmi.albedoTexture=mi.albedoTexture;  // NULL keeps the constant-albedo diagnostic
+        remixapi_MaterialHandle cm=nullptr;
+        if (!check(api.CreateMaterial(&cmi,&cm),"CreateMaterial(cutout)") || !cm) return 1;
+        tex_material_cutout.emplace_back(t.id,cm);
     }
     // blend-type bisect: identical materials that differ only in blendType_value, assigned round-robin, so one
     // frame shows which enum value is actually opaque.
@@ -471,7 +767,11 @@ int render(const wchar_t* dll, bool hold) {
         if (blend_mat[0]) { s.material=blend_mat[surfaces.size()%3]; surfaces.push_back(s); continue; }
         if (tri_material) { s.material=tri_mat; surfaces.push_back(s); if (!d.tex) ++untextured; continue; }
         const bool use_materials=!(getenv("REPROBE_MAT") && !std::strcmp(getenv("REPROBE_MAT"),"none"));
-        if (use_materials) for (const auto& m : tex_material) if (m.first==d.tex) { s.material=m.second; break; }
+        if (use_materials) {  // bit 1 of `skinned` is the converter's cutout flag; the probe never reads bit 0
+            const bool cutout=(d.skinned & 2u)!=0;
+            for (const auto& m : (cutout ? tex_material_cutout : tex_material))
+                if (m.first==d.tex) { s.material=m.second; break; }
+        }
         if (!s.material) ++untextured;  // draws with no sRGB albedo keep Remix's default material
         surfaces.push_back(s);
     }
@@ -548,6 +848,27 @@ int render(const wchar_t* dll, bool hold) {
     stage("CreateSky");
     if (!check(api.CreateLight(&sky_info,&skylight),"CreateSky") || !skylight) return 1;
     std::printf("Scene: sky %.2f\n",static_cast<double>(sky_power));
+    // Ambient that does not depend on the sky probe. An API-only client cannot populate the probe at all:
+    // RtxContext::commitExternalGeometryToRT only calls submitExternalDraw and never reaches tryHandleSky,
+    // so REMIXAPI_INSTANCE_CATEGORY_BIT_SKY picks a camera and nothing more. The one shipped pure-API
+    // client therefore stands in for sky ambient with a very large, dim area light. Radiance units are not
+    // documented anywhere reachable, so this is opt-in and meant to be swept on the GPU.
+    const float ambient_power=getenv("REPROBE_AMBIENT") ? static_cast<float>(std::atof(getenv("REPROBE_AMBIENT"))) : 0.f;
+    remixapi_LightHandle ambientlight=nullptr;
+    if (ambient_power>0.f) {
+      remixapi_LightInfoRectEXT rect{};
+      rect.sType=REMIXAPI_STRUCT_TYPE_LIGHT_INFO_RECT_EXT;
+      rect.position={0,60,20};
+      rect.xAxis={1,0,0}; rect.xSize=400;
+      rect.yAxis={0,0,1}; rect.ySize=400;
+      rect.direction={0,-1,0};  // convention (emit along +direction or -direction) is not documented; unverified
+      remixapi_LightInfo ambient_info{};
+      ambient_info.sType=REMIXAPI_STRUCT_TYPE_LIGHT_INFO; ambient_info.pNext=&rect; ambient_info.hash=5;
+      ambient_info.radiance={ambient_power,ambient_power,ambient_power*1.05f};
+      stage("CreateAmbient");
+      if (!check(api.CreateLight(&ambient_info,&ambientlight),"CreateAmbient") || !ambientlight) return 1;
+      std::printf("Scene: ambient rect light %.3f\n",static_cast<double>(ambient_power));
+    }
 #endif
     remixapi_CameraInfoParameterizedEXT params{};
     params.sType=REMIXAPI_STRUCT_TYPE_CAMERA_INFO_PARAMETERIZED_EXT;
@@ -578,6 +899,14 @@ int render(const wchar_t* dll, bool hold) {
 
     unsigned submitted=0;
     const unsigned limit=hold?hold_frames:frames;
+    const unsigned long long started=GetTickCount64();  // wall clock: --hold is killed, so print the rate as we go
+#ifdef SCENE_FILE
+    bool interop_done=false;
+    bool swapchain_done=false;
+#endif
+    // stdout never reaches the parent under this Proton (even a hello.exe prints nothing), so the rate also
+    // goes to metrics.txt in the working directory, flushed per line.
+    FILE* metrics=hold?std::fopen("metrics.txt","w"):nullptr;
     for (;submitted<limit;++submitted) {
         if (spin) {  // spin about the vertical axis through the object's centre (z=10 in mesh space, +5 instance)
             const float a=0.02f*static_cast<float>(submitted), c=std::cos(a), s=std::sin(a);
@@ -597,13 +926,36 @@ int render(const wchar_t* dll, bool hold) {
         stage("DrawLightInstance"); if (!check(api.DrawLightInstance(light),"DrawLightInstance")) return 1;
 #ifdef SCENE_FILE
         if (!check(api.DrawLightInstance(skylight),"DrawSky")) return 1;
+        if (ambientlight && !check(api.DrawLightInstance(ambientlight),"DrawAmbient")) return 1;
 #endif
         stage("Present"); if (!check(api.Present(nullptr),"Present")) return 1;
+#ifdef SCENE_FILE
+        // Interop probe, once, after the runtime has frames behind it. Diagnostic: REPROBE_INTEROP=1.
+        if (hold && !interop_done && submitted>=120 && getenv("REPROBE_INTEROP")) {
+            interop_done=true;
+            run_interop_probe(api,window.handle,static_cast<unsigned>(window_w),static_cast<unsigned>(window_h));
+        }
+        // External-swapchain probe: REPROBE_SWAPCHAIN=1 (pair with REPROBE_NO_VKSWAPCHAIN=1 to get an image).
+        if (hold && !swapchain_done && submitted>=120 && getenv("REPROBE_SWAPCHAIN")) {
+            swapchain_done=true;
+            run_swapchain_probe(api);
+        }
+#endif
         Sleep(hold?hold_delay_ms:frame_delay_ms);
+        // Rate line: the runner kills --hold before the end summary, so the fps must appear during the run.
+        // shortcut: capped near 62 fps by hold_delay_ms; enough to decide whether live rendering is viable.
+        if (hold && (submitted+1)%30==0) {
+            const double secs=(GetTickCount64()-started)/1000.0;
+            std::printf("FPS %u frames / %.1f s = %.2f fps\n",submitted+1,secs,(submitted+1)/secs);
+            std::fflush(stdout);
+            if (metrics) { std::fprintf(metrics,"FPS %u frames / %.1f s = %.2f fps\n",submitted+1,secs,(submitted+1)/secs); std::fflush(metrics); }
+        }
     }
+    if (metrics) std::fclose(metrics);
     std::printf("Submitted %u Remix frames. API success is NOT visual correctness; inspect the window.\n",submitted);
 #ifdef SCENE_FILE
     stage("DestroySky"); if (!check(api.DestroyLight(skylight),"DestroySky")) return 1;
+    if (ambientlight) { stage("DestroyAmbient"); if (!check(api.DestroyLight(ambientlight),"DestroyAmbient")) return 1; }
 #endif
     stage("DestroyLight"); if (!check(api.DestroyLight(light),"DestroyLight")) return 1;
     stage("DestroyMesh"); if (!check(api.DestroyMesh(mesh),"DestroyMesh")) return 1;
@@ -612,6 +964,7 @@ int render(const wchar_t* dll, bool hold) {
     if (tri_mat && !check(api.DestroyMaterial(tri_mat),"DestroyTriMaterial")) return 1;
     for (auto m : blend_mat) if (m && !check(api.DestroyMaterial(m),"DestroyBlendMaterial")) return 1;
     for (auto& m : tex_material) if (!check(api.DestroyMaterial(m.second),"DestroyMaterial")) return 1;
+    for (auto& m : tex_material_cutout) if (m.second && !check(api.DestroyMaterial(m.second),"DestroyCutoutMaterial")) return 1;
 #else
     if (!check(api.DestroyMaterial(mat),"DestroyMaterial")) return 1;
 #endif

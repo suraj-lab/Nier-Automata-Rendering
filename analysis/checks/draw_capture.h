@@ -33,7 +33,18 @@ struct Record {
     std::vector<ConstantBuffer> ps_cbs;       // pixel-shader constants: where per-material parameters live
     std::uint64_t vs_hash = 0, ps_hash = 0;  // shader identity, so draws can be grouped by shader family
     std::vector<texture_capture::Ref> ps_textures;  // material textures bound to the pixel shader
-};
+    // Fixed-size state, so one capture answers the material questions without another game run. Read with the
+    // ordinary context getters -- no vtable hooking is involved, exactly as VSGetShader/PSGetShader are read
+    // below. The descriptors are tiny and their objects are shared, so this costs bytes, not megabytes.
+    struct State {
+        unsigned blend_enable = 0;                                  // RenderTarget[0].BlendEnable
+        unsigned src_blend = 0, dest_blend = 0, blend_op = 0;       // RenderTarget[0]
+        unsigned write_mask = 0;                                    // RenderTarget[0].RenderTargetWriteMask
+        unsigned depth_enable = 0, depth_write = 0, depth_func = 0;  // D3D11_DEPTH_STENCIL_DESC
+        unsigned cull_mode = 0, fill_mode = 0;                      // D3D11_RASTERIZER_DESC
+        unsigned dsv_format = 0;                                    // bound depth-stencil view, 0 = none
+    } state;
+};  // struct Record
 
 // Skip draws smaller than this many indices (fullscreen/post-process quads and particles are 4-6; a
 // real mesh is hundreds+). Settable so the mock can lower it for testing.
@@ -85,7 +96,7 @@ inline bool read_cbs(ID3D11Device* device, ID3D11DeviceContext* context, bool pi
 inline bool capture_state(ID3D11Device* device, ID3D11DeviceContext* context, geometry_capture::Capture& geo,
                           std::vector<ConstantBuffer>& cbs, D3D11_VIEWPORT& viewport, geometry_capture::Cache* cache = nullptr,
                           std::vector<ConstantBuffer>* ps_cbs = nullptr, std::uint64_t* vs_hash = nullptr,
-                          std::uint64_t* ps_hash = nullptr) {
+                          std::uint64_t* ps_hash = nullptr, Record::State* state = nullptr) {
     if (!geometry_capture::capture(device, context, geo, cache)) return false;
     UINT num = 1;
     context->RSGetViewports(&num, &viewport);
@@ -99,6 +110,51 @@ inline bool capture_state(ID3D11Device* device, ID3D11DeviceContext* context, ge
     if (ps_hash) *ps_hash = shader_id(ps);
     if (vs) vs->Release();
     if (ps) ps->Release();
+    if (state) {  // fixed-size state descriptors; plain getters, no hooks
+        *state = Record::State{};
+        ID3D11BlendState* bs = nullptr;
+        FLOAT factor[4]{};
+        UINT mask = 0;
+        context->OMGetBlendState(&bs, factor, &mask);
+        if (bs) {
+            D3D11_BLEND_DESC d{};
+            bs->GetDesc(&d);
+            state->blend_enable = d.RenderTarget[0].BlendEnable;
+            state->src_blend = d.RenderTarget[0].SrcBlend;
+            state->dest_blend = d.RenderTarget[0].DestBlend;
+            state->blend_op = d.RenderTarget[0].BlendOp;
+            state->write_mask = d.RenderTarget[0].RenderTargetWriteMask;
+            bs->Release();
+        }
+        ID3D11DepthStencilState* ds = nullptr;
+        UINT stencil_ref = 0;
+        context->OMGetDepthStencilState(&ds, &stencil_ref);
+        if (ds) {
+            D3D11_DEPTH_STENCIL_DESC d{};
+            ds->GetDesc(&d);
+            state->depth_enable = d.DepthEnable;
+            state->depth_write = d.DepthWriteMask;
+            state->depth_func = d.DepthFunc;
+            ds->Release();
+        }
+        ID3D11RasterizerState* rs = nullptr;
+        context->RSGetState(&rs);
+        if (rs) {
+            D3D11_RASTERIZER_DESC d{};
+            rs->GetDesc(&d);
+            state->cull_mode = d.CullMode;
+            state->fill_mode = d.FillMode;
+            rs->Release();
+        }
+        ID3D11DepthStencilView* dsv = nullptr;
+        context->OMGetRenderTargets(0, nullptr, &dsv);  // zero views: we only want the DSV
+        if (dsv) {
+            D3D11_DEPTH_STENCIL_VIEW_DESC d{};
+            dsv->GetDesc(&d);
+            state->dsv_format = static_cast<unsigned>(d.Format);
+            dsv->Release();
+        }
+    }
     return true;
 }
 
@@ -129,7 +185,8 @@ inline void record_draw(ID3D11DeviceContext* self, bool instanced, UINT index_co
     r.index_count = index_count; r.start_index = start_index; r.base_vertex = base_vertex;
     r.instanced = instanced; r.instance_count = instance_count; r.start_instance = start_instance;
     const std::size_t before = cache.read_bytes;
-    if (capture_state(device, self, r.geometry, r.vs_cbs, r.viewport, &cache, &r.ps_cbs, &r.vs_hash, &r.ps_hash)) {
+    if (capture_state(device, self, r.geometry, r.vs_cbs, r.viewport, &cache, &r.ps_cbs, &r.vs_hash, &r.ps_hash,
+                      &r.state)) {
         r.valid = true;
         texture_capture::capture(device, self, texture_cache, r.ps_textures, max_texture_bytes);
         frame_bytes += cache.read_bytes - before;

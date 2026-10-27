@@ -3,6 +3,7 @@
 import hashlib
 import json
 import math
+import os
 import shutil
 import struct
 import sys
@@ -235,7 +236,35 @@ def valid_meta(c):
             and all(type(e.get('offset')) is int and e['offset'] >= 0 and type(e.get('slot', 0)) is int for e in c['layout']))
 
 
-def build(frame):
+def sky_dds_hdr(width=128, height=64, zenith=(0.05, 0.09, 0.22), horizon=(0.72, 0.80, 0.96)):
+    """Equirectangular RGBA16F sky for the dome light: a zenith->horizon gradient instead of one grey texel.
+
+    Same DDS/DX10 framing as sky_dds (plain 2D, full mip chain, never a cubemap); only the DXGI format and the
+    per-texel packing differ. Opt-in via REPROBE_SKY_HDR=1, because attaching any dome texture is the path that
+    crashed the runtime with an integer divide by zero - this variant exists to test whether that is about the
+    texture's size/format rather than the textured-dome path itself.
+    """
+    mips, w, h = [], width, height
+    while True:
+        t = np.linspace(0.0, 1.0, h)[:, None]  # 0 at the zenith row, 1 at the nadir row
+        col = np.array(zenith, dtype=np.float64) * (1.0 - t) + np.array(horizon, dtype=np.float64) * t
+        px = np.empty((h, w, 4), dtype='<f2')  # half floats: this format can carry radiance above 1.0
+        px[..., :3] = col[:, None, :]
+        px[..., 3] = 1.0
+        mips.append(px.tobytes())
+        if w == 1 and h == 1:
+            break
+        w, h = max(w >> 1, 1), max(h >> 1, 1)
+    hd = bytearray(124)
+    struct.pack_into('<7I', hd, 0, 124, 0x1 | 0x2 | 0x4 | 0x1000 | 0x20000, height, width, 8 * width, 0, len(mips))
+    struct.pack_into('<I', hd, 72, 32)             # DDS_PIXELFORMAT.dwSize
+    hd[80:84] = b'DX10'                            # dwFourCC: DX10 header follows the 124-byte header
+    struct.pack_into('<I', hd, 104, 0x1000 | 0x400000)  # DDSCAPS_TEXTURE | DDSCAPS_MIPMAP
+    dx10 = struct.pack('<5I', 10, 3, 0, 1, 0)      # DXGI_FORMAT_R16G16B16A16_FLOAT, TEXTURE2D, 1 array slice
+    return b'DDS ' + bytes(hd) + dx10 + b''.join(mips)
+
+
+def build(frame, cutout_ids=frozenset()):
     index = tex_index(frame)
     # draw_<digits> fitting the uint32 table field; other folder names are ignored entirely.
     draws = sorted(p for p in frame.iterdir() if p.is_dir() and p.name.startswith('draw_') and p.name[5:].isascii()
@@ -320,7 +349,11 @@ def build(frame):
                 t = uv[inv].reshape(-1, 3, 2)[keep]
                 t = np.where(np.isfinite(t), t, 0.0)
                 tris.append(np.concatenate([v, vn, t], axis=2).reshape(-1, 24))
-            table.append((int(d.name[5:]), start, sum(len(x) for x in tris) - start, int(skinned),
+            # Bit 1 of the `skinned` field carries the cutout flag: bit 0 is the only bit the probe has ever
+            # read (and today it reads neither), so the scene format stays v3 and every existing fixture and
+            # capture converts byte-identically when no discard list is supplied.
+            cutout = 2 if c.get('ps_hash') in cutout_ids else 0
+            table.append((int(d.name[5:]), start, sum(len(x) for x in tris) - start, int(skinned) | cutout,
                           albedo(c, index, frame)))
             stats['kept'] += 1
             break
@@ -330,15 +363,46 @@ def build(frame):
     return camera(first_kept), table, allt, main, stats
 
 
+def load_discard(path):
+    """Read a discard list and return the set of ps_hash ids whose pixel shader contains a discard.
+
+    Accepts the verbatim stdout of analysis/checks/dxbc_disasm.cpp (`DISCARD ps_<id> 1`) or a plain
+    `ps_<id> <0|1>` file, so the list can be produced offline and shipped next to the converter. Absence is
+    not an error: a capture taken before shader capture existed simply gets no cutouts.
+    """
+    ids = set()
+    for line in Path(path).read_text().splitlines():
+        parts = line.split()
+        if len(parts) == 3 and parts[0] == 'DISCARD':
+            name, flag = parts[1], parts[2]
+        elif len(parts) == 2:
+            name, flag = parts
+        else:
+            continue
+        if flag != '1' or not name.startswith('ps_'):
+            continue
+        digits = name[3:]
+        if not digits.isdigit():  # rejects ps_-3, ps_0x10 and the like
+            continue
+        ids.add(int(digits))
+    return frozenset(ids)
+
+
 def main():
-    if len(sys.argv) != 3:
-        print('usage: scene_from_frame.py <frame_dir> <out_scene.bin>', file=sys.stderr)
+    args = [a for a in sys.argv[1:] if not a.startswith('--')]
+    discard_path = None
+    if '--discard-file' in sys.argv:
+        discard_path = sys.argv[sys.argv.index('--discard-file') + 1]
+        args = [a for a in args if a != discard_path]
+    if len(args) != 2:
+        print('usage: scene_from_frame.py <frame_dir> <out_scene.bin> [--discard-file <list>]', file=sys.stderr)
         sys.exit(2)
-    frame, out = Path(sys.argv[1]), Path(sys.argv[2])
+    frame, out = Path(args[0]), Path(args[1])
     try:
         if not frame.is_dir():
             raise Reject('missing frame dir')
-        cam, table, allt, main, stats = build(frame)
+        cutout_ids = load_discard(discard_path) if discard_path else frozenset()
+        cam, table, allt, main, stats = build(frame, cutout_ids)
     except Exception as e:
         print(f'error: {e}', file=sys.stderr)
         sys.exit(2)
@@ -368,13 +432,17 @@ def main():
             dest.unlink()
         tmp.rename(dest)
         out.write_bytes(bytes(blob))
-        (out.parent / 'scene_sky.dds').write_bytes(sky_dds())  # the probe points the dome light at this
+        (out.parent / 'scene_sky.dds').write_bytes(
+            sky_dds_hdr() if os.environ.get('REPROBE_SKY_HDR') == '1' else sky_dds())  # dome light points here
     except OSError as e:
         print(f'error: {e}', file=sys.stderr)
         sys.exit(2)
-    print(json.dumps({'kept': stats['kept'], 'duplicates': stats['duplicates'], 'rejected': stats['rejected'],
-                      'other_viewport': stats['other_viewport'], 'triangles': len(allt),
-                      'main_viewport': list(main), 'textures': len(tex)}))
+    summary = {'kept': stats['kept'], 'duplicates': stats['duplicates'], 'rejected': stats['rejected'],
+               'other_viewport': stats['other_viewport'], 'triangles': len(allt),
+               'main_viewport': list(main), 'textures': len(tex)}
+    if cutout_ids:  # only present when a discard list was supplied, so default output stays unchanged
+        summary['cutout_draws'] = sum(1 for row in table if row[3] & 2)
+    print(json.dumps(summary))
 
 
 if __name__ == '__main__':

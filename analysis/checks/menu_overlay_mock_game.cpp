@@ -95,6 +95,35 @@ int wmain(int argc, wchar_t** argv) {
         std::fprintf(out, "FAIL compute shader\n"); return 3;
     }
     blob->Release();
+    // A cutout pixel shader: the capture hook must write its bytecode when NIER_SHADER_DIR is set, so an
+    // offline tool can tell `discard` shaders from opaque ones (test_shader_capture.py asserts this).
+    const char cutout_src[] = "Texture2D t : register(t0); SamplerState s : register(s0);"
+                              "float4 main(float2 uv : TEXCOORD0) : SV_Target { float4 c = t.Sample(s, uv);"
+                              " if (c.a < 0.5) discard; return c; }";
+    ID3DBlob* cutout_blob = nullptr; ID3D11PixelShader* cutout_ps = nullptr;
+    if (!compile || FAILED(compile(cutout_src, sizeof cutout_src - 1, nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, &cutout_blob, nullptr)) ||
+        FAILED(device->CreatePixelShader(cutout_blob->GetBufferPointer(), cutout_blob->GetBufferSize(), nullptr, &cutout_ps))) {
+        std::fprintf(out, "FAIL cutout pixel shader\n"); return 3;
+    }
+    cutout_blob->Release();
+    // Distinctive render state, so the capture path's state block can be proven end-to-end rather than assumed:
+    // alpha blending, depth test on but write off with GREATER, and FRONT-face culling in wireframe.
+    D3D11_BLEND_DESC bd{};
+    bd.RenderTarget[0].BlendEnable = TRUE;
+    bd.RenderTarget[0].SrcBlend = D3D11_BLEND_SRC_ALPHA;
+    bd.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
+    bd.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
+    bd.RenderTarget[0].RenderTargetWriteMask = 0xFF;
+    ID3D11BlendState* probe_blend = nullptr;
+    if (FAILED(device->CreateBlendState(&bd, &probe_blend))) { std::fprintf(out, "FAIL blend state\n"); return 3; }
+    D3D11_DEPTH_STENCIL_DESC dd{};
+    dd.DepthEnable = TRUE; dd.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO; dd.DepthFunc = D3D11_COMPARISON_GREATER;
+    ID3D11DepthStencilState* probe_depth = nullptr;
+    if (FAILED(device->CreateDepthStencilState(&dd, &probe_depth))) { std::fprintf(out, "FAIL depth state\n"); return 3; }
+    D3D11_RASTERIZER_DESC rd{};
+    rd.FillMode = D3D11_FILL_WIREFRAME; rd.CullMode = D3D11_CULL_FRONT; rd.DepthClipEnable = TRUE;
+    ID3D11RasterizerState* probe_raster = nullptr;
+    if (FAILED(device->CreateRasterizerState(&rd, &probe_raster))) { std::fprintf(out, "FAIL raster state\n"); return 3; }
     // Capture test: a known mesh + F9 trigger. The menu is closed until frame 30, so poll_capture
     // arms capture_next (F9 down at frame 1) and the mesh draw (frame 3) is the next DrawIndexed.
     const char vs_src[] =
@@ -170,6 +199,9 @@ int wmain(int argc, wchar_t** argv) {
         context->VSSetConstantBuffers(0, 1, &mesh_cb_buf);
         context->PSSetConstantBuffers(0, 1, &mesh_cb_buf);  // one PS buffer at a slot the VS also uses
         context->PSSetShaderResources(0, 3, mesh_srvs);
+        context->OMSetBlendState(probe_blend, nullptr, 0xFFFFFFFF);
+        context->OMSetDepthStencilState(probe_depth, 0);
+        context->RSSetState(probe_raster);
         context->DrawIndexed(192, 0, 0);
     };
     unsigned presented = 0, cs_lost = 0;

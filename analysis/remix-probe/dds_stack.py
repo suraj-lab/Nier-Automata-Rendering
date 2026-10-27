@@ -28,7 +28,7 @@ def load(path):
 
 
 def main(argv):
-    if len(argv) < 3:
+    if len(argv) < 2:
         print('usage: dds_stack.py <out.png> <a.dds> [b.dds ...]', file=sys.stderr)
         return 2
     try:
