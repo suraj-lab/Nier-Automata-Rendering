@@ -938,6 +938,24 @@ int render(const wchar_t* dll, bool hold) {
     const bool spin=hold;
 #endif
 
+    // A 3-vertex instanced mesh, used only by REPROBE_INSTANCES.
+    const int extra_instances = getenv("REPROBE_INSTANCES") ? std::atoi(getenv("REPROBE_INSTANCES")) : 0;
+    remixapi_MeshHandle extra_mesh=nullptr;
+    if (extra_instances>0) {
+        static remixapi_HardcodedVertex tiny[3]{};
+        const float tri[3][3]={{-1.f,-1.f,3.f},{1.f,-1.f,3.f},{0.f,1.f,3.f}};
+        for (unsigned i=0;i<3;++i) {
+            for (unsigned k=0;k<3;++k) tiny[i].position[k]=tri[i][k];
+            tiny[i].normal[2]=-1.f; tiny[i].color=0xffffffffu;
+        }
+        remixapi_MeshInfoSurfaceTriangles s_tiny{};
+        s_tiny.vertices_values=tiny; s_tiny.vertices_count=3; s_tiny.material=nullptr;
+        remixapi_MeshInfo mi{};
+        mi.sType=REMIXAPI_STRUCT_TYPE_MESH_INFO; mi.hash=99;
+        mi.surfaces_values=&s_tiny; mi.surfaces_count=1;
+        if (!check(api.CreateMesh(&mi,&extra_mesh),"CreateMesh(extra)") || !extra_mesh) return 1;
+        std::printf("Instances: %d extra per frame\n",extra_instances);
+    }
     unsigned submitted=0;
     const unsigned limit=hold?hold_frames:frames;
     const unsigned long long started=GetTickCount64();  // wall clock: --hold is killed, so print the rate as we go
@@ -964,6 +982,22 @@ int render(const wchar_t* dll, bool hold) {
         if (hold && submitted==16) quiet=true;  // keep the startup + first frames trace, then go quiet
         stage("SetupCamera"); if (!check(api.SetupCamera(&camera),"SetupCamera")) return 1;
         stage("DrawInstance"); if (!check(api.DrawInstance(&instance),"DrawInstance")) return 1;
+        // NieR's live path submits ~3000 SEPARATE instances per frame, while the scene path above is one mesh
+        // with thousands of surfaces and a single DrawInstance - so its fps contains no per-draw cost at all.
+        // REPROBE_INSTANCES=N adds N small instances on top, which is the marginal cost we need before
+        // committing to per-draw submission. Measured as an fps delta against N=0.
+        for (int k=0;k<extra_instances;++k) {
+            remixapi_InstanceInfo extra=instance;
+            extra.mesh=extra_mesh;
+            extra.transform.matrix[0][0]=0.02f; extra.transform.matrix[1][1]=0.02f; extra.transform.matrix[2][2]=0.02f;
+            extra.transform.matrix[0][3]=float((k%64)-32)*0.05f;
+            extra.transform.matrix[1][3]=float((k/64%32)-16)*0.05f;
+            // Behind the camera: the instances cannot reach any ray, so the fps delta is submission cost only.
+            // With them in view the numbers were not even monotonic in N (47 / 26 / 34 fps at 100/300/1000),
+            // because clustered triangles multiply per-pixel ray work instead of measuring submit overhead.
+            extra.transform.matrix[2][3]=-50.f;
+            if (!check(api.DrawInstance(&extra),"DrawInstance(extra)")) return 1;
+        }
         stage("DrawLightInstance"); if (!check(api.DrawLightInstance(light),"DrawLightInstance")) return 1;
 #ifdef SCENE_FILE
         if (!check(api.DrawLightInstance(skylight),"DrawSky")) return 1;

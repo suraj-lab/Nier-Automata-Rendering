@@ -118,6 +118,30 @@ NieR's HUD and menus are D3D11 draws in the game frame; Remix's output has no UI
 - **GUI buffer copy**: `CopyRenderingOutput(GUI)` exists but is refused when `combineGuiInFinalColor` is set,
   and it refers to *Remix's* ImGui overlay, not the game's UI. Not a solution for NieR's HUD.
 
+## FSR SDK (AMD) — what the desktop can and cannot have
+
+AMD FSR "Redstone" SDK 2.3 ships: FSR Upscaling 4.1.1, **FSR Frame Generation 4.0.1**, FSR FG (SwapChain) 3.1.7,
+**FSR Ray Regeneration 1.2.0**, plus FSR 2.3.4/3.1.5 and FG 3.1.6, and Radiance Caching 0.9.0 (preview).
+Constraints that decide our split:
+
+- **DirectX 12 only, Windows 10/11 only**, as prebuilt signed DLLs (`amd_fidelityfx_loader.dll` + per-feature DLLs).
+- Frame Generation 4 and Ray Regeneration 1.2 need **RDNA 4** (our 9070 XT qualifies) and Shader Model 6.6
+  (Agility SDK path). Upscaling 4 falls back to FSR 3.1.5 on older GPUs.
+- Frame Generation needs render-resolution **motion vectors and depth**, and the SwapChain variant expects the
+  game to present through a DX12 swapchain. NieR presents D3D11 through our proxy, so frame generation is a
+  swapchain-takeover research project, not an afternoon.
+- Ray Regeneration is a **standalone denoiser**, which is interesting precisely because Remix's own NRD is inert
+  for API-only clients — but it consumes ray-traced G-buffers, and Remix does not expose those to a client.
+
+Our in-game FSR 4.1.1 already rides the D3D11<->D3D12 interop bridge under vkd3d-proton, so "DX12 only" is not by
+itself a blocker on Linux; the *swapchain* requirement is.
+
+Resulting split on purpose:
+- **Desktop (Linux, RX 9070 XT):** Remix path with XeSS (measured 60.65 fps at Performance preset = the game's own
+  60 fps cap), FSR 4.1.1 upscaling at the game layer as today. No frame generation, no DLSS, no DLSS-RR.
+- **Laptop (Windows, RTX Spark N1X):** Remix path with DLSS + DLSS Ray Reconstruction + DL frame generation — the
+  only host where "best looking with frame gen" exists.
+
 ## Safety
 
 - The proxy must be deployable and revertible by the existing mechanism: `backups/ingame-menu-*/` with

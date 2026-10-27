@@ -33,6 +33,15 @@ wrong.** Full write-up and measurements: [LIVE_TRANSFER.md](analysis/LIVE_TRANSF
   `REPROBE_INTEROP_BACKBUFFER`, `REPROBE_INTEROP_LOOP`, `REPROBE_INTEROP_CLEAR`; `REPROBE_INTEROP_REGISTER` now
   defaults **off**. Exe `5b70560f…`, 27 CPU gates + the probe build green.
 
+- Per-draw submission cost is **unmeasured**: adding `REPROBE_INSTANCES` to the probe showed the effect is confounded
+  by clustered overdraw in view (47/26/34 fps at N=100/300/1000, non-monotonic), and with instances moved behind the
+  camera to isolate submit cost the probe **dies before its first report at N>=500** (0-byte metrics.txt, no stray
+  processes). Next session starts there.
+- FSR SDK 2.3 (Redstone) is **DX12 + Windows only**: Upscaling 4.1.1 (already in-game here via the D3D11<->D3D12
+  bridge), Frame Generation 4.0.1 and Ray Regeneration 1.2.0 on RDNA4, Radiance Caching preview. FG additionally
+  needs a DX12 swapchain, which NieR (D3D11) does not have - so desktop gets XeSS + FSR4 upscaling, and frame
+  generation + DLSS/RR live on the Windows/NVIDIA laptop.
+
 **What live now needs, in order:** (1) feed NieR's live draw stream instead of a converted capture — cache
 materials/meshes/textures by hash, update camera and instance transforms per frame (the probe already submits
 2.7M triangles per frame at 53 fps, so the renderer side is proven); (2) composite: copy -> sysmem -> D3D11
