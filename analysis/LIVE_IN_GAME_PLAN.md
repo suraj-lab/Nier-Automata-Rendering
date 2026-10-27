@@ -16,6 +16,17 @@ D3D11 without loss. **This was the last structural unknown for live-in-NieR.**
 Note: the surface must use the **default material** (`surface.material = nullptr`). The custom-material variant
 is the one the record already flags as unproven in this runtime, and it reproduced here (dark frame, no triangle).
 
+Cost of the bridge, measured (`--bench WxH`, which times the D3D11 hop alone):
+
+| hop | 2580x1080 |
+|---|---|
+| Remix -> D3D9 -> CPU (measured earlier) | 0.49 ms |
+| CPU -> D3D11 texture -> CPU (`--bench 2580x1080`) | **1.78 ms** |
+| total per frame | **~2.3 ms** (14% of a 16.7 ms budget) |
+
+So a live frame at XeSS Quality (48 fps = 20.8 ms of rendering) plus the bridge lands around 43 fps, and at native
+(21 fps) around 20 fps. Arithmetic, not yet measured end-to-end inside the game.
+
 What is left is engineering, not discovery:
 1. Warm the geometry/material/texture cache from NieR's own draw stream (cache-first, see below).
 2. Draw the uploaded frame in the existing Present hook (fullscreen quad; the proxy already has that pipeline).

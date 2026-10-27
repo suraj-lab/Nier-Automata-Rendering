@@ -189,16 +189,70 @@ bool bridge_once(RemixSide& r, ID3D11Device* dev, ID3D11DeviceContext* ctx,
     stage_name=nullptr;
     return true;
 }
+
+// --bench WxH: cost of the D3D11 hop alone (upload + GPU copy + map back), no Remix involved. The live budget
+// is this plus the measured Remix->CPU copy (0.49 ms at 2580x1080).
+int bench_bridge(unsigned w, unsigned h, int frames) {
+    ID3D11Device* dev=nullptr; ID3D11DeviceContext* ctx=nullptr; D3D_FEATURE_LEVEL level{};
+    const D3D_FEATURE_LEVEL want[]={D3D_FEATURE_LEVEL_11_0};
+    if (FAILED(D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_HARDWARE,nullptr,0,want,1,D3D11_SDK_VERSION,
+                                 &dev,&level,&ctx)) || !dev) { report("RESULT bench_d3d11_failed\n"); return 1; }
+    D3D11_TEXTURE2D_DESC td{};
+    td.Width=w; td.Height=h; td.MipLevels=1; td.ArraySize=1; td.Format=DXGI_FORMAT_B8G8R8A8_UNORM;
+    td.SampleDesc={1,0}; td.Usage=D3D11_USAGE_DEFAULT; td.BindFlags=D3D11_BIND_SHADER_RESOURCE;
+    ID3D11Texture2D* upload=nullptr;
+    if (FAILED(dev->CreateTexture2D(&td,nullptr,&upload))) { report("RESULT bench_upload_failed\n"); return 1; }
+    td.Usage=D3D11_USAGE_STAGING; td.BindFlags=0; td.CPUAccessFlags=D3D11_CPU_ACCESS_READ;
+    ID3D11Texture2D* staging=nullptr;
+    if (FAILED(dev->CreateTexture2D(&td,nullptr,&staging))) { report("RESULT bench_staging_failed\n"); return 1; }
+    std::vector<unsigned char> src((size_t)w*h*4, 128), dst((size_t)w*h*4);
+    for (int i=0;i<5;++i) {  // warm up
+        D3D11_BOX box{0,0,0,w,h,1};
+        ctx->UpdateSubresource(upload,0,&box,src.data(),w*4,0);
+        ctx->CopyResource(staging,upload);
+        D3D11_MAPPED_SUBRESOURCE m{};
+        if (SUCCEEDED(ctx->Map(staging,0,D3D11_MAP_READ,0,&m))) {
+            for (unsigned y=0;y<h;++y) std::memcpy(&dst[(size_t)y*w*4],(const unsigned char*)m.pData+(size_t)y*m.RowPitch,(size_t)w*4);
+            ctx->Unmap(staging,0);
+        }
+    }
+    LARGE_INTEGER f,t0,t1; QueryPerformanceFrequency(&f); QueryPerformanceCounter(&t0);
+    for (int i=0;i<frames;++i) {
+        D3D11_BOX box{0,0,0,w,h,1};
+        ctx->UpdateSubresource(upload,0,&box,src.data(),w*4,0);
+        ctx->CopyResource(staging,upload);
+        D3D11_MAPPED_SUBRESOURCE m{};
+        if (SUCCEEDED(ctx->Map(staging,0,D3D11_MAP_READ,0,&m))) {
+            for (unsigned y=0;y<h;++y) std::memcpy(&dst[(size_t)y*w*4],(const unsigned char*)m.pData+(size_t)y*m.RowPitch,(size_t)w*4);
+            ctx->Unmap(staging,0);
+        }
+    }
+    QueryPerformanceCounter(&t1);
+    const double ms=(t1.QuadPart-t0.QuadPart)*1000.0/double(f.QuadPart)/frames;
+    report("RESULT bench size=%ux%u frames=%d ms_per_frame=%.3f fps_ceiling=%.1f\n",w,h,frames,ms,1000.0/ms);
+    staging->Release(); upload->Release(); ctx->Release(); dev->Release();
+    return 0;
+}
+
 }  // namespace
 
 int wmain(int argc, wchar_t** argv) {
     const wchar_t* runtime=nullptr; int frames=60; const wchar_t* out_path=L"bridge.ppm";
+    report_file=std::fopen("bridge.txt","w");
     for (int i=1;i<argc;++i) {
         if (!std::wcscmp(argv[i],L"--render") && i+1<argc) runtime=argv[++i];
         else if (!std::wcscmp(argv[i],L"--frames") && i+1<argc) frames=_wtoi(argv[++i]);
         else if (!std::wcscmp(argv[i],L"--out") && i+1<argc) out_path=argv[++i];
+        else if (!std::wcscmp(argv[i],L"--bench") && i+1<argc) {
+            unsigned bw=0,bh=0;
+            if (std::swscanf(argv[++i],L"%ux%u",&bw,&bh)==2 && bw && bh) {
+                if (!report_file) report_file=std::fopen("bridge.txt","w");
+                const int rc=bench_bridge(bw,bh,frames);
+                if (report_file) std::fclose(report_file);
+                return rc;
+            }
+        }
     }
-    report_file=std::fopen("bridge.txt","w");
     if (!report_file) return 2;
     if (!runtime || !runtime[0] || !std::wcschr(runtime,L':')) {
         report("usage: d3d11-bridge.exe --render <absolute d3d9.dll> [--frames N]\n");
