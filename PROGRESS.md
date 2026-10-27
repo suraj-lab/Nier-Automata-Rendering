@@ -1031,7 +1031,10 @@ work were waiting on.
 
 ## Session end state (2026-10-27) — read this first
 
-**Installed in the game:** `d3d11.dll` = **`f8a416d8…`** (menu + capture + per-draw state + PS bytecode hook),
+**Installed in the game:** `d3d11.dll` = **`a16e820e…`** (15 117 447 B, 2026-10-27 14:36; verified byte-identical to a
+fresh build of the current source, so the install matches the repo. The rollback receipt for the 14:02Z deploy
+records `f8a416d8…` as its source, which is stale: that deploy was superseded by the later build. Rollback is
+still one `cp` from `backups/ingame-menu-state-20261027T140214Z/`, whose saved copy is `b32f6f5f…`.) (menu + capture + per-draw state + PS bytecode hook),
 `d3d11_dlaa.dll` = `3d628eb5…` untouched. Rollback: `backups/ingame-menu-state-20261027T140214Z/` with
 `receipt.json`. Two game captures exist under
 `/mnt/second/SteamLibrary/steamapps/common/NieRAutomata/NIER_CAPTURE/frame_21396979` and `frame_21565698`
