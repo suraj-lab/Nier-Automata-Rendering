@@ -1,5 +1,26 @@
 # Live Remix *in NieR* — implementation plan (L1)
 
+## Status 2026-10-27 late: the in-process bridge is PROVEN
+
+`analysis/remix-probe/d3d11_bridge_probe.cpp` (+ `run_bridge.sh`) now demonstrates the complete chain that live
+in-game needs, outside the game:
+
+    Remix renders (own VkDevice) -> dxvk_CopyRenderingOutput(FINAL_COLOR) -> D3D9 surface -> CPU
+      -> D3D11 texture (DXVK, own VkDevice, same process) -> back to CPU
+
+Measured: `registered=1 startup_rc=5 (ALREADY_EXISTS)`, `d3d11: device ok, feature level 0xb000`,
+`RESULT ok size=640x360 mean_luma=0.1037 nonblack=1.0000 bright=0.0765`, and the copied frame is a correctly lit
+path-traced triangle. Two Vulkan devices coexist in one process under Proton; the frame crosses D3D9 -> CPU ->
+D3D11 without loss. **This was the last structural unknown for live-in-NieR.**
+
+Note: the surface must use the **default material** (`surface.material = nullptr`). The custom-material variant
+is the one the record already flags as unproven in this runtime, and it reproduced here (dark frame, no triangle).
+
+What is left is engineering, not discovery:
+1. Warm the geometry/material/texture cache from NieR's own draw stream (cache-first, see below).
+2. Draw the uploaded frame in the existing Present hook (fullscreen quad; the proxy already has that pipeline).
+3. UI (fallback to the game's frame while a menu is open).
+
 Written 2026-10-27 evening, after the transfer step was proven ([LIVE_TRANSFER.md](LIVE_TRANSFER.md)).
 Prerequisites are all in place: the copy route works at 0.49 ms/frame (1080p), the renderer does 53 fps on the
 full textured camp scene, and the game's draw stream is already recorded with per-draw state, shader identity
