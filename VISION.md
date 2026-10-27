@@ -1,6 +1,7 @@
-# Vision — a modern NieR:Automata, not a remaster
+# NieR RTX — a modern NieR:Automata, not a remaster
 
-Written 2026-10-27, at the point where the live path stopped being a question of feasibility and became a build.
+**Working name: NieR RTX.** Written 2026-10-27, at the point where the live path stopped being a question of
+feasibility and became a build.
 This file is the shared intent. [PROGRESS.md](PROGRESS.md) holds the evidence and the resume state;
 [analysis/LIVE_TRANSFER.md](analysis/LIVE_TRANSFER.md) and [analysis/LIVE_IN_GAME_PLAN.md](analysis/LIVE_IN_GAME_PLAN.md)
 hold the engineering.

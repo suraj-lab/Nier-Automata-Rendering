@@ -1,4 +1,4 @@
-# NieR:Automata rendering investigation
+# NieR RTX — NieR:Automata rendering investigation
 
 ## Scope and status
 

@@ -1,6 +1,7 @@
 # NieR:Automata Rendering — Progress & Resume
 
-Last updated: 2026-10-27 (evening). **Read the first checkpoint: the transfer blocker is gone.**
+Last updated: 2026-10-27 (late). Project name: **NieR RTX**. **Read the first checkpoint: the pipeline is proven end
+to end and the build starts at the in-game host.**
 
 ## Checkpoint — 2026-10-27 late: pipeline proven end to end; build starts at the in-game host
 
