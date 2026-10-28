@@ -2,7 +2,7 @@
 
 ## Scope and status
 
-Status refreshed 2026-10-27 (late evening). Intent, scope and the desktop/laptop split: [VISION.md](VISION.md).
+Status refreshed 2026-10-28. Intent, scope and the desktop/laptop split: [VISION.md](VISION.md).
 [PROGRESS.md](PROGRESS.md) is the authoritative resume record (installed hashes, rollback chain, verified facts,
 next steps); its top "Checkpoint" section is the place to start.
 
@@ -13,7 +13,7 @@ next steps); its top "Checkpoint" section is the place to start.
 | Startup settings | `NIER_RENDER.ini` selects Native / Custom75 for the next launch; honest startup status. |
 | In-game menu | **Installed, live-tested:** Insert panel, save-for-next-launch, mouse/camera blocked while open. |
 | RTX Remix | **Textured** path-traced stills from one F9 capture (190 albedo textures, 2.74M triangles). Not live in the game. |
-| Remix live in NieR | **Pipeline fully proven, nothing in-game yet** (2026-10-27): frame leaves the runtime (`CopyRenderingOutput(FINAL_COLOR)`, 0.49 ms @1080p), reaches a **D3D11 texture in the same process** with DXVK and Remix each holding a Vulkan device (1.78 ms), and per-draw submission costs 0.24 µs (3000 draws = 0.73 ms). Render: 21 fps native / 48 XeSS Quality / **60.65 XeSS Performance = the game's own cap**. Remaining: in-game host, live draw stream, UI fallback, visual quality. See [VISION.md](VISION.md), [LIVE_TRANSFER.md](analysis/LIVE_TRANSFER.md), [LIVE_IN_GAME_PLAN.md](analysis/LIVE_IN_GAME_PLAN.md). |
+| Remix live in NieR | **Running inside NieR** (2026-10-28, user-confirmed): `NIER_REMIX=1` makes the proxy host the Remix runtime and replace the game image with the path-traced F9 camp scene at 3440x1440 (static scene; off by default). Not playable yet: 7.3 fps Remix / 14 fps game, GPU-bound. Next: cheap game rendering in Remix mode, lower Remix render size, async readback; then quality and the live draw stream. See PROGRESS.md (first checkpoint), [VISION.md](VISION.md), [LIVE_IN_GAME_PLAN.md](analysis/LIVE_IN_GAME_PLAN.md). |
 | Visual stack | LodMod + WAX texture injection; 289 textures active. Special K quarantined. |
 | DLSS 5 NR | Parked: blocked on a legitimately obtained `nvngx_dlssnr.dll`. |
 | Frame generation | `lsfg-vk` excluded by decision. Desktop: native FSR FG would need a DX12 present takeover (proxy owns Present and already has colour/depth/MVs) — unbuilt. Laptop: DL frame generation available. Native 60 FPS cap kept (research in `analysis/FAR_*.md`). |

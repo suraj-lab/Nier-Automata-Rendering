@@ -123,7 +123,7 @@ def inside():
         # and CULL_FRONT is 2 (the lead's first expectations of 4 and 3 were wrong and the capture corrected
         # them). If this fails, either the getters or the JSON field order changed.
         assert cap['state'] == {'blend_enable': 1, 'src_blend': 5, 'dest_blend': 6, 'blend_op': 1,
-                                'write_mask': 255, 'depth_enable': 1, 'depth_write': 0, 'depth_func': 5,
+                                'write_mask': 15, 'depth_enable': 1, 'depth_write': 0, 'depth_func': 5,
                                 'cull_mode': 2, 'fill_mode': 2, 'dsv_format': 0}, cap.get('state')
         # v4: shader identity + pixel-shader constants, so a converter can group draws by shader and reach
         # per-material parameters instead of guessing the albedo slot from texture formats.

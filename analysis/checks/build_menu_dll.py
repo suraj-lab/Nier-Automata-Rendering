@@ -25,7 +25,7 @@ def main():
     preview_build.generate_style()
     OUT.mkdir(parents=True, exist_ok=True)
     imgui = PREVIEW / 'vendor/imgui'
-    sources = [C / 'd3d11_scale_setter.cpp', C / 'menu_overlay.cpp', PREVIEW / 'panel.cpp',
+    sources = [C / 'd3d11_scale_setter.cpp', C / 'menu_overlay.cpp', C / 'remix_live.cpp', PREVIEW / 'panel.cpp',
                *(imgui / n for n in ['imgui.cpp', 'imgui_draw.cpp', 'imgui_tables.cpp', 'imgui_widgets.cpp']),
                imgui / 'backends/imgui_impl_win32.cpp', imgui / 'backends/imgui_impl_dx11.cpp']
     dll = OUT / 'd3d11.dll'
@@ -34,6 +34,7 @@ def main():
            # ImGui asserts must never abort the game; no XInput DLL is loaded into the game for gamepads.
            '-DIM_ASSERT(_EXPR)=((void)0)', '-DIMGUI_IMPL_WIN32_DISABLE_GAMEPAD',
            '-I' + str(imgui), '-I' + str(preview_build.OUT), '-I' + str(PREVIEW), '-I' + str(C),
+           '-isystem', str(A / 'remix-probe/vendor'),  # pinned remix_c.h; the runtime itself is loaded at run time
            *map(str, sources), str(C / 'd3d11_log_proxy.def'), '-ldwmapi', '-lgdi32', '-limm32', '-ldxguid', '-o', str(dll)]
     p = subprocess.run(cmd, capture_output=True, text=True)
     (OUT / 'build.log').write_text(p.stdout + p.stderr)
@@ -47,7 +48,7 @@ def main():
                              capture_output=True, text=True)
     raw = subprocess.run(['x86_64-w64-mingw32-objdump', '-p', str(dll)], capture_output=True, text=True, check=True).stdout
     imports = sorted(set(re.findall(r'DLL Name: (\S+)', raw)))
-    forbidden = [i for i in imports if i.lower().startswith(('d3d11', 'dxgi', 'd3dcompiler', 'xinput'))]
+    forbidden = [i for i in imports if i.lower().startswith(('d3d11', 'dxgi', 'd3dcompiler', 'xinput', 'd3d9'))]
     result = {'passed': exports.returncode == 0 and not forbidden, 'dll': str(dll.relative_to(A.parent)),
               'sha256': hashlib.sha256(dll.read_bytes()).hexdigest(), 'imports': imports, 'forbidden_imports': forbidden,
               'export_check': exports.stdout.strip().splitlines(), 'installed': False}

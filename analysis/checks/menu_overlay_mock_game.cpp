@@ -3,6 +3,9 @@
 // Usage: menu_overlay_mock_game.exe <click_x> <click_y>   (client coordinates; 0 0 = no click)
 // Writes mock-result.txt. Frame plan: 1-29 closed, capture "closed" at 25, Insert at 30, capture "open" at 45,
 // click at 50 (down) / 53 (up), capture "after" at 70, exit at 80.
+// Opt-in for the Remix host test (defaults unchanged): MOCK_BGRA=1 -> B8G8R8A8 backbuffer, MOCK_FRAME_MS=<n>
+// -> sleep per frame (default 16), MOCK_RESIZE_AT=<frame> -> ResizeBuffers at that frame to MOCK_RESIZE_TO=<w>x<h>
+// (default 1280x720), MOCK_START=<w>x<h> -> initial backbuffer size (default 1920x1080; the window stays 1920x1080).
 #define DIRECTINPUT_VERSION 0x0800
 #include <windows.h>
 #include <dinput.h>
@@ -77,8 +80,15 @@ int wmain(int argc, wchar_t** argv) {
     dxgi->GetAdapter(&adapter);
     adapter->GetParent(__uuidof(IDXGIFactory), reinterpret_cast<void**>(&factory));
     DXGI_SWAP_CHAIN_DESC sd{};
-    sd.BufferCount = 2; sd.BufferDesc.Width = 1920; sd.BufferDesc.Height = 1080;
-    sd.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM; sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    UINT start_w = 1920, start_h = 1080, resize_w = 1280, resize_h = 720;
+    if (const char* e = std::getenv("MOCK_START")) std::sscanf(e, "%ux%u", &start_w, &start_h);
+    if (const char* e = std::getenv("MOCK_RESIZE_TO")) std::sscanf(e, "%ux%u", &resize_w, &resize_h);
+    sd.BufferCount = 2; sd.BufferDesc.Width = start_w; sd.BufferDesc.Height = start_h;
+    const char* bgra = std::getenv("MOCK_BGRA");
+    sd.BufferDesc.Format = bgra && !std::strcmp(bgra, "1") ? DXGI_FORMAT_B8G8R8A8_UNORM : DXGI_FORMAT_R8G8B8A8_UNORM;
+    sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    const DWORD frame_ms = std::getenv("MOCK_FRAME_MS") ? static_cast<DWORD>(std::atoi(std::getenv("MOCK_FRAME_MS"))) : 16;
+    const int resize_at = std::getenv("MOCK_RESIZE_AT") ? std::atoi(std::getenv("MOCK_RESIZE_AT")) : 0;
     sd.OutputWindow = hwnd; sd.SampleDesc.Count = 1; sd.Windowed = TRUE; sd.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
     IDXGISwapChain* swapchain = nullptr;
     if (FAILED(factory->CreateSwapChain(device, &sd, &swapchain))) { std::fprintf(out, "FAIL swapchain\n"); return 3; }
@@ -113,11 +123,16 @@ int wmain(int argc, wchar_t** argv) {
     bd.RenderTarget[0].SrcBlend = D3D11_BLEND_SRC_ALPHA;
     bd.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
     bd.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
-    bd.RenderTarget[0].RenderTargetWriteMask = 0xFF;
+    // Alpha fields and a 4-bit mask: wined3d accepted 0 / 0xFF, DXVK (correctly) rejects them as invalid.
+    bd.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
+    bd.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ZERO;
+    bd.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+    bd.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
     ID3D11BlendState* probe_blend = nullptr;
     if (FAILED(device->CreateBlendState(&bd, &probe_blend))) { std::fprintf(out, "FAIL blend state\n"); return 3; }
     D3D11_DEPTH_STENCIL_DESC dd{};
     dd.DepthEnable = TRUE; dd.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO; dd.DepthFunc = D3D11_COMPARISON_GREATER;
+    dd.FrontFace = dd.BackFace = {D3D11_STENCIL_OP_KEEP, D3D11_STENCIL_OP_KEEP, D3D11_STENCIL_OP_KEEP, D3D11_COMPARISON_ALWAYS};
     ID3D11DepthStencilState* probe_depth = nullptr;
     if (FAILED(device->CreateDepthStencilState(&dd, &probe_depth))) { std::fprintf(out, "FAIL depth state\n"); return 3; }
     D3D11_RASTERIZER_DESC rd{};
@@ -231,6 +246,8 @@ int wmain(int argc, wchar_t** argv) {
         }
         if (frame == 45) request(L"capture-open.raw");
         if (frame == 70) request(L"capture-after.raw");
+        if (frame == resize_at)
+            std::fprintf(out, "resize_hr=0x%08lx\n", static_cast<unsigned long>(swapchain->ResizeBuffers(0, resize_w, resize_h, DXGI_FORMAT_UNKNOWN, 0)));
         ID3D11Texture2D* buffer = nullptr;
         swapchain->GetBuffer(0, __uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&buffer));
         ID3D11RenderTargetView* view = nullptr;
@@ -243,7 +260,7 @@ int wmain(int argc, wchar_t** argv) {
         ID3D11ComputeShader* bound = nullptr; context->CSGetShader(&bound, nullptr, nullptr);
         if (bound != cs) ++cs_lost;
         if (bound) bound->Release();
-        Sleep(16);
+        Sleep(frame_ms);
     }
     std::fprintf(out, "presented=%u stub_presents=%u foreground=%d cs_lost=%u\n", presented, count(),
                  GetForegroundWindow() == hwnd, cs_lost);

@@ -1,7 +1,89 @@
 # NieR:Automata Rendering — Progress & Resume
 
-Last updated: 2026-10-27 (late). Project name: **NieR RTX**. **Read the first checkpoint: the pipeline is proven end
-to end and the build starts at the in-game host.**
+Last updated: 2026-10-28 (01:05 UTC). Project name: **NieR RTX**. **Read the first checkpoint: the in-game Remix host
+runs inside NieR (static path-traced scene at 3440x1440), installed, off by default.**
+
+## Checkpoint — 2026-10-28: VISION goal 1 built — in-game Remix host, installed, off by default
+
+**Installed.** Game `d3d11.dll` = `77d9da809294c3f5…` (menu + FSR4 + capture + **remix_live**) and a new
+`rtx.conf` in the game folder (copy of `analysis/remix-probe/rtx.live.conf`; Remix reads it from the game's CWD, plain
+DXVK ignores it). Rollback chain: `backups/remix-live-focus-*` <- `remix-live-monitor-size-*` <- `remix-live-stable-start-*` <-
+`remix-live-watchdog-*` <- `remix-live-20261028T000431Z/` (holds the pre-Remix `a16e820e…`); delete `rtx.conf` to
+remove it. `d3d11_dlaa.dll` `3d628eb5…` and `NIER_RENDER.ini` (`Custom75`) unchanged. With `NIER_REMIX` unset the
+proxy behaves byte-for-byte as before (gated).
+
+**In NieR (2026-10-28 01:00, user-confirmed on screen):** NieR goes 1600x900 -> 3440x1440 at startup; Remix starts at
+the monitor size ~1 s after launch (cached shaders), shows the game's frames until the backbuffer matches, then the
+path-traced camp fills the window ~3 s after launch. Clean quit via the game menu; 8+ minutes with no watchdog line in
+an earlier session. Remix fps at 3440x1440 with XeSS Performance measured in the mock: **37.8** (58.5 at 1920x1080), so
+full-resolution 60 needs tuning (UltraPerf / lower render size). Focus changes are logged (`remix: focus ->`) and focus
+taken by a window of the game's own process is handed back (gated `steal-focus`); none was observed in NieR.
+
+**The "small box" (720x480) was the display, not Remix:** the Xwayland primary output had been cleared, so Wine fell
+back to the 1920x1080 HDMI monitor's mode list, NieR's options topped out at 900p, and NieR ran its 720x480 fallback
+in a 3440x1440 window. Fix: `xrandr --output DP-2 --primary` (what `~/.config/hypr/modules/monitors.lua` does at
+login/monitor-add). What cleared it is unknown; `run_live_mock.sh` now warns if a run changes the primary. NieR also
+drops to 720x480 when it loses focus (workspace switch) - normal, the host pauses/resumes.
+
+**Turn it on** (Steam launch options; remove them to turn it off):
+```
+NIER_REMIX=1 NIER_REMIX_RUNTIME='Z:\mnt\second\SteamLibrary\steamapps\common\PortalRTX\bin\.trex\d3d9.dll' NIER_REMIX_SCENE='Z:\home\suraj\Projects\Nier-Automata-Rendering\analysis\runtime\remix-probe\textured-scene\scene.bin' WINEDLLOVERRIDES="d3d11=n,b;dinput8=n,b;dxgi=n,b" mangohud gamemoderun %command%
+```
+Log lines: `NIER_SCALE.log`, prefix `remix:` (start, first frame, fps every 300 frames, any `disabled (...)` reason).
+
+**What was built** (all in `analysis/checks/`):
+- `remix_live.{h,cpp}`: worker thread owns runtime + D3D9 device + hidden window; Present uploads the newest frame
+  into the game backbuffer (never waits on Remix); follows ResizeBuffers via `ResetEx`; any failure logs one line and
+  the game's frames return. Hooked in `menu_overlay.cpp` Present before the menu, independent of the menu's phase.
+- `nscn_scene.h`: NSCN v3 -> materials/mesh/lights with the probe's defaults (delegated to desktop Qwen 27B, accepted
+  after lead fixes; ledger `nier-nscn-scene-header`).
+- Gates: `test_nscn_scene.py` (+`_hidden`, ASan), `test_remix_live.py` (9 scenarios, fake runtime
+  `remix_live_fake_runtime.cpp`). Real-GPU runner: `remix-probe/run_live_mock.sh` (mock game under Proton + real
+  runtime, screenshots of the real window via grim, exit timing).
+
+**Measured on the desktop (mock game, Proton, real Portal RTX runtime, textured camp scene, 1920x1080):** first frame
+~3.5 s after start, **58.4 fps steady** (worker pacing cap) with XeSS Performance; frame visible in the window
+(user-confirmed), menu on top, game keeps focus, process exits normally.
+
+**Rules learned today (do not rediscover):**
+- `rtx.dlssPreset` must be **2 (Custom)** for XeSS: 0 rewrites `upscalerType` to None. `rtx.enhanced.conf` has 0, so
+  it never ran XeSS (26 fps = native). XeSSPreset: UltraPerf 0, **Performance 1**, Balanced 2, Quality 3 (source
+  `rtx_options.h` @bbd74a12). Live conf: `remix-probe/rtx.live.conf`.
+- The runtime creates its own visible **`RemixGuiInputSink`** window copying our window's rect. At (0,0) 1920x1080 it
+  covered a monitor, Wine fullscreened it -> a white window over the desktop that also stole focus. No RtxOption
+  disables it; our hidden window now lives at (-32000,-32000), so the sink does too. Gated (fake sink).
+- The stub layer's capture proves the **backbuffer**, not the screen. Use `grim` on the window rect for what the user
+  sees.
+- Under Xvfb/Wine with no WM any new visible window takes the foreground: focus can only be checked on the desktop.
+- `GetWindowText` on another thread's window sends a message; use `InternalGetWindowText` in diagnostics.
+- The mock game's blend/depth state was invalid D3D11 (wined3d accepted it, DXVK rejects it): fixed.
+- **PAIR, desktop -> laptop is broken** (both nodes Online; laptop-model requests from the desktop never become jobs,
+  `broadcast attempt failed` in the desktop log; laptop -> desktop works). `local-helper` unusable from a desktop lead.
+- Never run the game or GPU work while a desktop local agent runs (user rule); unload the desktop model first.
+- **Never `ResetEx` the Remix device inside NieR**: during NieR's own startup resizes it froze the game once and crashed
+  it once. The host starts Remix once at the monitor size and pauses on any size mismatch (gated: `on-intro`,
+  `on-late-resize`). A "stable for 5 s" start picked NieR's 720x480 intro size instead.
+- Stall attribution: `remix: watchdog worker in '<stage>' ...` appears after 5 s in one stage (gated: `hang-present`).
+  A hung runtime does not stall the game in the mock.
+- In-game evidence lives in `NIER_SCALE.log` (`remix:`), `NIER_DLAA.log` (every `ResizeBuffers` size) and
+  `NIER_FSR4.log` (`CreateFeature` sizes); game stderr is in `journalctl` (Steam). Wine's debugger cannot attach from
+  outside Steam's container and `ptrace_scope=1` blocks gdb.
+
+**Performance in NieR at 3440x1440 (measured 01:00): not playable yet.** GPU 100% busy, Remix **7.3 fps**, game
+**14 fps** (MangoHud), game CPU threads ~3%: pure GPU contention between Remix path tracing at 3440x1440 (38 fps alone
+in the mock) and NieR's own frame + FSR4, which Remix covers completely.
+
+**Next session, in order:**
+1. Make NieR's own rendering cheap while Remix is shown (its image is invisible): drive the existing scale setter to a
+   very low render scale in Remix mode. Expected to be the largest single win.
+2. Render Remix below 3440x1440 (or XeSS UltraPerf) and stretch it with a GPU draw in the Present hook instead of an
+   exact-size `UpdateSubresource`.
+3. Double-buffered (async) readback so `GetRenderTargetData`/`LockRect` stops serialising the GPU every frame.
+4. Then goal 4 (quality: noise, streaks, sky/ambient, materials) and goal 2 (live draw stream).
+
+Open, by decision: reviewer P2s on `nscn_scene.h` (duplicate/huge texture ids, partial `Scene` on failed parse,
+quadratic lookup on hostile files); Remix registers Raw Input for its sink window (possible missed game input,
+unchecked); desktop->laptop PAIR route broken; what cleared the Xwayland primary is unknown.
 
 ## Checkpoint — 2026-10-27 late: pipeline proven end to end; build starts at the in-game host
 

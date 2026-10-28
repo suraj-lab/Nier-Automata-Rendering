@@ -13,6 +13,7 @@
 #include "shader_capture.h"
 #include "draw_capture.h"
 #include "input_capture.h"
+#include "remix_live.h"
 #include "../menu-preview/panel.h"
 #include "backends/imgui_impl_dx11.h"
 #include "backends/imgui_impl_win32.h"
@@ -426,7 +427,12 @@ void render_panel(IDXGISwapChain* swapchain) {
 
 HRESULT STDMETHODCALLTYPE present(IDXGISwapChain* self, UINT sync, UINT flags) {
     const auto next = reinterpret_cast<PresentFn>(next_present.load(std::memory_order_acquire));
-    if (self == target.load(std::memory_order_acquire) && !(flags & DXGI_PRESENT_TEST) && phase != Phase::Disabled) {
+    const bool game_frame = self == target.load(std::memory_order_acquire) && !(flags & DXGI_PRESENT_TEST);
+    // Remix replaces the game's image first, so the menu still draws on top. Independent of the menu's phase.
+    if (game_frame) {
+        try { remix_live::on_present(self, host.log); } catch (...) {}
+    }
+    if (game_frame && phase != Phase::Disabled) {
         try {
             if (phase == Phase::Waiting) initialize(self);
             if (phase == Phase::Ready) { poll_capture(); render_panel(self); start_armed_capture(); }
