@@ -80,6 +80,9 @@ in the mock) and NieR's own frame + FSR4, which Remix covers completely.
    exact-size `UpdateSubresource`.
 3. Double-buffered (async) readback so `GetRenderTargetData`/`LockRect` stops serialising the GPU every frame.
 4. Then goal 4 (quality: noise, streaks, sky/ambient, materials) and goal 2 (live draw stream).
+5. Alternative/additional route: run NieR's own frame on the second GPU (RX 6800 XT) and Remix on the 9070 XT -
+   plan and open questions in [analysis/DUAL_GPU_PLAN.md](analysis/DUAL_GPU_PLAN.md) (incl. FSR4 on the 6800 XT, user
+   reports it is possible; unverified here).
 
 Open, by decision: reviewer P2s on `nscn_scene.h` (duplicate/huge texture ids, partial `Scene` on failed parse,
 quadratic lookup on hostile files); Remix registers Raw Input for its sink window (possible missed game input,
