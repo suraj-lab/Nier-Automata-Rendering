@@ -43,7 +43,10 @@ Goal: raise live fps from 1–4 by removing CPU/GPU stalls, without losing what 
 2B skinning, sun, sky). Background and sources: `analysis/PERF_RESEARCH.md`. Each step: measure before/after from the
 `remix: N fps ... (ms/frame: ... readback R, ... other O)` and `live draws=... built= evicted=` log lines, same spot in
 the camp, same settings. Baseline (2026-10-29 23:32): **3.6 fps, readback 152 ms, other 125 ms, built 22223,
-evicted 19717**.
+evicted 19717**. It degrades with play time: 23:31:35 log "live shadow budget reached (262144 KB); static
+vertex/index bytes are dropped and re-read only to rebuild", then 23:34 **2.2 fps, readback 230 ms, other 216 ms**.
+Mesh evictions force rebuilds whose source bytes the full shadow cache already dropped, so they are read back again:
+the two caches feed each other. Earlier build (20:08): 2.5 fps, readback 345 ms. Per-buffer causes are not measured yet.
 
 1. **Measure where readback bytes come from** (no behaviour change). Add per-frame counters: bytes/reads by buffer
    kind (static/immutable, default, dynamic, constant) and by reason (first sight, rewrite not mirrored, re-read after
