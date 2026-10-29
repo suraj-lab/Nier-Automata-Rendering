@@ -37,16 +37,42 @@ Latest F9 capture from the user: `NIER_CAPTURE/frame_41686139` (unused so far).
 **evicted 7710**, mesh_bytes 537 MB (at the 512 MB budget), light_creates 692, sky 8, untextured 0, textures 141.
 Eviction churn is new and likely from pose-specific skinned keys: a performance problem, not yet investigated.
 
-**Next steps, in order** (step 1 done 23:32: world, HUD, 2B, sun and sky all seen live)
-1. Performance (research: `analysis/PERF_RESEARCH.md`): capture static buffers at CreateBuffer, mesh-cache thrash
-   (pose-specific skinned keys vs 512 MB budget), then batched/deferred readback
-   (read the previous frame's copies instead of stalling the GPU on every Map).
-2. Blown-out surfaces on the right of the live shot: sun scale or missing textures; check against frame_41686139.
-3. Laptop (Spark) run of the live build: see `analysis/LAPTOP_PORT.md`; answers whether readback cost is Proton's.
-4. Materials (clay look): only albedo is used; draws bind 4–12 textures. Map slots to normal / gloss / emissive from
-   the disassembled pixel shaders, convert to Remix normal/roughness/metallic, laptop A/B first.
-5. Open: DeepSeek P2 (cache purge clears sky classification), Remix crash dialog hidden behind the fullscreen game,
-   F10 needs a held key at low fps (polled once per frame).
+## Plan for next session: performance (CPU bottleneck)
+
+Goal: raise live fps from 1–4 by removing CPU/GPU stalls, without losing what now works (world under native HUD,
+2B skinning, sun, sky). Background and sources: `analysis/PERF_RESEARCH.md`. Each step: measure before/after from the
+`remix: N fps ... (ms/frame: ... readback R, ... other O)` and `live draws=... built= evicted=` log lines, same spot in
+the camp, same settings. Baseline (2026-10-29 23:32): **3.6 fps, readback 152 ms, other 125 ms, built 22223,
+evicted 19717**.
+
+1. **Measure where readback bytes come from** (no behaviour change). Add per-frame counters: bytes/reads by buffer
+   kind (static/immutable, default, dynamic, constant) and by reason (first sight, rewrite not mirrored, re-read after
+   eviction). One live run. This decides the order of 2–4 instead of guessing.
+2. **Capture static buffers at creation.** Hook `ID3D11Device::CreateBuffer`; when `pInitialData` is given for
+   vertex/index buffers, keep the bytes as the shadow. Those buffers then never need a GPU readback.
+   Gate: mock creates an immutable VB with initial data; assert zero staging reads for its draws.
+3. **Stop the mesh-cache thrash.** Likely cause: CPU-skinned meshes keyed per pose, so every animated frame is a new
+   mesh competing for the 512 MB budget. Options to weigh with the step-1 numbers: evict skinned pose meshes first /
+   keep only the latest pose per character, or raise the budget. Gate: two posed characters over many frames,
+   resident mesh count bounded, static meshes never evicted by pose churn.
+4. **Batch and defer the remaining readbacks.** Reuse a staging ring (no per-read CreateBuffer); issue all copies for
+   the frame, one `Flush`, map them 1–2 frames later with `D3D11_MAP_FLAG_DO_NOT_WAIT`, falling back to the last data
+   if still in flight. Camera and transforms stay current; geometry may lag a frame. Gate: mock asserts no blocking
+   map in the draw path and correct geometry after the latency.
+5. **Optional experiment:** `d3d11.cachedDynamicResources = vi` in `dxvk.conf` for the game; one run, compare.
+6. **Laptop (Spark) live run** (`analysis/LAPTOP_PORT.md`): native Windows D3D11 instead of DXVK; tells us how much of
+   the remaining cost is Proton's.
+
+Process for this session: after each step run only the affected gates (~9 min for the live set), install
+hash-pinned, the user runs the game, the agent takes screenshots (`grim -o DP-2`) and reads the log. Full suite
+(~17 min) once at the end, not per step.
+
+**After performance**, in order:
+- Blown-out surfaces on the right of the live shot: sun scale or missing textures; check against `frame_41686139`.
+- Materials (clay look): only albedo is used; draws bind 4–12 textures. Map slots to normal / gloss / emissive from
+  the disassembled pixel shaders, convert to Remix normal/roughness/metallic, laptop A/B first.
+- Open: DeepSeek P2 (cache purge clears sky classification), Remix crash dialog hidden behind the fullscreen game,
+  F10 needs a held key at low fps (polled once per frame).
 
 **Process notes:** full suite ~17 min; for narrow changes run the affected gates only (~9 min for the live set).
 F10 is polled per frame: at 2–4 fps hold it ~0.5 s.
