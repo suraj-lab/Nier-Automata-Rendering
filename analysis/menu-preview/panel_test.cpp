@@ -3,6 +3,7 @@
 #include <cassert>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <stdexcept>
 
 using namespace menu_preview;
@@ -47,30 +48,46 @@ int main(int argc, char** argv) {
             Writer writer;
             Geometry geometry;
             auto frame = [&](State& s, SavePreset callback = save) {
-                ImGui::NewFrame(); draw_panel(s,info,fonts,scale,callback,&writer,&geometry); ImGui::Render();
+                ImGui::NewFrame();
+                const bool remix=s.active==SessionMode::Remix50;
+                if (remix) ImGui::LogToBuffer();
+                draw_panel(s,info,fonts,scale,callback,&writer,&geometry);
+                if (remix) {
+                    const char* text=ImGui::GetCurrentContext()->LogBuffer.c_str();
+                    assert(std::strstr(text,"Remix50") && std::strstr(text,"EXPERIMENTAL / 50% PER AXIS"));
+                    assert(std::strstr(text,"NIER_REMIX_CHEAP_GAME") && !std::strstr(text,"BYPASS / FULL RESOLUTION"));
+                    assert(!std::strstr(text,"This session stays on Native.") && !std::strstr(text,"This session keeps Native"));
+                    if (render_menu::notice(s)==Notice::SaveFailed || render_menu::notice(s)==Notice::RecoveryRequired) {
+                        assert(std::strstr(text,"Saved/default preset:") && !std::strstr(text,"Next launch uses"));
+                    }
+                    ImGui::LogFinish();
+                }
+                ImGui::Render();
             };
             auto click = [&](State& s, Rect r) {
                 auto p = center(r); io.AddMousePosEvent(p.x,p.y); io.AddMouseButtonEvent(0,true); frame(s);
                 io.AddMouseButtonEvent(0,false); frame(s);
             };
             // 0 custom75, 1 native, 2 dirty, 3 saved, 4 save-fail, 5 startup-fail, 6 not-applied+saved,
-            // 7 missing file, 8 invalid file, 9 unreadable file (+edit), 10 recovery required.
+            // 7 missing file, 8 invalid file, 9 unreadable file (+edit), 10 recovery required,
+            // 11 Remix50, 12 Remix50 dirty, 13 Remix50 saved, 14 Remix50 save failure, 15 Remix50 recovery.
             const Notice expected_notice[] = {Notice::None, Notice::None, Notice::Unsaved, Notice::RestartRequired,
                 Notice::SaveFailed, Notice::None, Notice::RestartRequired, Notice::None, Notice::ConfigInvalid,
-                Notice::ConfigUnreadable, Notice::RecoveryRequired};
-            for (int scenario = 0; scenario < 11; ++scenario) {
+                Notice::ConfigUnreadable, Notice::RecoveryRequired, Notice::None, Notice::Unsaved, Notice::RestartRequired,
+                Notice::SaveFailed, Notice::RecoveryRequired};
+            for (int scenario = 0; scenario < 16; ++scenario) {
                 const bool bad = scenario==8 || scenario==9;
                 const SessionMode active = scenario==1 || bad ? SessionMode::Native :
-                    scenario==5 || scenario==6 ? SessionMode::NotApplied : SessionMode::Custom75;
+                    scenario>=11 ? SessionMode::Remix50 : scenario==5 || scenario==6 ? SessionMode::NotApplied : SessionMode::Custom75;
                 const FileState file = scenario==7 ? FileState::Missing : scenario==8 ? FileState::Invalid :
                     scenario==9 ? FileState::Unreadable : FileState::Valid;
                 State s{active,file,scenario==1 || bad ? Mode::Native : Mode::Custom75,scenario<5 || scenario>6};
                 s.open = true;
-                if ((scenario>=2 && scenario<=4) || scenario==6 || scenario==10) render_menu::select(s,Mode::Native);
+                if ((scenario>=2 && scenario<=4) || scenario==6 || scenario==10 || scenario>=12) render_menu::select(s,Mode::Native);
                 if (scenario==9) render_menu::select(s,Mode::Custom75);
-                if (scenario==3 || scenario==6) render_menu::complete_save(s,SaveOutcome::Committed,FileState::Valid,Mode::Native);
-                if (scenario==4) render_menu::complete_save(s,SaveOutcome::NotSaved,FileState::Valid,Mode::Custom75);
-                if (scenario==10) render_menu::complete_save(s,SaveOutcome::RecoveryRequired,FileState::Missing,Mode::Custom75);
+                if (scenario==3 || scenario==6 || scenario==13) render_menu::complete_save(s,SaveOutcome::Committed,FileState::Valid,Mode::Native);
+                if (scenario==4 || scenario==14) render_menu::complete_save(s,SaveOutcome::NotSaved,FileState::Valid,Mode::Custom75);
+                if (scenario==10 || scenario==15) render_menu::complete_save(s,SaveOutcome::RecoveryRequired,FileState::Missing,Mode::Custom75);
                 assert(render_menu::notice(s) == expected_notice[scenario]);
                 for (int n=0;n<3;++n) frame(s);
                 assert(near(geometry.panel.max.x,viewport.x-32*scale));
@@ -94,7 +111,7 @@ int main(int argc, char** argv) {
                     assert(geometry.body_scroll_max>0);
                 }
                 assert(s.active == active);
-                if (scenario==9 || scenario==10) {  // Save is shown but cannot fire
+                if (scenario==9 || scenario==10 || scenario==15) {  // Save is shown but cannot fire
                     const int calls = writer.calls; click(s,geometry.save); assert(writer.calls == calls);
                 }
                 ++layouts;

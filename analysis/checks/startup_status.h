@@ -4,7 +4,7 @@
 #include <cstdint>
 
 namespace startup_status {
-enum class Outcome : std::uint8_t { NativeBypass, Custom75Applied, NotApplied, Incomplete, NotStarted };
+enum class Outcome : std::uint8_t { NativeBypass, Custom75Applied, NotApplied, Incomplete, NotStarted, Remix50Applied };
 enum class Failure : std::uint8_t { None, InvalidConfig, Depth, Proxy, Renderer, MissingGate, ThreadCreation };
 
 // No backend/GPU/dimensions: those require direct frame/resource observations, not boot values.

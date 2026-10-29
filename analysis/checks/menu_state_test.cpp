@@ -20,7 +20,7 @@ static void check(const State& s) {
     const Notice expected = s.save_error ? Notice::SaveFailed
         : dirty ? Notice::Unsaved
         : s.saved_this_session &&
-          (s.active == SessionMode::NotApplied ||
+          (s.active == SessionMode::NotApplied || s.active == SessionMode::Remix50 ||
            (s.active == SessionMode::Native && s.saved != Mode::Native) ||
            (s.active == SessionMode::Custom75 && s.saved != Mode::Custom75))
             ? Notice::RestartRequired : Notice::None;
@@ -100,7 +100,7 @@ int main() {
         check(s); check(supported);
     }
     // Exhaust all 7-event traces to catch error/restart priority and close/reopen drift.
-    for (const auto active : {SessionMode::Native, SessionMode::Custom75, SessionMode::NotApplied}) {
+    for (const auto active : {SessionMode::Native, SessionMode::Custom75, SessionMode::NotApplied, SessionMode::Remix50}) {
         for (const auto saved : {Mode::Native, Mode::Custom75}) {
             for (const bool available : {false, true}) {
                 for (unsigned trace = 0; trace < 823543; ++trace) { // 7^7

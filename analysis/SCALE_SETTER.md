@@ -4,6 +4,23 @@ An outer `d3d11.dll` that chainloads renamed NIER_DLAA (`d3d11_dlaa.dll`) and wr
 game's internal render scale once: `renderer+0x80 = 0.75`. No hooks, no code patching,
 no INI. Not installed in the game.
 
+## Current continuation — Remix50 live-test install (2026-10-28)
+
+The rest of this file is the historical Phase A record. Current source includes the startup settings, depth/upscale
+patches, menu, and Remix host; see `../PROGRESS.md` (first checkpoint) for the current candidate hash and test results.
+
+With **both** `NIER_REMIX=1` and `NIER_REMIX_CHEAP_GAME=1`, the installed test build uses a fixed **0.5** base-game
+startup scale and matching proxy gate. Native/Custom75 remain the only saved presets; the override never writes the
+INI and is disabled for invalid/unreadable settings. Existing signature and patch prerequisites remain mandatory.
+The menu reports Remix50 separately. This does not lower Remix's own resolution or bypass FSR4.
+
+The override is deliberately startup-only: the base game's fallback/menus also stay at 50% until restart. Remove the
+extra flag and restart to use the saved preset. Installation is hash-verified. The user confirmed visible Remix after
+selecting 3440x1440 output; live logs verify 1720x720 colour/depth/MVs, provider 4.1.1, and 31.8–32.1 fps Remix.
+This is not a controlled A/B or a completed long-session/clean-exit test. Tests:
+`python3 analysis/checks/test_remix_scale.py analysis/checks/render_settings.h` and
+`python3 analysis/checks/test_startup_settings.py` from the repo root, plus the regression gates in PROGRESS.md.
+
 ## How it works
 
 - The game imports `d3d11.dll` statically, so the DLL loads before SteamStub decrypts

@@ -35,6 +35,9 @@ inline std::vector<std::pair<ID3D11InputLayout*, Layout>>& store() {
 inline void record(ID3D11InputLayout* layout, std::vector<Element>&& elements) {
     if (!layout) return;
     std::lock_guard<std::mutex> lock(mutex());
+    // A freed layout's address is reused by later CreateInputLayout calls: the newest elements win, one entry each.
+    for (auto& [key, value] : store())
+        if (key == layout) { value = Layout{std::move(elements)}; return; }
     store().emplace_back(layout, Layout{std::move(elements)});
 }
 inline bool lookup(ID3D11InputLayout* layout, Layout& out) {

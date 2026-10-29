@@ -51,9 +51,10 @@ int main() {
         Snapshot result;assert(successes==1 && publication.read(result));
         assert(result.detail==winner);
     }
-    for (auto outcome : {Outcome::NotApplied,Outcome::Incomplete,Outcome::NotStarted}) {
+    for (auto outcome : {Outcome::NotApplied,Outcome::Incomplete,Outcome::NotStarted,Outcome::Remix50Applied}) {
         Publication p;Snapshot value;
-        value.outcome=outcome;value.failure=outcome==Outcome::Incomplete ? Failure::MissingGate : Failure::ThreadCreation;
+        value.outcome=outcome;value.failure=outcome==Outcome::Remix50Applied ? Failure::None :
+            outcome==Outcome::Incomplete ? Failure::MissingGate : Failure::ThreadCreation;
         assert(p.publish(value));Snapshot copy;assert(p.read(copy));assert(same(copy,value));
     }
     std::puts("{\"passed\":true,\"concurrent_rounds\":32,\"writers\":4,\"readers\":4,\"limits\":\"Transport only; actual setter producers not connected\"}");

@@ -407,9 +407,12 @@ def main():
                 assert x['has_albedo'] == 1, 'every texture material carries albedoTexture'
                 assert close(x['albedoConstant'], [1, 1, 1]), x['albedoConstant']
                 assert (x['opacity'], x['roughness'], x['metallic'], x['emissive']) == (1, 0.6, 0, 0), x
-                assert (x['useDrawCallAlphaState'], x['blendType_hasvalue'], x['blendType_value'], x['invertedBlend']) == (0, 1, 2, 0), x
-            assert [(x['alphaTestType'], x['alphaReferenceValue']) for x in m] == [(0, 0), (4, 128), (0, 0), (4, 128)], \
-                'opaque: alphaTestType 0 ref 0; cutout twin: alphaTestType 4 (Greater) ref 128'
+                # Changed 2026-10-29 with evidence: (0, 1, 2, 0) + alphaTestType 0 pinned a defect. blendType_hasvalue is
+                # "blending enabled" and alphaTestType 0 is kNever; the laptop A/B of capture frame_23275488 showed every
+                # surface see-through with them, solid with NVIDIA's remix.h defaults (test_material_defaults.py).
+                assert (x['useDrawCallAlphaState'], x['blendType_hasvalue'], x['blendType_value'], x['invertedBlend']) == (0, 0, 0, 0), x
+            assert [(x['alphaTestType'], x['alphaReferenceValue']) for x in m] == [(7, 0), (4, 128), (7, 0), (4, 128)], \
+                'opaque: alphaTestType 7 (kAlways) ref 0; cutout twin: alphaTestType 4 (Greater) ref 128'
             assert [x['albedo'] for x in m] == ['C:\\game\\scene_textures\\tex_41.dds'] * 2 + ['C:\\game\\scene_textures\\tex_7.dds'] * 2, \
                 [x['albedo'] for x in m]
             sd = write('short.bin', ts_short())

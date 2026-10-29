@@ -98,6 +98,15 @@ def inside():
             for name in ('vb_0.bin', 'ib.bin'):
                 assert os.path.samefile(fr / 'draw_0000' / name, fr / 'draw_0001' / name), name
         assert log.count('menu: frame captured') == 2, log
+        # Light arrays for the laptop probe: t20 through a BUFFEREX view starting at element 1 (2 of 3 elements), t22 as a
+        # plain BUFFER view; the whole buffer is written, the view range is in lights.json.
+        for fr in frames:
+            lj = json.loads((fr / 'lights.json').read_text())
+            assert lj['t20'] == {'present': 1, 'dimension': 11, 'stride': 48, 'first': 1, 'count': 2, 'bytes': 144}, lj
+            assert lj['t22'] == {'present': 1, 'dimension': 1, 'stride': 80, 'first': 0, 'count': 1, 'bytes': 80}, lj
+            pts = struct.unpack('<36f', (fr / 'lights_t20.bin').read_bytes())
+            assert pts[12:15] == (7.0, 8.0, 9.0) and pts[24:27] == (-4.0, 2.0, 11.0), pts[12:27]
+            assert struct.unpack('<20f', (fr / 'lights_t22.bin').read_bytes())[0:3] == (1.0, 2.0, 3.0)
         # PS textures: static RGBA + BC1 written once each as DDS (DX10 header, 148 bytes); the render target is not.
         rgba = bytes((i * 7 + 3) & 0xff for i in range(64)); bc1 = bytes((i * 5 + 1) & 0xff for i in range(32))
         for fr in frames:

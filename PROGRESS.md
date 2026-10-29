@@ -1,7 +1,593 @@
 # NieR:Automata Rendering — Progress & Resume
 
-Last updated: 2026-10-28 (01:05 UTC). Project name: **NieR RTX**. **Read the first checkpoint: the in-game Remix host
-runs inside NieR (static path-traced scene at 3440x1440), installed, off by default.**
+**START HERE (2026-10-29 late).** Installed: `d3d11.dll` **`065432e4…f8467e`** (HUD replay shader fix), not yet run.
+Rollback `backups/live-scene-20261029T232758586690Z/` (holds `0e9b032b…`, the build whose HUD test showed the bug).
+Latest F9 capture from the user: `NIER_CAPTURE/frame_41686139` (unused so far).
+
+## Checkpoint — 2026-10-29 late: skinning, sun, sky, native HUD
+
+**Done and evidenced**
+- **Character stretching cause found and bypassed.** Remix's GPU skinning reads the weight buffer with a stride of one
+  float (`rtx_remix_api.cpp:1021`) while we pass four floats per vertex. On the laptop runtime the same captured 2B
+  mesh rendered broken via the API and clean via CPU baking. Live now CPU-bakes skinned draws
+  (`checks/live_skinning.h`, pose-specific geometry keys). Gates: `test_live_skinning.py`, `test_live_skinning_capture.py`.
+- **Mesh replacement deleted itself** (runtime handle == hash): fixed in `live_scene::build_mesh`, gated.
+- **Sky dome crash root cause:** generated DX10 DDS lacked `DDPF_FOURCC`. Fixed in `scene_from_frame.py`; same texels
+  now render on the laptop. Gate `test_sky_dds.py`. Sky strength 2.0 picked on the laptop
+  (`runtime/remix-probe/sky-dds-fixed/sky-fill-0.5-vs-2.png`). Live loads `nier_sky_hdr.dds` beside the scene file.
+- **Sun:** offsets/sign verified from shaders (PS CB2 rgb @0, surface-to-light @16, w=0). Live reads it per frame from
+  the first scene draw passing `parse_sun`; recreated on change, destroy-before-create (light handle == hash).
+  RGB is copied unscaled: looked right on the laptop, not radiometrically calibrated. Details `analysis/SUN_LIGHTING.md`.
+- **Native HUD handoff:** before the first draw with the shipped HUD sprite PS (DXBC checksum `A1B772527CEA5742`)
+  into a full-size R11G11B10F target, the Remix image is drawn into that target; the game then draws its own HUD
+  and final copy. **Live run 23:12 confirmed the handoff fires and the real HUD appears** (`native HUD handoff
+  3440x1440`), but the world under it was one flickering flat colour.
+- **That bug, found from the screen recording:** `hud_replay.h` PS lacked `SV_POSITION`; DXVK links stage I/O by
+  register, so `uv` was the pixel position and every pixel sampled the clamped bottom-right texel. The Wine mocks link by
+  semantic and could not see it. Fixed; new gate `test_hud_replay_linkage.py` compiles the real shader strings and
+  compares registers (red before, green after). World draw is now opaque. This also affected the old Present-time HUD
+  replay, which never ran live (`hud=0`).
+- Gates: full suite 49/49 on `0e9b032b`; after the HUD fix the focused set (hud_shader, live_scene, native_hud,
+  live_hud_capture, remix_live, live_camera, live_geometry, hud_replay_linkage) all pass. Full suite not rerun.
+
+**Live stats seen 23:13 (build `0e9b032b`)**: 4.3 fps (ms/frame: readback 144, other 87); meshes 2026, built 10220,
+**evicted 7710**, mesh_bytes 537 MB (at the 512 MB budget), light_creates 692, sky 8, untextured 0, textures 141.
+Eviction churn is new and likely from pose-specific skinned keys: a performance problem, not yet investigated.
+
+**Next steps, in order**
+1. Launch the game with `065432e4…`: check the world shows under the HUD (screenshots/recording from the agent:
+   `grim -o DP-2`, `wf-recorder -o DP-2`). Check sun direction, sky fill, 2B moving without stretching.
+   If the sky texture crashes this runtime (PortalRTX's, not the laptop's), delete
+   `analysis/runtime/remix-probe/textured-scene/nier_sky_hdr.dds`.
+2. Investigate eviction churn (built 10220 / evicted 7710 in ~300 frames): budget vs pose keys.
+3. Materials (clay look): only albedo is used; draws bind 4–12 textures. Map slots to normal / gloss / emissive from
+   the disassembled pixel shaders, convert to Remix normal/roughness/metallic, laptop A/B first.
+4. Performance: readback is still most of the frame.
+5. Open: DeepSeek P2 (cache purge clears sky classification), Remix crash dialog hidden behind the fullscreen game,
+   F10 needs a held key at low fps (polled once per frame).
+
+**Process notes:** full suite ~17 min; for narrow changes run the affected gates only (~9 min for the live set).
+F10 is polled per frame: at 2–4 fps hold it ~0.5 s.
+
+Last updated: 2026-10-28. Project name: **NieR RTX**. **Start here: reviewed live build `9ec61bdf…` is installed and
+awaiting the user's first live run; read the newest Review section below.** Earlier note: live camera, live draw-stream geometry and skinned
+characters are implemented and gated offline; the next step is a live test of the new DLL (needs the user's approval to
+install) and then HUD/menu separation.** No DLL was installed in this stretch.
+
+**2026-10-29 — first live run crashed at the title screen (Remix divide-by-zero on a sky-only frame; see
+`analysis/PHASE1_REVIEW.md` "First live run"). Fixed build `df239034c712…` installed, 38/38 gates.** Earlier the same day:
+**Phase 1 reviewed, fixed and INSTALLED: `a4eaf86fe2bb…`** (38/38 gates; previous `e313c177…`,
+rollback `backups/live-scene-20261029T172859383059Z/`). Read `analysis/PHASE1_REVIEW.md` (R1–R10, all fixed and gated),
+then run the live test in `analysis/ROADMAP.md` "Phase 1 test protocol".
+
+**Plan of record 2026-10-29: finish the desktop build, then port to the laptop.** Phase 1's nine changes are gated
+offline and **none has run in the game**: the test procedure, per-item acceptance criteria, a results table and the
+rollback steps are in `analysis/ROADMAP.md` under "Phase 1 test protocol" — follow that, not memory.
+ Read `analysis/ROADMAP.md` for
+the ordered phases, their gates and the remaining estimate; `analysis/LAPTOP_PORT.md` for the port detail.
+
+**Ordering changed 2026-10-29: playability before performance.** Read `analysis/PLAYABILITY_PLAN.md` (stages A and
+B, with the draw mix of one real frame) and `analysis/PRIOR_ART.md` (who already solved these problems, and which
+API fields we own but never set). Under that ordering the performance items below become stage B.
+
+## Checkpoint — 2026-10-29: shadow/post passes excluded from the scene (offline, not installed)
+
+Stage A1 of `analysis/PLAYABILITY_PLAN.md` is implemented and gated. **The filter is by render target, not by
+viewport size** — a measured frame shows 1375 draws into a 2580x1080 scene target, 920 into a 4096x4096 shadow atlas
+(viewport 2048x2048, *larger* than the 25%-of-frame threshold the previous plan relied on), 58 bloom passes and 58 HUD
+sprites. Running the old `NIER_REMIX_LIVE_SKIP_SMALL_VIEWPORT=25` would have skipped 23 of 2436 draws (0.9%) and read
+as "shadow passes disproven".
+
+How it works (`analysis/checks/live_capture.h`): cache each render-target view's size, count candidate draws per target
+per frame, and choose the scene target as the largest target that is strictly smaller than the final image and has the
+final image's aspect ratio — the engine's internal scale. Shadow atlases are excluded by size and aspect, bloom chains
+by size, the HUD target because it *is* the final image. If the choice empties a frame (a game that renders into a
+target the rule cannot recognise), it latches itself off after three frames instead of alternating between a full and
+an empty picture; `NIER_REMIX_LIVE_ALL_TARGETS=1` disables it by hand and restores the old behaviour.
+
+Log: `remix: live scene target 2580x1080 of 3440x1440; N draws into other targets skipped (shadow maps, post passes)`
+once per run, and `scene=WxH skipped_pass=N fallbacks=N` in the periodic stats line. `small_viewport=` is now a
+count-only diagnostic; the knob that skipped on it is gone.
+
+Gate `analysis/checks/test_live_scene_target.py` (SHA256 `3eb4eda3…`) passes: one target submits everything; with a
+second 256x256 target the shadow-pass draws make no instance and no mesh; `NIER_REMIX_LIVE_ALL_TARGETS=1` makes exactly
+those two draws reappear per frame (so the assertion can fail); a square scene target latches the filter off instead of
+blanking the picture. Mock-only evidence: this pins the rule, not NieR's real passes. The whole live suite was re-run
+green after the mock's scene target changed from 64x64 to 960x540: 19 geometry scenarios, `test_live_scene`,
+`test_live_camera`, `test_live_capture_skips_big_writes`, `test_remix_live`, `test_menu_overlay`.
+
+Not installed: `dll_sha256` of the gated build is `d04b88c0327f39f2a0805adfe3cf8c8a6e58a0e4d3375be4ca8bd8df9bdab1b4`.
+The next live run should now be plain `NIER_REMIX_LIVE=1` (any old launch line with `SKIP_SMALL_VIEWPORT` is obsolete)
+and should report `scene=2580x1080` with `skipped_pass` around 1000 at 3440x1440.
+
+**Shader declarations recovered offline (same day).** `analysis/SHADER_DECLARATIONS.md`, generated by
+`analysis/checks/dump_shader_decls.py` from the 10137 captured pixel-shader blobs, lists what the game itself calls
+every shader input. Two consequences: (1) slot 0 is `g_ColorTexture`/`g_Texture0` (albedo, 4985 + 3583 shaders),
+slot 4 `g_NormalTexture`, slot 2 `g_MaskTexture`, slot 11 `g_ShadowTexture`, slot 12 `g_FogLUT`, slot 13 `g_ZTexture`,
+slot 17 `g_AO_Texture` — so the albedo slot was never the guess we thought it was; (2) the renderer is **tiled forward**:
+point lights are a structured buffer at SRV 20 (48-byte elements), per-tile indices at 21, spot lights at 22. The
+constant-buffer scan for a light array that I ran earlier could not have worked. Cbuffer bind slots for the scene
+shaders: 12 `HPixel_Buffer`, 13 `CamParam_HPixel_Buffer`, 3 `MeshBuffer1`, 2 `PSParamBuffer1`, 0 `SceneBuffer`,
+4 `ModelBuffer`, 8 `InsatncingParamBuffer`. Variable *offsets* inside those buffers are still unverified: my
+hand-rolled RDEF variable parse disagrees with the vendor layout, so use the existing `dxbc_disasm` path for offsets
+rather than trusting a second hand parse.
+
+**Delegated fix landed (desktop `local-worker`, ledger `live-late-material`): late materials.** A draw whose texture
+was deferred used to be skipped (mesh not built) until the texture landed; now it is built without a material and the
+texture's arrival invalidates exactly those geometries (`waiting_materials`, bounded at 65536 entries), so one rebuild
+gives it the material. New knob `NIER_REMIX_LIVE_TEX_PER_FRAME` (0 = none, default 4, clamped to 64). Gate
+`analysis/checks/test_live_late_material.py` green, and so are `test_live_geometry` (19 scenarios),
+`test_live_scene_target`, `test_live_alpha_state`, `test_live_scene`, `test_remix_live`, `test_live_camera`; gated build
+`d0b9cee556d8…`. **Review note, and a correction to my own claim:** the pre-fix behaviour was not "permanent white", it
+was "not built until the texture lands", so this work does not explain the white surfaces and the plan now says so.
+
+**A2, first slice (same day): alpha-blended draws become cutout.** NieR draws foliage, hair and grilles with classic
+straight-alpha blending; Remix has no per-draw blend state, so the live path now reads the game's blend state per draw
+(`OMGetBlendState`), requires the exact `SRC_ALPHA`/`INV_SRC_ALPHA`/`ADD` combination with alpha-to-coverage off, and
+marks those instances `REMIXAPI_INSTANCE_CATEGORY_BIT_ALPHA_BLEND_TO_CUTOUT`. Additive blending (particles, light
+shafts) is deliberately excluded: a "blend enabled means cutout" implementation would punch holes in every explosion.
+Gate `analysis/checks/test_live_alpha_state.py` (SHA256 `46deb460…`) passes with three cases plus a red one: opaque →
+flags 0, straight alpha → exactly the cutout bit on every instance, additive → flags 0, `NIER_REMIX_LIVE` off → nothing
+submitted. `blended=N` is now in the periodic stats line, so one live run reports whether the rule matches the game.
+Whole live suite re-run green (`test_live_geometry`, `test_live_scene`, `test_live_scene_target`, `test_live_camera`,
+`test_remix_live`).
+
+**A3 done (same day): the game's lights reach Remix.** The light element layout was recovered from the game's own
+shaders (`analysis/SHADER_DECLARATIONS.md`): point lights are a 48-byte structured buffer at PS slot 20 — position at 0,
+outer radius at 12, colour at 32, inner radius at 44. `live_capture.h` reads slot 20 at most once per frame (stride-48
+check, 64-light cap, zero-position padding skipped), `live_types.h` carries `Light`, and `live_scene.h` creates one
+`LightInfoSphereEXT` per light (hashes 4000000+, so they never collide with materials or the sun/sky) and draws them
+every frame. Gate `analysis/checks/test_live_lights.py` (SHA256 `2717a855…`) green, and so are `test_live_geometry`,
+`test_live_late_material`, `test_live_scene_target`, `test_live_alpha_state`, `test_live_scene`, `test_live_camera`,
+`test_remix_live`, `test_menu_overlay` on build `35ce3f1a9b02…`.
+
+Delegation note (ledger `live-lights-a3`): the worker wrote the code but hit its 30-minute box with the gate red, and
+**both red causes were bugs in my gate, not its code** — a per-frame assertion that counted a log line the gate never
+enables, and a red-test case binding a zero-element structured SRV (an invalid D3D11 view). I fixed the gate and the
+mock, re-ran everything, and it passed. The worker also drifted into wine diagnostics after my broken asset crashed a
+run; two steers were needed.
+
+**A6 measured (same day).** The whole HUD is 56 draws from one pixel shader, 52 straight-alpha blended, **all carrying
+CB11**, so the A1 filter already keeps them out of the scene and they are simply absent. Design recorded: replay them as a
+2D overlay through the existing `menu_overlay` draw path, using the captured CB11 as the transform with an identity
+view/projection and the already-captured textures.
+
+**1.9 done (same day): the sky exists, and the flags have a home.** The background shell was *dropped* (a deliberate
+rule from the captured-scene path), which is why there was no sky at all. It is now a mesh submitted with
+`REMIXAPI_INSTANCE_CATEGORY_BIT_SKY`, 4 on the dome and 0 on world geometry, asserted by `test_live_geometry`'s sky
+scenario. Two things had to be right for that: sky-ness is remembered per geometry (`sky_geometries()`), because the
+decode only runs when a mesh is rebuilt and a per-frame recomputation lost the flag; and the gates that count meshes or
+textures had to learn that the dome is not world geometry. `SMOOTH_NORMALS` and `HAIR_CARDS` are **not** set: there is no
+evidence yet which draws they belong to, and flagging on a guess would change the look for no reason. The way to find out
+is the same one that worked for lights — the shader's own declarations.
+
+**A6 done (same day): the HUD is back on screen.** `analysis/checks/hud_replay.h` draws the captured HUD quads onto the
+game's backbuffer right after the Remix frame is uploaded, in the Present hook, sampling the game's own texture views —
+no copy, no DDS. Two things were needed and both were found by the gate, not by inspection: the HUD draw carries its own
+**screen-space matrix in CB11** (using the scene's matrices put the quad off screen), and the game's **rasterizer state
+must be replaced** (the mock's probe state is wireframe with front-face culling, which discarded the quad silently). The
+replay saves and restores the immediate-context state it touches (layout, vertex/index buffers, shaders, CB, SRV, sampler,
+blend, rasterizer, target, topology, viewport). Gate `test_live_hud_capture.py` (SHA256 `20757e92…`) now asserts pixels:
+the composed frame must be the Remix image at the edge and the HUD's own texture in the centre. Whole suite green on build
+`4a64d2f4dbc8…`, including a new test switch `NIER_REMIX_CAPTURE_COMPOSITE` that writes what actually reached the screen
+(the `.raw` captures elsewhere happen before our composite and cannot prove this).
+
+**A6 first half done (same day): the HUD pass is captured.** The HUD is 56 alpha-blended sprite draws into the final
+image, and they are short indexed quads — often 6 indices — so the world-geometry minimum silently dropped them before
+any other rule could see them. `observe()` now decides HUD-ness **first** (bound blend state + bound target == final
+image) and only then applies `min_index_count`; a HUD draw is decoded straight into `Frame::ui`/`ui_draws` with its CB11
+transform and texture id, outside the geometry cache because sprite vertices change every frame. `hud=` in the stats line
+reports the captured draw count. Gate `analysis/checks/test_live_hud_capture.py` (SHA256 `eda21866…`) green, plus the
+whole suite on build `e3bb2a8deccb…`. Capture only: **the replay over the Remix image is not implemented**, which is what
+actually puts the HUD on screen.
+
+**A6 mock support ready (same day).** `menu_overlay_mock_game.cpp` has a `live-hud` mode: the live-late scene plus a
+green clip-space quad drawn **into the backbuffer after the 3D scene**, i.e. a stand-in for the game's 56-sprite HUD pass
+(it builds clean). What is still missing is the proxy side — capture those draws and replay them over the Remix image —
+and a test-only hook that writes the *composited* backbuffer to a file so a gate can sample it (the existing `.raw`
+captures are taken before our composite, so they cannot prove the HUD survives).
+
+**Live-run analysis is now one command.** `analysis/checks/analyze_live_run.py` prints a verdict per open question:
+scene target and skip count (A1), whether any draw matched the alpha rule (A2), `untextured=` against `textures=`
+(white surfaces), the ms/frame split (stage B), and the draw mix. Run it after any live test before reading anything else.
+
+## Review — 2026-10-28 (self-review; no independent review of the live-scene code exists yet)
+
+**P0, fixed in source (`b681f445…`), NOT installed.** Every build installed since `e89e2b77…` up to the installed
+`75ecd22b…` hooks Map/Unmap/UpdateSubresource/Copy* on **every launch**, Remix or not: it shadows every buffer write,
+AddRefs game buffers (holding freed GPU buffers alive up to 256 MB) and reads mapped memory. Worse, a boxed
+`UpdateSubresource` on a buffer copied `ByteWidth` bytes from a source that only holds the box: proven to fault on a
+guard page (`read access to …3BB1000`) **with Remix off**. Fixed: hooks are pure pass-through unless live capture is
+permitted; boxed updates patch exactly the box; nested Maps no longer lose writes. Gate `off`/`box` scenarios cover it.
+The earlier claim "Remix-off unchanged" was wrong for those builds — the `off` test checked readbacks, not this.
+
+**Status after "do all of those things" (same day):** P0 build `b681f445…` installed (hash-verified). P1/P2 fixed in
+source as candidate `127d8a4b…`, **not installed** until the independent review passes. Gates were frozen before the
+fix (hashes in `analysis/runtime/p1-gate-hashes.txt`, verified unchanged at green); two red-phase gate holes were found
+and closed before any fix (a rebuild assertion satisfied by an unrelated rewrite, and a trim scenario an implementation
+could pass by ignoring the knob). Fixes: evicted keys flow back through `live_capture::forget()`; meshes drawn this
+frame are never evicted; shadows separate identity (incarnation + generation) from bytes, so static vertex/index bytes
+drop under budget without rebuilds or readbacks; entries and texture refs expire after 1800 unused frames; backlog keeps
+the newest upload per geometry; textures rate-limited (4/frame, deferral delays the upload instead of losing the
+material), disk-capped (2 GB) and never retried after failure; live materials use the 3000000+ hash range;
+`skipped_skinned` renamed `skinned`. New gate scenarios: `evict`, `trim`; worker gate cases 7-9. Full suite green.
+
+**Independent review round 1 (Claude Haiku reviewer): BLOCK** — null deref on a failed readback / null VB slot (P0),
+CB11 reference leak, expiry rebuilding all static geometry every ~30 s, phantom zero-instance draws, stale input layouts on
+pointer reuse, no topology check, plus 10 P2s. All fixed in candidate `a0980b43…`, each with a red test first:
+gate scenarios `review` (zero-instance / strip / null-slot draws, CB11 refcount stable), `expire`, `readfail` (test-only
+`NIER_REMIX_LIVE_FAIL_VB_READS`), `test_input_layout_store.py`, worker-gate case for unready frames. The injection test
+also exposed a new bug: a frame whose meshes were not built yet called SetupCamera and lights with no instances (breaks
+the camera -> instances -> lights -> Present contract; it was the "DrawLightInstance at stage 1" seen in the earlier
+benchmark, wrongly attributed then). Fixed by `live_scene::ready()`. Mutation checks: reverting the null-deref fix, the
+CB11 guard, the expiry refresh or the ready() guard each makes a gate fail. Full suite (15 suites, 16 live scenarios)
+green. Gate hashes: `analysis/runtime/review-gate-hashes.txt` (the worker gate was changed once, deliberately: its old
+case required SetupCamera on an empty frame, which was the contract bug). Review round 2: **OK with notes**; every round-1 finding confirmed fixed. Its new P1 (N1: texture expiry re-exported
+textures under new ids and could exhaust the 2 GB disk budget, untexturing a long session) and P2s N2-N5, N7 (staging),
+N8, the partial readback cap and the backlog bound are fixed; N1 and N2 have gate cases (`expire` now counts DDS files;
+worker case 10), and reverting N1 makes `expire` fail with exactly the predicted third DDS. Full suite green.
+**First real live run (user, in game): unusable.** Menu crawl, main thread pinned at ~100% of one core, GPU graphics
+engine ~0.6% busy, F10 changed the picture but not the speed. Diagnosis by sampling the paused process (gdb, detached,
+game resumed): three consecutive samples of the main thread inside `memcpy` in `live_capture::note_write`, registers
+showing source + 4194304 = a **4 MiB mapped buffer**. Reading a large write-combined mapping back at frame rate was the
+hotspot, not Remix and not the resolution (the game was at 1600x900, then at 3440x1440: slow in both).
+Fix in candidate `1eec10e7…`: writes over 1 MiB are not mirrored (`NIER_REMIX_LIVE_MAX_WRITE_KB`, constant buffers
+exempt); the bytes are dropped, the identity bumped, and a draw that needs them does one staging read. A changed mesh
+bypasses the per-frame read budget (`NIER_REMIX_LIVE_READ_BUDGET_KB`) so it can never keep its old shape.
+Review: DeepSeek (`deepseek-flash`) blocked twice, then cleared after withdrawing its own P1; its two test-strength
+findings (hash-scope the late rebuild, count the retried builds exactly) are applied. New gates: `readfail`,
+`readfail2`, `changed` (with a per-frame spender in the mock), `test_live_capture_skips_big_writes.py`. Mutation
+evidence: removing the skip → probe fails (`skipped=0`); removing the changed-guard → builds stop at `[0,1,38]`.
+Honest limits: the 1 MiB threshold is unvalidated in the real game; a >1 MiB buffer rewritten every frame would now
+pay a staging read every frame (knob exists for that); readfail2 tests the outcome, not the specific record line.
+**Second live run (user), then optimisation from measurement.** Real game, live scene: mesh rebuild storm — 16,441
+builds in 112 s (~96/s, the per-update cap), 574 evictions, mesh budget pinned at 512 MB, picture doubled and smeared,
+2.7 fps, GPU 96-100%, main thread 87%. Cause: NieR rewrites dynamic buffers continuously and every rewrite became a new
+Remix mesh. Fixed by hashing the decoded content (vertices+indices+bones+weights) per geometry and keeping the uploaded
+mesh when it is unchanged (`content_hashes()`); first version also skipped the draw's Item, which a DeepSeek review
+caught as P0 — the geometry would have disappeared — now the Item is always emitted and the gate asserts the draw happens
+on nearly every frame. Next run: 278 meshes, 0 evictions, 131 MB. `identical=` and the per-stage ms/frame split are now
+logged; a bogus `100000.0 fps` line (window shorter than the rate window) is fixed.
+**Write-copy cost was still the CPU limiter**: three gdb samples again inside `note_write`'s memcpy for sub-1 MiB
+buffers. With `NIER_REMIX_LIVE_MAX_WRITE_KB=64` the original view went 10 → 20 fps and path traced 4 → 5 fps.
+**F10 does not stop capture** (by design until now) → first attempt called `set_permitted(false)` on F10, which tore
+down refs and maps, and the game crashed one second after resuming: `amdgpu` gfx page fault in `dxvk-submit`, ring
+timeout, wedged GPU. Root cause unproven, correlation strong (only new code, same second). Replaced with
+`set_suspended()`: `permitted=false` only, nothing released, nothing cleared. Result the user measured before the
+crash: original view 60 fps.
+`rtx.resolutionScale` 0.75 → 0.6 → 0.3 moved path-traced fps only 3 → 4 → 5, so the remaining 5 fps is **not** pixel
+count: it is either Remix's per-frame submission or our GPU→CPU→GPU copy path (GetRenderTargetData + per-pixel swizzle +
+UpdateSubresource). The ms/frame split is installed to decide which, but has not been captured yet (needs 300 composites
+≈ 60 s in the path-traced view).
+
+**Where this stands (end of 2026-10-28 session, for a fresh start)**
+
+Working now: live scene in the real game — camera, indexed/instanced geometry, skinned meshes, materials by texture,
+budgeted uploads. Original view (F10) runs at 60 fps and no longer pays for capture. Path-traced view is **5 fps**
+(10 fps looking at the floor), GPU ~88-100%, main thread no longer the limiter.
+
+Measured facts from the real game (do not re-derive):
+- Rebuild storm fixed: 16,441 builds/112 s and 574 evictions → 278 builds, 0 evictions, 131 MB.
+- `rtx.resolutionScale` 0.75 → 0.6 → 0.3 moved path-traced fps 3 → 4 → 5, so pixels are **not** the limiter.
+- fps doubles when little is on screen (5 → 10 at a bare floor), so cost scales with submitted geometry.
+- The static probe scene ran ~32 fps through the same GPU→CPU→GPU copy path, so that path is not 170 ms.
+- Lights are created once (`!s.sun || !s.sky`), not per frame: ruled out as a leak.
+- Write-copy cost was the earlier CPU limiter (three gdb samples in `note_write`). `NIER_REMIX_LIVE_MAX_WRITE_KB=64`
+  took the original view 10 → 20 fps before F10 suspend made it 60.
+- A `set_permitted(false)` teardown on F10 caused a **gfx page fault in `dxvk-submit` → ring timeout → wedged GPU**
+  one second after resume. Replaced by `set_suspended()` (permitted flag only, nothing released). Root cause unproven;
+  if a page fault recurs, that assumption is wrong — the GPU coredump is at
+  `/sys/class/drm/card1/device/devcoredump/data` and `journalctl -k`.
+
+Next hypothesis, **installed** (`e313c177…`, receipt in `backups/live-scene-20261029*`): NieR's shadow-map/offscreen passes are being submitted as
+world geometry, so Remix ray traces the scene two or more times over. The capture now measures the viewport of every
+draw and counts draws whose viewport is under 25% of the frame's largest (`small_viewport=`), skipping them only when
+`NIER_REMIX_LIVE_SKIP_SMALL_VIEWPORT=<pct>` is set. Default is count-only, so one run reports whether those passes
+exist before we trust the filter. `ms/frame` (present/copy/readback/publish/other) now prints unconditionally every
+300 composites; it was swallowed by an elapsed-time guard twice.
+
+Next run, in this order:
+1. Launch with the usual line plus `NIER_REMIX_LIVE_SKIP_SMALL_VIEWPORT=25`, stay in the path-traced view ~90 s.
+2. Compare `small_viewport` and fps against the 5 fps baseline. Big `small_viewport` + higher fps → keep the filter,
+   then decide whether to raise the threshold or lower it so nothing real is dropped.
+3. If fps does not move, read `ms/frame`: whichever of present/copy/readback/publish dominates decides the next fix
+   (Remix-side quality knobs vs our copy path).
+4. Then the picture problems, in this order: washout (materials are a heuristic; most surfaces come out untextured
+   white), doubling while standing still (was churn; unverified whether churn was the whole cause), HUD/menus absent,
+   foliage solid (no alpha).
+
+Also true and worth knowing: `NIER_REMIX_LIVE_MAX_WRITE_KB=64` is an experiment value; the default is 1 MiB. The
+600-frame-old gate hashes are in `analysis/runtime/review-gate-hashes.txt`. No commits have been made; HEAD is still
+`e01542b`, and the working tree holds all of this uncommitted.
+
+**Installed `e313c177…`** (validated: both long suites green; the viewport filter is count-only until the knob is set).
+
+**Earlier: installed `18cf82fc…`** (`908b0c7b…` caused the crash above; `d090ae43…` in
+`backups/live-scene-20261028T232548890993Z/`, `18cf82fc…` receipt in `backups/live-scene-20261028T234402527385Z/`).
+
+**Earlier: installed `1eec10e7…`** (previous **`9ec61bdf…`** in `backups/live-scene-20261028T222757013840Z/`) for the second live run.
+
+**Earlier: installed `9ec61bdf…` for the first live run** (rollback chain in `backups/live-scene-*`, original `fb2284e2…` in
+`backups/live-scene-20261028T162516078850Z/`). Open, unverifiable offline: N6 (per-instance VB data / uncapped instance
+counts), deferred contexts, CB offsets, matrix transpose, bone space, albedo-slot heuristic.
+
+**P1, as found (fixed in `127d8a4b…`, see above):**
+1. LRU-evicted meshes never return: the game side still marks them built, so the worker skips them forever.
+2. Shadow trim + pointer reuse can serve a stale mesh (generation restarts at 1); and bytes are resolved for every
+   draw even when already built, so once the working set exceeds the 256 MB shadow budget, staging readbacks
+   happen every frame.
+3. Worker backlog is unbounded and not deduplicated by geometry key (per-frame dynamic geometry can grow it).
+**P2:** texture capture is unbounded on disk and stalls the render thread per new texture (failed writes retried every
+draw); live material hashes collide with the static scene's range; `skipped_skinned` now counts *drawn* skinned
+draws; stale comments/dead fields; `skinning_convert.h` is no longer used by the shipping path.
+**Unknown until a real run:** CB offsets via `VSSetConstantBuffers1` (capture does not record them), deferred
+contexts, 3x3 transpose, Remix bone space, the "first PS texture is albedo" heuristic.
+
+**Process:** the live-geometry gate was written *and* repeatedly edited by the implementer (me) after failures — not
+frozen; seven different DLLs were installed under one approval; the "~1 µs/draw" figure measured the cache-hit path only.
+
+## Checkpoint — 2026-10-28 14:30 UTC: live draw-stream scene implemented and gated (not yet installed)
+
+**The Remix scene can now follow the game every frame**, opt-in with `NIER_REMIX_LIVE=1` (+ `NIER_REMIX_LIVE_TEX`).
+Nothing is installed and no game run happened; the evidence is the software gate below.
+
+New code, all lead-written after the desktop worker timed out and the cloud provider hit its usage limit:
+- `analysis/checks/live_capture.h` (game thread): CPU shadows for everything the game writes (`Map`/`Unmap`,
+  `UpdateSubresource`, `Copy*`), one-time reads for static buffers, per-draw capture keyed by geometry, compact
+  **indexed** uploads (only referenced vertices), CB11 3x4 world matrices, one DDS per material texture.
+- `analysis/checks/live_scene.h` (worker thread): owns every mesh/material handle, indexed mesh per geometry,
+  one `DrawInstance` per game draw, sun+sky lights, LRU eviction with a byte budget.
+- `nscn_scene.h`: camera setup and lights extracted into `setup_camera()` / `make_lights()` so the live path reuses
+  exactly the proven static-path code (`test_nscn_scene.py` + its hidden gate still pass).
+- Wiring: live capture armed/disarmed around Present exactly like the camera path; the static scene mesh is skipped
+  when live data arrives and is only a fallback after ~100 empty frames.
+
+**Gate `analysis/checks/test_live_geometry.py`** (SHA256 `567cb45a…`) passes: one mesh per geometry key, no per-frame
+vertex/index/constant readback (all buffers come from shadows or one read), `DrawInstance` transforms follow CB11 every
+frame, one DDS + one material per texture, live camera still reaches `SetupCamera`, Remix-off unchanged. Mock DLL
+`f800ff45…`. Also re-ran and passed: `test_live_camera.py`, `test_remix_live.py`, `test_menu_overlay.py`,
+`test_geometry_capture.py`, `test_part3_integration.py`, `test_nscn_scene.py` (+hidden), `test_remix_scale.py`,
+`test_startup_settings.py`, `test_camera_decode_hidden.py`.
+
+Three real bugs were caught by the gates while building it, all fixed: an SRV refcount double-release that crashed
+Wine, a geometry-version taken before the shadows existed (rebuild every frame), and byte iterators copied into a
+`vector<float>` (every transform wrong).
+
+**Skinned draws are now wired too** (same gate, `skinned` scenario): the draw becomes a bind-pose INDEXED mesh with
+4 bone indices + 4 normalised weights per vertex (`MeshInfoSurfaceTriangles.skinning_value`), and each instance carries
+the frame's CB11 palette through `InstanceInfoBoneTransformsEXT`. `remixapi_Transform` is `float[3][4]` and NieR's
+palette is already 3x4 row-major at a 48-byte stride, so it is copied, not converted. `analysis/checks/skinning_convert.h`
+(SHA256-gated on 12 real skinned draws) remains the pure reference for that arithmetic. Draws whose weighted bone
+index falls outside the palette are rejected and counted — that is real data, 64752 such vertices in one capture.
+
+**Benchmark + one real bug found after that install.** Driving the mock at 1 / 50 / 200 draws per frame kept the frame at
+2.1–2.4 ms (llvmpipe, MOCK_FRAME_MS=0), so the capture overhead is ~1 µs per draw — roughly 3 ms for 3000 draws. The same
+run exposed a lost-geometry bug: first-sight meshes were published *inside* a frame, so whenever the worker sampled a later
+frame (it is slower than the game), those meshes never reached Remix and the scene stayed empty. Uploads and textures are
+now queued and drained by the worker (`take_uploads()` / `take_textures()`, capped at 256 MB); the mock now reports
+`meshes=1 instances=50/200` instead of `meshes=0`. Installed DLL is now `8bd21c2b…` (previous builds
+`e89e2b77…` and `56a45da2…`; the original `fb2284e2…` is still in `backups/live-scene-20261028T162516078850Z/`). The
+worker also logs a live stat line every 300 frames (draws, instances, meshes, built, evicted, mesh bytes, dropped
+uploads) so the first real run is diagnosable from `NIER_SCALE.log`.
+
+`test_live_camera.py` failed once on `present-fail` (wine exit -9) and passed on rerun with no code change — treat it as
+host flakiness, but if it repeats, investigate before trusting the camera gate.
+
+**Two showstoppers found and fixed before the first real run** (both would have made the live scene wrong or empty):
+1. `start_index` / `base_vertex` were ignored, so a draw would read the wrong indices — real NieR uses non-zero
+   `start_index` in almost every draw. The mock now draws the second half of a 130-vertex buffer both ways and the gate
+   asserts the uploaded first vertex is `z=2.500`, not `0.500`.
+2. Geometry uploads were tied to one frame; when the worker sampled a later frame they were lost forever. They are now a
+   drained queue with retry-on-overflow, and mesh builds are capped at 96 per iteration so the first-sight frame cannot
+   stall (draws whose mesh is not built yet are skipped, so geometry appears over a few frames instead of frozen).
+Plus: draws with no CB11 (no world transform -> screen-space/UI) are skipped instead of drawn at the origin, per-instance
+input elements are no longer decoded as per-vertex data, and `analysis/checks/analyze_live_run.py` summarises a real log
+(first live frame, periodic stats, pauses/failures, dropped uploads, watchdog stalls).
+
+3. The **vertex-buffer offset** was ignored too (45 real draws bind slot 2 at offset 864). Offsets, `start_index`,
+   `base_vertex` and `start_instance` now all take part in addressing, and the gate draws the second half of a 130-vertex
+   buffer three different ways, asserting the uploaded first vertex is `z=2.500`.
+4. **Sky domes** are refused, as the captured-scene path already did: the world-space extent of the first instance above
+   5000 units is skipped. Measured on a 104-draw sample of the real capture: 4 exceed it (extents up to 130672), median
+   103 — so the rule drops background shells, not level geometry.
+5. Mesh builds are capped at 96 per worker iteration with the rest queued, so a first-sight frame cannot stall; meshes
+   appear over a few frames instead.
+
+New gate `analysis/checks/test_live_scene.py` (SHA256 `79f821a5…`) compiles the worker scene natively with
+ASan/UBSan against a recording runtime: LRU eviction frees every handle, a rebuild replaces rather than leaks, lights are
+created once, transforms and bone palettes are copied, unbuilt meshes are skipped, destroy frees everything. A
+do-nothing header with the same shape is rejected with 9 violations.
+
+**The vertex decode is now one implementation, checked against real draws.** `analysis/checks/live_vertex_decode.h`
+owns the draw -> compact-vertex/index decode (bounds, `base_vertex`, IB offset, first-wins TEXCOORD, per-instance
+elements skipped, skinned bone data) and the capture hook calls it. `analysis/checks/test_live_vertex_decode.py`
+(SHA256 `5fb2e14f…`) compiles it natively and compares it with an independent oracle on 6 sampled draws from the real
+2995-draw capture (4 skinned): every referenced vertex's position, normal, uv and colour, the exact index remap, and
+valid weights/bones. A do-nothing header is rejected. This is the first time the decode has been checked against real
+NieR bytes rather than a 65-vertex mock. `skinning_convert.h` remains as the stand-alone reference for the skinning
+arithmetic (its own gate still passes); the shipping path uses `live_vertex_decode.h`.
+
+Two gate flakes seen on this machine: `test_live_camera.py` scenario `fail-before-draw` has twice exited with -9
+(SIGKILL, no assertion failure) and passed on an immediate rerun with no code change — look at host memory before
+trusting a single failure there.
+
+Installed DLL `75ecd22b…` (chain: `adaa555f…`, `c0fd33b6…`, `2677847b…`, `16361eaf…`, `56a45da2…`, `e89e2b77…`,
+original `fb2284e2…`).
+
+**Still missing for playability:** the game's HUD/menu draws are not separated from world geometry (they will appear as
+world-space quads); the scene is rebuilt from the full draw stream each frame, so cost on real NieR is unmeasured; the
+matrix 3x3 transposition question is only settled by a live run; no cutscene/fade handling. Gate DLL `e89e2b77…`.
+
+## Checkpoint — 2026-10-28 13:30 UTC: live camera accepted; live geometry and skinning in flight
+
+**Live camera is wired and reviewed.** `camera_capture.h` observes VB->DrawIndexed/DrawIndexedInstanced, decodes VS CB0
+with the accepted `camera_decode.h`, and publishes coherent snapshots that the Remix worker copies into
+`scene.camera` before each submit. Review found a real race (an armed capture could still read back after the host
+failed); fixed with an atomic permission gate revoked in `fail()` and checked at arming, observation, readback and
+publication. `F10` toggles an original-game view (no visual change to the game, no camera readbacks while bypassed,
+Insert menu unaffected, resume without rebuilding the scene). Gate: `analysis/checks/test_live_camera.py`, ten software
+scenarios, DLL `bdd82ec7…`. Codex review of both the fix and the F10 addition: no issues.
+
+**Live geometry (the actual playability step) is designed, gated and delegated.** Plan and verified facts:
+`analysis/LIVE_SCENE_PLAN.md`. Gate: `analysis/checks/test_live_geometry.py` (fails today for the right reason).
+It requires: Map/Unmap/UpdateSubresource shadows so nothing is read back per frame; one INDEXED mesh per geometry key
+with only the referenced vertices uploaded; rebuild only when a shadow was written; `DrawInstance` transforms from the
+live CB11; one DDS/material per texture; the live camera still arriving; Remix-off unchanged. Verified against the real
+2995-draw capture: 9.25M triangles/frame (so triangle expansion would cost ~1.27 GB — hence indexed), R32 indices,
+`base_vertex` always 0, non-zero `start_index`, 2-4 bound vertex buffers, 51 instanced draws, 568 skinned draws.
+
+**`remixapi_Transform` is `float matrix[3][4]`, not 4x4** (verified in `remix-probe/vendor/remix_c.h:200-202`). NieR's
+3x4 row-major CB11 world matrix is therefore copied element for element, translation in `matrix[row][3]`, with no
+fourth row to fill. Bone transforms are the same 3x4 struct (max 256 bones), so NieR's 48-byte-stride bone palette
+needs no conversion. Whether the 3x3 must be transposed is the only open convention question and is settled only live.
+`remixapi_InstanceInfoBoneTransformsEXT` + `MeshInfoSurfaceTriangles.skinning_value` mean animated characters can be
+driven by bone matrices without rebuilding meshes.
+
+**Skinning gate is written and proven, implementation delegated.** `analysis/checks/test_skinning_convert.py`
+(SHA256 `d8e36ead…`) compiles a candidate `skinning_convert.h` against four real skinned draws and checks: raw bind
+pose preserved, 4 bone indices + normalised weights preserved, only referenced vertices emitted (compacted indices),
+and — independent of the candidate — that skinning its output with the captured palette reproduces NieR's own
+skinning. Eleven malformed-input cases must be rejected. A lead oracle under `analysis/runtime/skinning-gate/oracle/`
+proves it satisfiable; a stub proves it fails cleanly. Both gates are software-only evidence, not real-game proof.
+
+No new DLL was installed. Any install still needs offline gates, review, separate approval, and a live test.
+Installer (dry-run by default, refuses while NieR runs, hash-verifies before and after, writes receipt + RESTORE.md):
+`python3 analysis/checks/install_live_dll.py --install`. Live test launch options = the previous line plus
+`NIER_REMIX_LIVE=1 NIER_REMIX_LIVE_TEX='Z:\\home\\suraj\\Projects\\Nier-Automata-Rendering\\analysis\\runtime\\live-tex'`.
+First things to look for in `NIER_SCALE.log`: `remix: live scene first frame draws=… meshes=… instances=…`, and whether the
+world is upright and correctly handed (a transposed 3x3 shows a broken/mirrored world).
+
+## Checkpoint — 2026-10-28: primary guard verified; functionality-first continuation
+
+**User direction:** get NieR RTX fully live and playable in the game, then optimise. Do not spend the next session on
+Remix resolution presets, async readback, frame generation, or local-model benchmarks instead of live functionality.
+The installed DLL remains `fb2284e2…`, with the visible static scene and ~32 fps result below. No new DLL was installed.
+The user has closed the game; that does not independently prove its shutdown path was clean.
+
+**Persistent display fix is done.** Updated only the primary-policy tail of
+`~/.config/hypr/modules/monitors.lua`: startup, monitor-add and config-reload hooks plus a retained repeating Lua timer
+check every 5000 ms. The shell command sets DP-2 primary only if it is connected, active, and not already primary;
+absent/disconnected/inactive DP-2 is left alone. No resolution, refresh, HDR or layout rules changed. Returning the
+timer retains it through Lua's module cache. Lua syntax, 9 fake-xrandr cases and mocked Lua lifecycle checks pass;
+Hyprland reports no config errors. With NieR closed, cleared the flag twice: the live guard automatically restored it
+in **3.43 s / 5.04 s**, with both monitor modes/positions unchanged. This is hardening, not proof of what originally
+cleared the flag. It intentionally enforces DP-2 while active, even if another primary is selected manually.
+
+Backup and install receipt: `backups/xwayland-primary-20261028T113153980394Z/` (`monitors.lua`, `receipt.json`).
+Offline check/candidate: `analysis/runtime/xwayland-primary/`. Do not reapply the old startup-only tail.
+
+**Live-camera preparation:** a Codex scout mapped the draw-hook and `nscn::submit` seams; the lead checked source and
+actual capture data. VS CB0 contains the row-major view matrix (first 16 floats) and projection (next 16). The view is
+constant across 73 and 2995 sampled draws in the two full-frame captures. Four separate camera poses agree with the
+independent VS CB13 position to within 0.000053 units. Do not treat CB0 as an object world transform (an old receipt
+contains that superseded interpretation). Current world/skin transforms are in CB11, as used by the converter.
+
+Frozen next gate: `analysis/checks/test_camera_decode.py` (SHA256
+`783fbe4780121166dcaa46a6a22210c952c91665e6afdfe6e81293a0c9006ef1`) checks a pure decoder, 244 malformed-input cases,
+synthetic orientations, unaligned bytes and four real captures with a separate CB13 position cross-check. The lead
+oracle passes; an empty candidate fails. Implementation is the next bounded delegated unit, then wire a camera-only
+per-frame snapshot into the existing host without reloading meshes. Camera-only motion is a stepping stone, NOT the
+complete live draw stream. Next after that: persistent geometry/material cache, object/skin updates, and game UI/menu
+fallback. Any new DLL still needs offline gates, review, separate install approval, and a live test.
+
+## Checkpoint — 2026-10-28 11:23 UTC: full-size render visible; cheap-game path verified live
+
+**User-confirmed:** changing NieR's output resolution to 3440x1440 made the static Remix scene appear. The host
+logged `resumed at 3440x1440`, `first frame ready`, and `composited first frame 3440x1440` at 11:20:58. Resolution
+changes back to 1920x1080 paused it, and changing back resumed it; no device reset was needed. DP-2 remains the
+Xwayland primary. This confirms the earlier missing image was blocked by output-size mismatch, not a failed scene.
+
+**Live measurements, installed `fb2284e2…`, both flags set:** real FSR provider **4.1.1**, colour/depth/motion vectors
+**1720x720**, output and Remix **3440x1440**. Twelve steady 300-frame Remix samples after the last resize/pause interval:
+**31.8–32.1 fps, mean 31.93**. The first FPS report after resuming was excluded because it included paused time.
+This is about 4.4x the earlier 7.3 fps Remix observation, but **not a controlled same-session A/B benchmark**. Game FPS
+has not been independently measured, and the visible scene is still static, not a live geometry/camera stream.
+Desktop local models were confirmed unloaded during the measurement.
+
+Evidence snapshot: `analysis/runtime/remix-cheap-game/live-result-20261028T112334521851Z/` holds the three logs and
+`result.json` (hashes, provider line, each FPS sample, scope limits). The live-install pointer links to that result.
+The installed DLL/rollback chain is unchanged from the next checkpoint. No new code or live configuration changes
+were made while this run was active.
+
+**Next (superseded by the functionality-first direction above):** user has closed the game; a clean-exit result is
+not independently verified. Prior performance candidates were lower Remix render size + GPU stretch and async
+readback; defer these until live functionality. Keep desktop inference off while the game runs.
+
+## Checkpoint — 2026-10-28 10:41 UTC: Remix50 installed, awaiting user test
+
+**First live-run update:** user reported wrong resolution and no Remix image. Live `xrandr` showed no primary output
+again. The game used 1600x900 then 1920x1080, while Remix started at 3440x1440 and correctly paused on the mismatch.
+FSR logs confirm the cheap-game path itself: 960x540 colour/depth/MVs -> 1920x1080 output, real provider 4.1.1.
+That is not a valid full-resolution performance comparison. With explicit approval, restored only
+`xrandr --output DP-2 --primary` and verified `DP-2 connected primary 3440x1440`; no mode or DLL change, no device
+reset. The user must quit/relaunch and select 3440x1440 in game options if 1080p was retained. Do not confuse the
+expected 1720x720 internal game scale with the required 3440x1440 output. **Always check Xwayland primary before
+future live tests**; the cause of it being cleared remains unknown. No desktop local inference while the game runs.
+
+With user approval and NieR confirmed closed, replaced only the game's `d3d11.dll` with the offline-tested build:
+`fb2284e215cada6e1fddd47df27baf2746171ae7f91803ddfc0e1d4be0f3d401` (hash verified after atomic replacement).
+Live path: `/mnt/second/SteamLibrary/steamapps/common/NieRAutomata/d3d11.dll`.
+Storage was verified live: ext4 label `second`, UUID `629e3aa1-e005-4e46-837d-7efe723271aa`, mounted RW at `/mnt/second`.
+
+**Rollback:** `backups/remix-cheap-game-20261028T104108701043Z/d3d11.dll`, verified original SHA256
+`77d9da809294c3f53d2817a3fb7d3d8dca658ffb3e864d5dba1d9d0067b7d95d`. That folder has `receipt.json` and
+`RESTORE.md`. Restore only with NieR closed. No second hook DLL/staging file was left in the game folder.
+The executable (`5171bed0…`), `d3d11_dlaa.dll` (`3d628eb5…`), `NIER_RENDER.ini`, and `rtx.conf` were hash-checked
+unchanged. Steam launch options were not edited. Desktop Qwen was idle and was unloaded before the user test to
+free its 17.74 GB allocation; do not restart desktop inference while the game/GPU test runs.
+
+**Next:** the user adds `NIER_REMIX_CHEAP_GAME=1` to the existing Remix launch options (both it and
+`NIER_REMIX=1` must be present), then launches the game. Check that Insert reports Remix50; at 3440x1440, inspect
+logs for actual 1720x720 game input/depth/MV resources, native-size output, and the real FSR4 provider. Compare steady
+Remix/game FPS with the prior 7.3/14 baseline, check the menu/fallback image, and quit normally. No performance win
+or actual scaled dimensions are claimed yet. The startup override also affects fallback until restart; remove the
+extra flag and restart to return to the saved preset.
+
+Log offsets before the install are in the backup receipt: `NIER_SCALE.log` 52670 bytes, `NIER_DLAA.log` 11348,
+`NIER_FSR4.log` 2744. Use `analysis/runtime/remix-cheap-game/live-install.json` to find the receipt, and examine only
+new log data after the user's run. If logs were truncated/rotated, do not blindly seek those old offsets.
+
+## Checkpoint — 2026-10-28: cheap base-game rendering candidate (Remix50), offline only
+
+**Next action: approved live test, not more model benchmarking.** Built candidate:
+`analysis/runtime/menu-dll/d3d11.dll`, SHA256
+`fb2284e215cada6e1fddd47df27baf2746171ae7f91803ddfc0e1d4be0f3d401`.
+No game files, launch options, or saved presets were changed. Last recorded installed DLL is still `77d9da809294c3f5…`
+(next checkpoint); that installed hash was not rechecked this session. Do not confuse the candidate with the installed DLL.
+
+The new **experimental, startup-only** override requires both exact flags:
+```
+NIER_REMIX=1 NIER_REMIX_CHEAP_GAME=1
+```
+Keep the existing runtime/scene paths and other launch options. This flag exists only in the candidate, not the old install.
+With valid settings (including missing-file Custom75 defaults), the base game's renderer and matching proxy gate use
+**0.5** instead of the saved Native/Custom75 ratio. At 3440x1440 the expected game targets are 1720x720 (actual resource
+creation still needs a live check); the Remix host and output backbuffer stay full-size. Invalid/unreadable settings remain fail-closed Native. All depth/proxy/signature,
+renderer-readability, and existing-scale checks are retained. The INI still accepts only Native/Custom75; Remix50 is
+not a new saved preset. The menu reports **Remix50 / experimental / 50% per axis**, separately from the saved preset.
+
+**Limit:** the override also affects intro frames, menus, and fallback after a Remix failure. It is NOT conditional on
+Remix currently covering the frame, and does not restore the original scale mid-process. Remove
+`NIER_REMIX_CHEAP_GAME` and restart to use the saved preset. No device ResetEx/hot-resize work was added. FSR4 still
+runs; reduced cost and higher FPS are hypotheses until measured in NieR.
+
+**Verified by the lead:** frozen policy gate (512 matrix cases), hidden exact-match boundary cases, native startup
+function mocks (flag matrix, saved settings, Native override, invalid config, depth/proxy/renderer/missing-gate faults),
+settings/scale/status/menu-state tests, menu-session ASan/UBSan + MinGW checks, 96 ImGui layout/input cases, full DLL
+build/export/import checks (Part 3 gate: 29 checks), and Remix/menu Wine+Xvfb mocks with forced llvmpipe. These are
+NOT real Remix, DXVK, Proton, or NieR tests. Remix-off captures remain byte-identical; the existing runtime-failure,
+resize/pause, hang/watchdog, focus, and menu cases pass.
+
+Delegation: desktop Qwen implemented only the pure policy behind the frozen gate; lead integrated and re-verified it.
+An independent **openai-codex/gpt-6.1-sol** review found misleading next-launch wording after save failure/recovery;
+new failing UI cases reproduced it, then the wording was corrected and the gate passed. Outcomes are in the shared
+ledger. Laptop Qwen inference works again after registry refresh. Gemma research tests are parked: 31B loading failure,
+12B actual 8K context exceeded; neither was scored for research quality. Do not spend this session on model tuning.
+
+**Resume:** with user approval and the game closed, back up/hash the current DLL, install only this hash-pinned
+candidate, then let the user compare flags off/on against the prior 7.3 fps Remix / 14 fps game baseline. Verify actual
+game input/depth/MV dimensions and FSR provider logs at 0.5, plus fallback/menu behavior, before keeping it. If useful,
+continue lower Remix render size + GPU stretch, then async readback; live draw streaming and image quality remain pending.
 
 ## Checkpoint — 2026-10-28: VISION goal 1 built — in-game Remix host, installed, off by default
 

@@ -154,10 +154,10 @@ def sky_dds(level=255, size=8):
         mips.append(bytes((level, level, level, 255)) * (n * n))
         n //= 2
     h = bytearray(124)
-    struct.pack_into('<7I', h, 0, 124, 0x1 | 0x2 | 0x4 | 0x1000 | 0x20000, size, size, 4 * size, 0, len(mips))
-    struct.pack_into('<I', h, 72, 32)             # DDS_PIXELFORMAT.dwSize
+    struct.pack_into('<7I', h, 0, 124, 0x1 | 0x2 | 0x4 | 0x8 | 0x1000 | 0x20000, size, size, 4 * size, 0, len(mips))
+    struct.pack_into('<2I', h, 72, 32, 0x4)      # DDS_PIXELFORMAT size, DDPF_FOURCC (required to recognise DX10)
     h[80:84] = b'DX10'                            # dwFourCC: DX10 header follows the 124-byte header
-    struct.pack_into('<I', h, 104, 0x1000 | 0x400000)  # DDSCAPS_TEXTURE | DDSCAPS_MIPMAP
+    struct.pack_into('<I', h, 104, 0x1000 | 0x8 | 0x400000)  # TEXTURE | COMPLEX | MIPMAP
     dx10 = struct.pack('<5I', 28, 3, 0, 1, 0)     # DXGI_FORMAT_R8G8B8A8_UNORM, TEXTURE2D, 1 array slice
     return b'DDS ' + bytes(h) + dx10 + b''.join(mips)
 
@@ -256,10 +256,10 @@ def sky_dds_hdr(width=128, height=64, zenith=(0.05, 0.09, 0.22), horizon=(0.72, 
             break
         w, h = max(w >> 1, 1), max(h >> 1, 1)
     hd = bytearray(124)
-    struct.pack_into('<7I', hd, 0, 124, 0x1 | 0x2 | 0x4 | 0x1000 | 0x20000, height, width, 8 * width, 0, len(mips))
-    struct.pack_into('<I', hd, 72, 32)             # DDS_PIXELFORMAT.dwSize
+    struct.pack_into('<7I', hd, 0, 124, 0x1 | 0x2 | 0x4 | 0x8 | 0x1000 | 0x20000, height, width, 8 * width, 0, len(mips))
+    struct.pack_into('<2I', hd, 72, 32, 0x4)     # DDS_PIXELFORMAT size, DDPF_FOURCC
     hd[80:84] = b'DX10'                            # dwFourCC: DX10 header follows the 124-byte header
-    struct.pack_into('<I', hd, 104, 0x1000 | 0x400000)  # DDSCAPS_TEXTURE | DDSCAPS_MIPMAP
+    struct.pack_into('<I', hd, 104, 0x1000 | 0x8 | 0x400000)  # TEXTURE | COMPLEX | MIPMAP
     dx10 = struct.pack('<5I', 10, 3, 0, 1, 0)      # DXGI_FORMAT_R16G16B16A16_FLOAT, TEXTURE2D, 1 array slice
     return b'DDS ' + bytes(hd) + dx10 + b''.join(mips)
 
@@ -434,6 +434,19 @@ def main():
         out.write_bytes(bytes(blob))
         (out.parent / 'scene_sky.dds').write_bytes(
             sky_dds_hdr() if os.environ.get('REPROBE_SKY_HDR') == '1' else sky_dds())  # dome light points here
+        # The capture's light arrays (point t20, spot t22), passed through unchanged: the probe converts them with
+        # checks/light_convert.h, the same code the live path uses. NLIT v1: per array u32 stride, first, count, nbytes.
+        lights_out = out.parent / 'scene_lights.bin'
+        if (frame / 'lights.json').exists():
+            lj = json.loads((frame / 'lights.json').read_text())
+            blob_l = bytearray(b'NLIT' + struct.pack('<I', 1))
+            for key, name in (('t20', 'lights_t20.bin'), ('t22', 'lights_t22.bin')):
+                a = lj.get(key, {})
+                data = (frame / name).read_bytes() if (frame / name).exists() else b''
+                blob_l += struct.pack('<4I', a.get('stride', 0), a.get('first', 0), a.get('count', 0), len(data)) + data
+            lights_out.write_bytes(bytes(blob_l))
+        elif lights_out.exists():
+            lights_out.unlink()  # never light a scene with another capture's lights
     except OSError as e:
         print(f'error: {e}', file=sys.stderr)
         sys.exit(2)

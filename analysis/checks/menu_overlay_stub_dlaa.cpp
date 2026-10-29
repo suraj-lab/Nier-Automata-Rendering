@@ -7,6 +7,7 @@
 #include <atomic>
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
 
 using CreateDeviceFn = decltype(&D3D11CreateDevice);
 using CreateSwapChainFn = HRESULT (STDMETHODCALLTYPE*)(IDXGIFactory*, IUnknown*, DXGI_SWAP_CHAIN_DESC*, IDXGISwapChain**);
@@ -53,7 +54,13 @@ static void capture(IDXGISwapChain* swapchain) {
 }
 
 static HRESULT STDMETHODCALLTYPE stub_present(IDXGISwapChain* self, UINT sync, UINT flags) {
-    presents.fetch_add(1);
+    const unsigned frame = presents.fetch_add(1) + 1;
+    const char* mode = std::getenv("MOCK_CAMERA");
+    if (mode && (!std::strcmp(mode, "present-boundary") || !std::strcmp(mode, "present-fail"))) {
+        auto draw = reinterpret_cast<void (*)()>(reinterpret_cast<void*>(GetProcAddress(GetModuleHandleW(nullptr), "mock_downstream_camera_draw")));
+        if (draw) draw();
+        if (!std::strcmp(mode, "present-fail") && frame == 20) return E_FAIL;
+    }
     if (capture_path[0]) { capture(self); capture_path[0] = 0; }
     return real_present(self, sync, flags);
 }

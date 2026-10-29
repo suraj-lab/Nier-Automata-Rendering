@@ -1,3 +1,4 @@
+#pragma once
 // Hook ID3D11Device::CreatePixelShader so each pixel shader's bytecode can be written out with a capture.
 //
 // Why: deciding whether a draw is a cutout (foliage, hair, grilles) needs the shader's `discard`, and the

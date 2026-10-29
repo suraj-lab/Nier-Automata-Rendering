@@ -44,6 +44,15 @@ inline Settings select(ReadState state, std::wstring_view value)
 
 inline float scale(Mode mode) { return mode == Mode::Native ? 1.0f : 0.75f; }
 
+struct StartupScale { float scale; bool remix_override; };
+
+inline StartupScale startup_scale(const Settings& settings, std::wstring_view remix, std::wstring_view cheap)
+{
+    // Exact L"1" on both switches and a valid preset: no trimming, truthiness, or case-folding.
+    const bool enabled = settings.valid && remix == L"1" && cheap == L"1";
+    return {enabled ? 0.5f : scale(settings.mode), enabled};
+}
+
 inline std::wstring_view name(Mode mode) { return mode == Mode::Native ? L"Native" : L"Custom75"; }
 
 }  // namespace render_settings

@@ -99,6 +99,8 @@ void draw_panel(render_menu::State& state, const RuntimeInfo& rt, const Fonts& f
     if (!state.open) return;
     const bool failed = state.active == SessionMode::NotApplied;
     const Mode active = state.active == SessionMode::Custom75 ? Mode::Custom75 : Mode::Native;
+    const bool remix = state.active == SessionMode::Remix50;
+    const char* active_name = remix ? "Remix50" : mode_name(active);
     const auto notice = render_menu::notice(state);
     char line[240] = "No unsaved changes.", sub[320] = "";
     ImU32 strip = c::neutral, ink = c::text;
@@ -106,7 +108,7 @@ void draw_panel(render_menu::State& state, const RuntimeInfo& rt, const Fonts& f
     using render_menu::Notice;
     if (notice == Notice::RecoveryRequired) {
         std::snprintf(line, sizeof(line), "Save interrupted: settings file needs recovery.");
-        std::snprintf(sub, sizeof(sub), "Recovery copies were kept beside NIER_RENDER.ini. Next launch uses %s. Saving is off until restart.",
+        std::snprintf(sub, sizeof(sub), "Recovery copies were kept beside NIER_RENDER.ini. Saved/default preset: %s. Saving is off until restart.",
                       mode_name(state.saved));
         strip = c::error_bg; ink = c::error_text;
     } else if (notice == Notice::ConfigUnreadable) {
@@ -120,17 +122,17 @@ void draw_panel(render_menu::State& state, const RuntimeInfo& rt, const Fonts& f
         strip = c::pending_bg; ink = c::pending_text;
     } else if (notice == Notice::Unsaved) {
         std::snprintf(line, sizeof(line), "Unsaved. %s", failed ? "This session stays as it started." :
-            active == Mode::Native ? "This session stays on Native." : "This session stays on Custom75.");
+            remix ? "This session stays on Remix50." : active == Mode::Native ? "This session stays on Native." : "This session stays on Custom75.");
         strip = c::pending_bg; ink = c::pending_text;
     } else if (notice == render_menu::Notice::RestartRequired) {
         std::snprintf(line, sizeof(line), "%s saved for next launch. Restart required.", mode_name(state.saved));
         if (failed) std::snprintf(sub, sizeof(sub), "This session stays as it started.");
-        else std::snprintf(sub, sizeof(sub), "This session keeps %s at %s -> %s.", mode_name(active), known(rt.render_size), known(rt.display_size));
+        else std::snprintf(sub, sizeof(sub), "This session keeps %s at %s -> %s.", active_name, known(rt.render_size), known(rt.display_size));
         strip = c::pending_bg; ink = c::pending_text;
     } else if (notice == render_menu::Notice::SaveFailed) {
         std::snprintf(line, sizeof(line), "Save failed: settings file could not be written.");
         // state.saved is the fresh read after the attempt, not a cached value.
-        std::snprintf(sub, sizeof(sub), "Next launch uses %s. Your %s selection is kept.", mode_name(state.saved), mode_name(state.edited));
+        std::snprintf(sub, sizeof(sub), "Saved/default preset: %s. Your %s selection is kept.", mode_name(state.saved), mode_name(state.edited));
         strip = c::error_bg; ink = c::error_text;
     }
     const ImVec2 viewport = ImGui::GetIO().DisplaySize;
@@ -171,10 +173,11 @@ void draw_panel(render_menu::State& state, const RuntimeInfo& rt, const Fonts& f
         text(fonts, Headline, "Not applied as configured", c::reason_text, true);
         text(fonts, Secondary, rt.failure_reason ? rt.failure_reason : "Startup setup failed.", c::reason_text, true);
     } else {
-        text(fonts, ModeName, mode_name(active));
+        text(fonts, ModeName, active_name);
         ImGui::SameLine();
-        text(fonts, Badge, active == Mode::Native ? "BYPASS / FULL RESOLUTION" : "ACTIVE / 75% PER AXIS", c::secondary_text);
-        if (active == Mode::Native) text(fonts, Secondary, "Controller patches skipped; existing AA mod kept.", c::secondary_text, true);
+        text(fonts, Badge, remix ? "EXPERIMENTAL / 50% PER AXIS" : active == Mode::Native ? "BYPASS / FULL RESOLUTION" : "ACTIVE / 75% PER AXIS", c::secondary_text);
+        if (remix) text(fonts, Secondary, "Startup override, including fallback. Remove NIER_REMIX_CHEAP_GAME and restart to use the saved preset.", c::secondary_text, true);
+        else if (active == Mode::Native) text(fonts, Secondary, "Controller patches skipped; existing AA mod kept.", c::secondary_text, true);
     }
     text(fonts, Dimensions, failed ? "—" : known(rt.render_size));
     ImGui::SameLine(218*s); text(fonts, Dimensions, "->", c::secondary_text);

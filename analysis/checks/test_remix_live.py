@@ -28,8 +28,9 @@ import test_nscn_scene as ts  # noqa: E402  (NSCN writer)
 
 BACKGROUND, SURFACE, REMIX = tmo.BACKGROUND, tmo.SURFACE, (200, 40, 120)
 PROBE = (100, 100)  # left of the menu panel at every size used here
-ENV_KEYS = ('NIER_REMIX', 'NIER_REMIX_RUNTIME', 'NIER_REMIX_SCENE', 'MOCK_BGRA', 'MOCK_FRAME_MS', 'MOCK_RESIZE_AT', 'MOCK_RESIZE_TO',
-            'MOCK_START', 'FAKE_REMIX_FAIL')
+ENV_KEYS = ('NIER_REMIX', 'NIER_REMIX_CHEAP_GAME', 'NIER_REMIX_RUNTIME', 'NIER_REMIX_SCENE', 'MOCK_BGRA', 'MOCK_FRAME_MS', 'MOCK_RESIZE_AT', 'MOCK_RESIZE_TO',
+            'MOCK_START', 'MOCK_CAMERA', 'FAKE_REMIX_FAIL', 'FAKE_REMIX_CAMERA_LOG', 'MOCK_SCENE_FULL', 'MOCK_EMPTY_EVERY',
+            'NIER_REMIX_LIVE_NO_HUD', 'NIER_REMIX_LIVE_NO_SKY', 'MOCK_SKY_ONLY_UNTIL', 'MOCK_PREPASS', 'MOCK_CUTOUT_PS')
 
 
 def rgb(raw, x, y):
@@ -50,7 +51,7 @@ def win(path):
     return 'Z:' + str(path).replace('/', '\\')
 
 
-def run(work, name, env, fonts=True):
+def run(work, name, env, fonts=True, expected_presented=80):
     for k in ENV_KEYS:
         os.environ.pop(k, None)
     os.environ.update(env)
@@ -60,7 +61,7 @@ def run(work, name, env, fonts=True):
         for k in ENV_KEYS:
             os.environ.pop(k, None)
     fake = (d / 'fake-remix.log').read_text() if (d / 'fake-remix.log').exists() else None
-    assert r['presented'] == '80' and r['stub_presents'] == '80', f'{name}: frames lost {r}'
+    assert r['presented'] == str(expected_presented) and r['stub_presents'] == '80', f'{name}: frames lost {r}'
     return d, r, log, fake
 
 
@@ -87,8 +88,10 @@ def inside():
         x0, y0 = 1920 - 32 - 552, 32  # menu panel at 1920x1080 (test_menu_overlay.py)
 
         # 1. Off: unset and "0" are the same program -- nothing logged, nothing loaded, identical frames.
-        d_unset, _, log_unset, fake = run(work, 'off-unset', {})
+        d_unset, r_unset, log_unset, fake = run(work, 'off-unset', {})
         assert fake is None and not remix_lines(log_unset), (fake, remix_lines(log_unset))
+        # Off means no live-capture hooks at all (review 2026-10-29: they were installed on every launch).
+        assert r_unset.get('ctx_map_in_proxy') == '0', f'Remix off, yet Map is hooked: {r_unset.get("ctx_map_in_proxy")}'
         d_zero, _, log_zero, fake = run(work, 'off-zero', {'NIER_REMIX': '0', 'NIER_REMIX_RUNTIME': on['NIER_REMIX_RUNTIME']})
         assert fake is None and not remix_lines(log_zero), (fake, remix_lines(log_zero))
         for cap in ('capture-closed.raw', 'capture-open.raw', 'capture-after.raw'):
@@ -102,12 +105,17 @@ def inside():
         assert 'VIOLATION' not in fake, fake
         assert not any('disabled' in x for x in lines), lines
         f = fake.splitlines()
-        order = [x.split()[0] for x in f]
-        assert order[:5] == ['InitializeLibrary', 'CreateD3D9', 'Register', 'Startup', 'CreateMesh'], f
+        # Material creation now logs too; the contract is the order of the lifecycle calls, not adjacency.
+        lifecycle = ('InitializeLibrary', 'CreateD3D9', 'Register', 'Startup', 'CreateMesh')
+        order = [x.split()[0] for x in f if x.split()[0] in lifecycle]
+        assert order[:5] == list(lifecycle), f
         assert 'version_minor=6' in f[0], f[0]
-        assert f[2] == 'Register 1920x1080 started=0', f'device created at the game backbuffer size before Startup: {f[2]}'
-        assert f[3] == 'Startup hwnd_visible=0 combineGui=1 registered=1', f'hidden window, after Register: {f[3]}'
-        assert f[4].startswith('CreateMesh surfaces=4 materials=4 started=1'), f[4]
+        register = next(x for x in f if x.startswith('Register '))
+        startup = next(x for x in f if x.startswith('Startup '))
+        mesh = next(x for x in f if x.startswith('CreateMesh '))
+        assert register == 'Register 1920x1080 started=0', f'device created at the game backbuffer size before Startup: {register}'
+        assert startup == 'Startup hwnd_visible=0 combineGui=1 registered=1', f'hidden window, after Register: {startup}'
+        assert mesh.startswith('CreateMesh hash=2 surfaces=4 verts=15 indices=0 materials=4'), mesh
         assert 'SetupCamera aspect=1.7778 fov=50.00' in f, 'camera aspect follows the backbuffer, fov the scene'
         assert 'Copy 1920x1080' in f, f
         sink = [x for x in f if x.startswith('Sink rect=')]

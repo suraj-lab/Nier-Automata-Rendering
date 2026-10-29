@@ -85,6 +85,7 @@ inline bool parse(const std::vector<unsigned char>& b, Scene& s) {
 
 struct Options {
     float skip_max = 5000.f, sun = 2.f, sun_angle = 20.f, sky = 0.5f;
+    const wchar_t* sky_texture = nullptr;  // header-valid DDS (DDPF_FOURCC); null leaves the dome without light
 };
 
 struct Built {
@@ -114,16 +115,26 @@ inline void make_material_info(remixapi_MaterialInfo& info, remixapi_MaterialInf
     info.hash = hash;
     info.albedoTexture = path;
     info.emissiveIntensity = 0;
+    // Linear filtering and repeat wrapping (MDL tex::wrap_repeat = 1): zero-initialised means nearest + clamp, which
+    // smeared every tiled NieR texture into streaks and made them blocky (2026-10-29 laptop A/B).
+    info.filterMode = 1;
+    info.wrapModeU = 1;
+    info.wrapModeV = 1;
     ext.sType = REMIXAPI_STRUCT_TYPE_MATERIAL_INFO_OPAQUE_EXT;
     ext.pNext = nullptr;
     ext.albedoConstant.x = ext.albedoConstant.y = ext.albedoConstant.z = 1.f;
     ext.opacityConstant = 1.f;
     ext.roughnessConstant = 0.6f;
     ext.metallicConstant = 0.f;
+    // NVIDIA's remix.h defaults for an opaque surface: no blending, alpha test kAlways (7). blendType_hasvalue is
+    // "blending enabled": it was 1 (type 2, reverse-alpha-emissive), so every surface was see-through by its texture
+    // alpha. alphaTestType 0 is kNever.
     ext.useDrawCallAlphaState = 0;
-    ext.blendType_hasvalue = 1;
-    ext.blendType_value = 2;
+    ext.blendType_hasvalue = 0;
+    ext.blendType_value = 0;
     ext.invertedBlend = 0;
+    ext.alphaTestType = 7;
+    ext.alphaReferenceValue = 0;
     if (cutout) {
         ext.alphaTestType = 4;
         ext.alphaReferenceValue = 128;
@@ -150,6 +161,68 @@ inline float extent_of(const Scene& s, const Draw& d) {
 }
 
 }  // namespace detail
+
+// Camera and lights are separate so a live scene can reuse exactly the same, already-proven setup.
+inline remixapi_ErrorCode setup_camera(const remixapi_Interface& api, const float camera[14], float aspect) {
+    remixapi_CameraInfoParameterizedEXT cp{};
+    cp.sType = REMIXAPI_STRUCT_TYPE_CAMERA_INFO_PARAMETERIZED_EXT;
+    cp.pNext = nullptr;
+    std::memcpy(&cp.position, &camera[0], 12);
+    std::memcpy(&cp.forward, &camera[3], 12);
+    std::memcpy(&cp.up, &camera[6], 12);
+    std::memcpy(&cp.right, &camera[9], 12);
+    cp.fovYInDegrees = camera[12];
+    cp.aspect = aspect;
+    cp.nearPlane = 0.1f;
+    cp.farPlane = 20000.f;
+    remixapi_CameraInfo ci{};
+    ci.sType = REMIXAPI_STRUCT_TYPE_CAMERA_INFO;
+    ci.pNext = &cp;
+    ci.type = REMIXAPI_CAMERA_TYPE_WORLD;
+    return api.SetupCamera(&ci);
+}
+
+// Distant light; direction is the incoming ray direction (Remix convention). Hash 3 keeps denoiser history on recreate.
+inline remixapi_ErrorCode make_sun(const remixapi_Interface& api, const float direction[3], const float radiance[3],
+                                   float angle, remixapi_LightHandle& sun) {
+    remixapi_LightInfoDistantEXT ext{};
+    ext.sType = REMIXAPI_STRUCT_TYPE_LIGHT_INFO_DISTANT_EXT;
+    ext.pNext = nullptr;
+    ext.direction = {direction[0], direction[1], direction[2]};
+    ext.angularDiameterDegrees = angle;
+    ext.volumetricRadianceScale = 1.f;
+    remixapi_LightInfo li{};
+    li.sType = REMIXAPI_STRUCT_TYPE_LIGHT_INFO;
+    li.pNext = &ext;
+    li.hash = 3;
+    li.radiance = {radiance[0], radiance[1], radiance[2]};
+    if (const remixapi_ErrorCode e = api.CreateLight(&li, &sun)) { sun = nullptr; return e; }
+    return sun ? REMIXAPI_ERROR_CODE_SUCCESS : REMIXAPI_ERROR_CODE_GENERAL_FAILURE;
+}
+
+inline remixapi_ErrorCode make_lights(const remixapi_Interface& api, const Options& o, remixapi_LightHandle& sun,
+                                      remixapi_LightHandle& sky) {
+    {
+        const float direction[3] = {0.3015113f, -0.9045340f, 0.3015113f}, radiance[3] = {o.sun, o.sun, o.sun * 0.95f};
+        if (const remixapi_ErrorCode e = make_sun(api, direction, radiance, o.sun_angle, sun)) return e;
+    }
+    {
+        remixapi_LightInfoDomeEXT ext{};
+        ext.sType = REMIXAPI_STRUCT_TYPE_LIGHT_INFO_DOME_EXT;
+        ext.pNext = nullptr;
+        ext.transform.matrix[0][0] = ext.transform.matrix[1][1] = ext.transform.matrix[2][2] = 1.f;
+        // The old crash was a DX10 DDS with DDPF_FOURCC unset (test_sky_dds.py); a valid header renders.
+        ext.colorTexture = o.sky_texture;
+        remixapi_LightInfo li{};
+        li.sType = REMIXAPI_STRUCT_TYPE_LIGHT_INFO;
+        li.pNext = &ext;
+        li.hash = 4;
+        li.radiance.x = li.radiance.y = li.radiance.z = o.sky;
+        if (const remixapi_ErrorCode e = api.CreateLight(&li, &sky)) { sky = nullptr; return e; }
+        if (!sky) return REMIXAPI_ERROR_CODE_GENERAL_FAILURE;
+    }
+    return REMIXAPI_ERROR_CODE_SUCCESS;
+}
 
 inline void destroy(const remixapi_Interface& api, Built& b) {
     if (b.sky) api.DestroyLight(b.sky);
@@ -253,60 +326,13 @@ inline remixapi_ErrorCode build(const remixapi_Interface& api, const Scene& s, c
     if (!out.mesh) return fail(REMIXAPI_ERROR_CODE_GENERAL_FAILURE);
 
     // Lights: sun (distant) first, then sky (dome). `fail` destroys everything already created.
-    {
-        remixapi_LightInfoDistantEXT ext{};
-        ext.sType = REMIXAPI_STRUCT_TYPE_LIGHT_INFO_DISTANT_EXT;
-        ext.pNext = nullptr;
-        ext.direction.x = 0.3015113f;
-        ext.direction.y = -0.9045340f;
-        ext.direction.z = 0.3015113f;
-        ext.angularDiameterDegrees = o.sun_angle;
-        ext.volumetricRadianceScale = 1.f;
-        remixapi_LightInfo li{};
-        li.sType = REMIXAPI_STRUCT_TYPE_LIGHT_INFO;
-        li.pNext = &ext;
-        li.hash = 3;
-        li.radiance.x = o.sun;
-        li.radiance.y = o.sun;
-        li.radiance.z = o.sun * 0.95f;
-        if (const remixapi_ErrorCode e = api.CreateLight(&li, &out.sun)) return fail(e);
-        if (!out.sun) return fail(REMIXAPI_ERROR_CODE_GENERAL_FAILURE);
-    }
-    {
-        remixapi_LightInfoDomeEXT ext{};
-        ext.sType = REMIXAPI_STRUCT_TYPE_LIGHT_INFO_DOME_EXT;
-        ext.pNext = nullptr;
-        ext.transform.matrix[0][0] = ext.transform.matrix[1][1] = ext.transform.matrix[2][2] = 1.f;
-        ext.colorTexture = nullptr;  // a dome texture crashes this runtime
-        remixapi_LightInfo li{};
-        li.sType = REMIXAPI_STRUCT_TYPE_LIGHT_INFO;
-        li.pNext = &ext;
-        li.hash = 4;
-        li.radiance.x = li.radiance.y = li.radiance.z = o.sky;
-        if (const remixapi_ErrorCode e = api.CreateLight(&li, &out.sky)) return fail(e);
-        if (!out.sky) return fail(REMIXAPI_ERROR_CODE_GENERAL_FAILURE);
-    }
+    if (const remixapi_ErrorCode e = make_lights(api, o, out.sun, out.sky)) return fail(e);
     return REMIXAPI_ERROR_CODE_SUCCESS;
 }
 
 inline remixapi_ErrorCode submit(const remixapi_Interface& api, const Scene& s, const Built& b, float aspect) {
     if (!b.mesh || !b.sun || !b.sky) return REMIXAPI_ERROR_CODE_GENERAL_FAILURE;
-    remixapi_CameraInfoParameterizedEXT cp{};
-    cp.sType = REMIXAPI_STRUCT_TYPE_CAMERA_INFO_PARAMETERIZED_EXT;
-    cp.pNext = nullptr;
-    std::memcpy(&cp.position, &s.camera[0], 12);
-    std::memcpy(&cp.forward, &s.camera[3], 12);
-    std::memcpy(&cp.up, &s.camera[6], 12);
-    std::memcpy(&cp.right, &s.camera[9], 12);
-    cp.fovYInDegrees = s.camera[12];
-    cp.aspect = aspect;
-    cp.nearPlane = 0.1f;
-    cp.farPlane = 20000.f;
-    remixapi_CameraInfo ci{};
-    ci.sType = REMIXAPI_STRUCT_TYPE_CAMERA_INFO;
-    ci.pNext = &cp;
-    ci.type = REMIXAPI_CAMERA_TYPE_WORLD;
-    if (const remixapi_ErrorCode e = api.SetupCamera(&ci)) return e;
+    if (const remixapi_ErrorCode e = setup_camera(api, s.camera, aspect)) return e;
     remixapi_InstanceInfo ii{};
     ii.sType = REMIXAPI_STRUCT_TYPE_INSTANCE_INFO;
     ii.pNext = nullptr;

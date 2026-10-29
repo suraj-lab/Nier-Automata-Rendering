@@ -9,6 +9,8 @@
 #include "vtable_hook.h"
 #include "geometry_capture.h"
 #include "texture_capture.h"
+#include "camera_capture.h"
+#include "live_capture.h"
 
 namespace draw_capture {
 // 0-based ID3D11DeviceContext vtable slots (IUnknown 0..2, ID3D11DeviceChild 3..6, then VSSetConstantBuffers=7 ...).
@@ -48,6 +50,8 @@ struct Record {
 
 // Skip draws smaller than this many indices (fullscreen/post-process quads and particles are 4-6; a
 // real mesh is hundreds+). Settable so the mock can lower it for testing.
+// Set by the overlay when live Remix is linked in; standalone users of this header leave it null.
+inline void (*before_draw)(ID3D11DeviceContext*, UINT) = nullptr;
 inline unsigned min_index_count = 128;
 
 // Whole-frame capture. The menu's Present hook calls end_frame() BEFORE its own ImGui drawing and
@@ -62,6 +66,39 @@ inline texture_capture::Cache texture_cache;  // guarded by mutex; same lifetime
 inline std::vector<texture_capture::Texture> frame_textures;  // guarded by mutex; filled by end_frame()
 inline std::size_t max_texture_bytes = std::size_t(1024) << 20;  // mip-0 bytes per frame; later ones get id 0
 inline std::size_t frame_bytes = 0;
+// The frame's light arrays (point t20, spot t22), as the first draw that binds t20 sees them: bytes plus the view, so
+// the laptop probe lights an F9 capture exactly like the live path does (light_convert.h). Guarded by mutex.
+struct LightArray {
+    bool present = false;
+    unsigned dimension = 0, stride = 0, first = 0, count = 0;
+    std::vector<unsigned char> bytes;
+};
+inline LightArray frame_lights[2];  // [0] = t20 points, [1] = t22 spots
+inline void read_light_array(ID3D11Device* device, ID3D11DeviceContext* context, UINT slot, LightArray& out) {
+    out = LightArray{};
+    ID3D11ShaderResourceView* srv = nullptr;
+    context->PSGetShaderResources(slot, 1, &srv);
+    if (!srv) return;
+    out.present = true;
+    D3D11_SHADER_RESOURCE_VIEW_DESC vd{};
+    srv->GetDesc(&vd);
+    out.dimension = static_cast<unsigned>(vd.ViewDimension);
+    ID3D11Resource* resource = nullptr;
+    srv->GetResource(&resource);
+    ID3D11Buffer* buffer = nullptr;
+    if ((vd.ViewDimension == D3D11_SRV_DIMENSION_BUFFER || vd.ViewDimension == D3D11_SRV_DIMENSION_BUFFEREX) && resource &&
+        SUCCEEDED(resource->QueryInterface(__uuidof(ID3D11Buffer), reinterpret_cast<void**>(&buffer))) && buffer) {
+        D3D11_BUFFER_DESC bd{};
+        buffer->GetDesc(&bd);
+        out.stride = bd.StructureByteStride;
+        out.first = vd.Buffer.FirstElement;  // BUFFER and BUFFEREX share the leading fields
+        out.count = vd.Buffer.NumElements;
+        if (bd.ByteWidth <= (16u << 20)) geometry_capture::read_buffer(device, context, buffer, 0, bd.ByteWidth, out.bytes);
+        buffer->Release();
+    }
+    if (resource) resource->Release();
+    srv->Release();
+}
 inline unsigned frame_skipped = 0;
 inline std::mutex mutex;
 
@@ -161,6 +198,7 @@ inline bool capture_state(ID3D11Device* device, ID3D11DeviceContext* context, ge
 inline void begin_frame() {
     std::lock_guard<std::mutex> lock(mutex);
     frame.clear(); cache.clear(); texture_cache.clear(); frame_textures.clear(); frame_bytes = 0; frame_skipped = 0;
+    frame_lights[0] = LightArray{}; frame_lights[1] = LightArray{};
     frame_active.store(true, std::memory_order_release);
 }
 // Stop recording; true if a frame was being recorded (its draws are then in `frame`). Records keep
@@ -189,6 +227,10 @@ inline void record_draw(ID3D11DeviceContext* self, bool instanced, UINT index_co
                       &r.state)) {
         r.valid = true;
         texture_capture::capture(device, self, texture_cache, r.ps_textures, max_texture_bytes);
+        if (!frame_lights[0].present) {
+            read_light_array(device, self, 20, frame_lights[0]);
+            if (frame_lights[0].present) read_light_array(device, self, 22, frame_lights[1]);
+        }
         frame_bytes += cache.read_bytes - before;
         for (const auto& cb : r.vs_cbs) frame_bytes += cb.bytes.size();
         for (const auto& cb : r.ps_cbs) frame_bytes += cb.bytes.size();
@@ -205,6 +247,9 @@ inline void STDMETHODCALLTYPE hooked_draw_indexed(ID3D11DeviceContext* self, UIN
                                                   UINT start_index, INT base_vertex) {
     // Capture BEFORE the draw: the IA/VS state is already bound. Draws below the minimum index count
     // (fullscreen quads, particles) are skipped.
+    try { if (draw_capture::before_draw) draw_capture::before_draw(self, index_count); } catch (...) {}
+    try { camera_capture::observe(self, index_count); } catch (...) {}
+    try { live_capture::observe(self, index_count, start_index, base_vertex, 1, 0); } catch (...) {}
     if (index_count >= min_index_count && frame_active.load(std::memory_order_relaxed))
         record_draw(self, false, index_count, start_index, base_vertex, 0, 0);
     reinterpret_cast<DrawIndexedFn>(g_next_draw_indexed.load(std::memory_order_acquire))(self, index_count, start_index, base_vertex);
@@ -212,6 +257,9 @@ inline void STDMETHODCALLTYPE hooked_draw_indexed(ID3D11DeviceContext* self, UIN
 
 inline void STDMETHODCALLTYPE hooked_draw_indexed_instanced(ID3D11DeviceContext* self, UINT index_count,
         UINT instance_count, UINT start_index, INT base_vertex, UINT start_instance) {
+    if (instance_count) { try { if (draw_capture::before_draw) draw_capture::before_draw(self, index_count); } catch (...) {} }
+    if (instance_count) { try { camera_capture::observe(self, index_count); } catch (...) {} }
+    try { live_capture::observe(self, index_count, start_index, base_vertex, instance_count, start_instance); } catch (...) {}
     if (index_count >= min_index_count && frame_active.load(std::memory_order_relaxed))
         record_draw(self, true, index_count, start_index, base_vertex, instance_count, start_instance);
     reinterpret_cast<DrawIndexedInstancedFn>(g_next_draw_indexed_instanced.load(std::memory_order_acquire))(

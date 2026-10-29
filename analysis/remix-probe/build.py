@@ -28,7 +28,7 @@ def main():
         assert mesh.name == 'captured_mesh.h' and mesh.exists(), mesh
         common += ['-DCAPTURED_MESH', '-I', str(mesh.parent)]
     if scene:
-        common += ['-DSCENE_FILE']
+        common += ['-DSCENE_FILE', '-I', str(HERE.parent / 'checks')]  # light_convert.h, shared with the live path
     steps = [
         ('native-build', ['g++', *common, '-fsanitize=address,undefined', '-fno-sanitize-recover=all',
                           str(source), '-o', str(native)]),

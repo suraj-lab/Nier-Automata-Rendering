@@ -13,6 +13,7 @@
 #include <cstring>
 #include <string>
 #include <vector>
+#include "light_convert.h"  // checks/, shared with the live path
 #include <chrono>
 #endif
 
@@ -650,6 +651,7 @@ int render(const wchar_t* dll, bool hold) {
     // Opt-in: tell the runtime not to own a VkSwapchain, so dxvk_GetExternalSwapchain becomes meaningful.
     // It returns success with a NULL image when this flag is off, so success must be judged by the handle.
     startup.forceNoVkSwapchain=getenv("REPROBE_NO_VKSWAPCHAIN") ? std::atoi(getenv("REPROBE_NO_VKSWAPCHAIN")) : 0;
+#ifdef SCENE_FILE
     // With REPROBE_PRE_REGISTER the device is already registered, so Startup cannot help and refuses with
     // ALREADY_EXISTS. That refusal is the expected outcome of this flow, not a failure.
     if (getenv("REPROBE_PRE_REGISTER")) {
@@ -662,10 +664,15 @@ int render(const wchar_t* dll, bool hold) {
         const int applied=apply_conf_file(api);
         stage("config"); std::printf("config: %d keys applied from %s\n",applied,conf);
     }
+#endif
     stage("Startup");
     const remixapi_ErrorCode startup_rc=api.Startup(&startup);
+#ifdef SCENE_FILE
     if (startup_rc && !interop_pre_registered) { check(startup_rc,"Startup"); return 1; }
     if (startup_rc) std::printf("Startup refused (%d) after pre-register; continuing\n",static_cast<int>(startup_rc));
+#else
+    if (startup_rc) { check(startup_rc,"Startup"); return 1; }
+#endif
 
     remixapi_MaterialInfoOpaqueEXT opaque{};
     opaque.sType=REMIXAPI_STRUCT_TYPE_MATERIAL_INFO_OPAQUE_EXT;
@@ -699,13 +706,16 @@ int render(const wchar_t* dll, bool hold) {
         op.albedoConstant={1,1,1};  // the captured map is the albedo; per-material parameters are not captured yet
         // NieR's diffuse maps carry cutout alpha and we do not model which draws are alpha-tested, so force the
         // material opaque rather than letting Remix alpha-test every surface against its texture's alpha.
-        op.useDrawCallAlphaState=0; op.alphaTestType=0; op.alphaReferenceValue=0;
-        // Measured on both hosts: 0 renders fully transparent, 1 blends by the albedo texture alpha
-        // (NieR maps carry cutout alpha), 2 is opaque. Overridable for A/B.
-        op.blendType_hasvalue=1; op.blendType_value=getenv("REPROBE_BLEND") ? std::atoi(getenv("REPROBE_BLEND")) : 2;
+        // NVIDIA's remix.h defaults for an opaque surface: no blending, alpha test kAlways (7). The earlier
+        // alphaTestType=0 is kNever (every texel discarded), which is why blending was once switched on as a
+        // workaround; blending made every surface see-through by its texture alpha (2026-10-29 laptop A/B).
+        op.useDrawCallAlphaState=0; op.alphaTestType=7; op.alphaReferenceValue=0;
+        op.blendType_hasvalue=getenv("REPROBE_BLEND") ? 1 : 0;  // diagnostic only: REPROBE_BLEND=<type> turns blending on
+        op.blendType_value=getenv("REPROBE_BLEND") ? std::atoi(getenv("REPROBE_BLEND")) : 0;
         op.invertedBlend=0;
         remixapi_MaterialInfo mi{};
         mi.sType=REMIXAPI_STRUCT_TYPE_MATERIAL_INFO; mi.pNext=&op; mi.hash=1000000ull+t.id;  // mesh=2, light=3
+        mi.filterMode=1; mi.wrapModeU=1; mi.wrapModeV=1;  // linear, repeat (MDL tex::wrap_repeat); 0 = nearest, clamp
         const char* albedo_mode=getenv("REPROBE_ALBEDO");  // "none" isolates the material from the texture
         if (albedo_mode && !std::strcmp(albedo_mode,"none")) { op.albedoConstant={0.6f,0.6f,0.6f}; }
         else { mi.albedoTexture=tex_path.back().c_str(); }
@@ -720,6 +730,7 @@ int render(const wchar_t* dll, bool hold) {
         cop.useDrawCallAlphaState=0; cop.alphaTestType=4; cop.alphaReferenceValue=128;
         remixapi_MaterialInfo cmi{};
         cmi.sType=REMIXAPI_STRUCT_TYPE_MATERIAL_INFO; cmi.pNext=&cop; cmi.hash=2000000ull+t.id;
+        cmi.filterMode=1; cmi.wrapModeU=1; cmi.wrapModeV=1;
         if (mi.albedoTexture) cmi.albedoTexture=mi.albedoTexture;  // NULL keeps the constant-albedo diagnostic
         remixapi_MaterialHandle cm=nullptr;
         if (!check(api.CreateMaterial(&cmi,&cm),"CreateMaterial(cutout)") || !cm) return 1;
@@ -854,6 +865,20 @@ int render(const wchar_t* dll, bool hold) {
     sun.direction={0.3015113f,-0.9045340f,0.3015113f}; sun.angularDiameterDegrees=sun_angle; sun.volumetricRadianceScale=1;
     light_info.pNext=&sun;
     light_info.radiance.x=sun_power; light_info.radiance.y=sun_power; light_info.radiance.z=sun_power*0.95f;
+    // Diagnostic sidecar: first 32 bytes of a shader-verified scene PS CB2. Missing keeps the old baseline.
+    const auto sun_bytes=read_file("scene_sun.bin");
+    if (!sun_bytes.empty()) {
+        light_convert::Sun captured{};
+        if (!light_convert::parse_sun(sun_bytes.data(),sun_bytes.size(),captured)) {
+            std::fprintf(stderr,"scene_sun.bin: invalid scene PS CB2 prefix\n"); return 1;
+        }
+        sun.direction={captured.direction[0],captured.direction[1],captured.direction[2]};
+        // shortcut: direct game intensity, not radiometrically calibrated; compare laptop renders before live use.
+        light_info.radiance={captured.colour[0],captured.colour[1],captured.colour[2]};
+        std::printf("Scene: captured sun rgb %.4f %.4f %.4f incoming %.6f %.6f %.6f\n",
+                    captured.colour[0],captured.colour[1],captured.colour[2],
+                    captured.direction[0],captured.direction[1],captured.direction[2]);
+    }
 #else
     remixapi_LightInfoSphereEXT sphere{};
     sphere.sType=REMIXAPI_STRUCT_TYPE_LIGHT_INFO_SPHERE_EXT;
@@ -909,6 +934,47 @@ int render(const wchar_t* dll, bool hold) {
       stage("CreateAmbient");
       if (!check(api.CreateLight(&ambient_info,&ambientlight),"CreateAmbient") || !ambientlight) return 1;
       std::printf("Scene: ambient rect light %.3f\n",static_cast<double>(ambient_power));
+    }
+#endif
+#ifdef SCENE_FILE
+    // The game's own lights from the capture (scene_lights.bin beside the scene), converted with checks/light_convert.h,
+    // exactly as the live path converts them. REPROBE_LIGHT_SCALE is the one tuning knob; REPROBE_GAME_LIGHTS=0 skips them.
+    std::vector<remixapi_LightHandle> game_lights;
+    if (!(getenv("REPROBE_GAME_LIGHTS") && !std::atoi(getenv("REPROBE_GAME_LIGHTS")))) {
+        const float light_scale=getenv("REPROBE_LIGHT_SCALE") ? static_cast<float>(std::atof(getenv("REPROBE_LIGHT_SCALE"))) : 1.f;
+        std::vector<unsigned char> lb;
+        if (FILE* lf=std::fopen("scene_lights.bin","rb")) {
+            unsigned char chunk[65536]; std::size_t n;
+            while ((n=std::fread(chunk,1,sizeof chunk,lf))>0) lb.insert(lb.end(),chunk,chunk+n);
+            std::fclose(lf);
+        }
+        std::vector<light_convert::Light> lights;
+        if (lb.size()>=8 && !std::memcmp(lb.data(),"NLIT",4)) {
+            std::size_t at=8;
+            for (int k=0;k<2 && at+16<=lb.size();++k) {
+                std::uint32_t h[4]; std::memcpy(h,lb.data()+at,16); at+=16;
+                if (at+h[3]>lb.size()) break;
+                light_convert::parse(lb.data()+at,h[3],h[0],h[1],h[2],k==1,lights);
+                at+=h[3];
+            }
+        }
+        unsigned spots=0;
+        for (std::size_t i=0;i<lights.size();++i) {
+            const light_convert::Sphere c=light_convert::to_sphere(lights[i],light_scale);
+            remixapi_LightInfoSphereEXT s{};
+            s.sType=REMIXAPI_STRUCT_TYPE_LIGHT_INFO_SPHERE_EXT;
+            s.position={c.position[0],c.position[1],c.position[2]}; s.radius=c.radius; s.volumetricRadianceScale=1.f;
+            s.shaping_hasvalue=c.shaped?1:0;
+            if (c.shaped) { s.shaping_value.direction={c.direction[0],c.direction[1],c.direction[2]};
+                            s.shaping_value.coneAngleDegrees=c.cone_angle_degrees; s.shaping_value.coneSoftness=c.cone_softness; ++spots; }
+            remixapi_LightInfo gi{};
+            gi.sType=REMIXAPI_STRUCT_TYPE_LIGHT_INFO; gi.pNext=&s; gi.hash=(lights[i].spot?4500000ull:4000000ull)+i;
+            gi.radiance={c.radiance[0],c.radiance[1],c.radiance[2]};
+            remixapi_LightHandle h=nullptr;
+            if (!api.CreateLight(&gi,&h) && h) game_lights.push_back(h);
+        }
+        std::printf("Scene: game lights %zu created of %zu (%u spot), scale %.3f\n",game_lights.size(),lights.size(),spots,
+                    static_cast<double>(light_scale));
     }
 #endif
     remixapi_CameraInfoParameterizedEXT params{};
@@ -1002,6 +1068,7 @@ int render(const wchar_t* dll, bool hold) {
 #ifdef SCENE_FILE
         if (!check(api.DrawLightInstance(skylight),"DrawSky")) return 1;
         if (ambientlight && !check(api.DrawLightInstance(ambientlight),"DrawAmbient")) return 1;
+        for (auto h : game_lights) if (!check(api.DrawLightInstance(h),"DrawGameLight")) return 1;
 #endif
         stage("Present"); if (!check(api.Present(nullptr),"Present")) return 1;
 #ifdef SCENE_FILE

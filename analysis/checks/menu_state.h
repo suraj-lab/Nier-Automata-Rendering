@@ -3,7 +3,7 @@
 
 namespace render_menu {
 using render_settings::Mode;
-enum class SessionMode { Native, Custom75, NotApplied };
+enum class SessionMode { Native, Custom75, NotApplied, Remix50 };
 enum class Notice { None, Unsaved, RestartRequired, SaveFailed, ConfigInvalid, ConfigUnreadable, RecoveryRequired };
 enum class FileState { Valid, Missing, Invalid, Unreadable };
 enum class SaveOutcome { Committed, NotSaved, RecoveryRequired };
@@ -63,7 +63,7 @@ inline Notice notice(const State& s) {
     if (can_discard(s)) return Notice::Unsaved;
     if (s.file == FileState::Invalid) return Notice::ConfigInvalid;
     if (s.saved_this_session &&
-        (s.active == SessionMode::NotApplied ||
+        (s.active == SessionMode::NotApplied || s.active == SessionMode::Remix50 ||
          (s.active == SessionMode::Native && s.saved != Mode::Native) ||
          (s.active == SessionMode::Custom75 && s.saved != Mode::Custom75)))
         return Notice::RestartRequired;

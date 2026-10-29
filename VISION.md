@@ -72,6 +72,9 @@ in one piece, and a native-NVIDIA control for anything we measure on the AMD box
 
 ## Next goals, in order
 
+**Priority clarified 2026-10-28:** after the primary-monitor fix, finish live camera/geometry and playable UI/menu
+fallback (goals 2–3) before further performance tuning. Camera-only motion is a stepping stone, not a playable build.
+
 1. **In-game host, static scene.** `remix_live` module inside `d3d11.dll`, gated by `NIER_REMIX=1`: load the
    runtime, create the D3D9 device, register it *before* `Startup`, copy each frame, upload it, draw it as a
    fullscreen quad in the existing Present hook. Scene source is a converted F9 capture, camera static.

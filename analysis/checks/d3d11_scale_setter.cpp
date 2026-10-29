@@ -315,6 +315,13 @@ static render_settings::Settings load_render_settings()
     return read_render_settings(module_dir + L"NIER_RENDER.ini");
 }
 
+static std::wstring startup_switch(const wchar_t* name)
+{
+    wchar_t value[2] = {};
+    if (GetEnvironmentVariableW(name, value, 2) != 1) return {};
+    return std::wstring(value, 1);
+}
+
 static DWORD WINAPI setter_thread(void*)
 {
     const auto settings = load_render_settings();
@@ -327,10 +334,14 @@ static DWORD WINAPI setter_thread(void*)
         observed.detail = detail;
         startup_observation.publish(observed);
     };
-    const float kScale = render_settings::scale(settings.mode);
+    const auto plan = render_settings::startup_scale(settings, startup_switch(L"NIER_REMIX"),
+                                                   startup_switch(L"NIER_REMIX_CHEAP_GAME"));
+    const float kScale = plan.scale;
     logf_line("render settings: Preset=%ls scale=%.3f valid=%d defaulted=%d (startup only)",
-              render_settings::name(settings.mode).data(), kScale, settings.valid, settings.defaulted);
-    if (settings.mode == render_settings::Mode::Native) {
+              render_settings::name(settings.mode).data(), render_settings::scale(settings.mode), settings.valid, settings.defaulted);
+    if (plan.remix_override)
+        logf_line("remix: cheap game startup override scale=%.3f; saved preset unchanged; fallback stays scaled until restart", kScale);
+    if (!plan.remix_override && settings.mode == render_settings::Mode::Native) {
         logf_line("native mode: no depth/proxy patches or scale write%s",
                   settings.valid ? "" : " (invalid/unreadable config)");
         publish(startup_status::Outcome::NativeBypass, settings.valid ? startup_status::Failure::None : startup_status::Failure::InvalidConfig);
@@ -388,8 +399,9 @@ static DWORD WINAPI setter_thread(void*)
         gate_ready = true;
         logf_line("proxy gate scale set to %.3f", kScale);
     }
+    const auto applied = plan.remix_override ? startup_status::Outcome::Remix50Applied : startup_status::Outcome::Custom75Applied;
     if (r == scale_patch::Result::Applied)
-        publish(gate_ready ? startup_status::Outcome::Custom75Applied : startup_status::Outcome::Incomplete,
+        publish(gate_ready ? applied : startup_status::Outcome::Incomplete,
                 gate_ready ? startup_status::Failure::None : startup_status::Failure::MissingGate);
     else
         publish(startup_status::Outcome::NotApplied, startup_status::Failure::Renderer, static_cast<std::int32_t>(r));

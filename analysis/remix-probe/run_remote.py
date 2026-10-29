@@ -39,9 +39,11 @@ def main():
     ap.add_argument('--hold', action='store_true', help='keep rendering until the 90 s watchdog (probe --hold mode)')
     ap.add_argument('--shot-frame', type=int, default=10, help='DXVK_DUMP_SCREENSHOT_FRAME (default 10)')
     ap.add_argument('--scene', type=Path, help='scene.bin for the remix-scene.exe build (copied next to it)')
+    ap.add_argument('--sun-cb', type=Path, help='shader-verified scene PS CB2 bytes; explicitly opts into the captured sun')
     ap.add_argument('--conf', type=Path, help='copied into the run folder as rtx.conf (process working dir only)')
     ap.add_argument('--sun', type=float, help='REPROBE_SUN: distant light radiance')
     ap.add_argument('--sky', type=float, help='REPROBE_SKY: dome light radiance')
+    ap.add_argument('--light-scale', type=float, help='REPROBE_LIGHT_SCALE: game-light intensity knob (light_convert.h)')
     ap.add_argument('--sun-angle', type=float, help='REPROBE_SUN_ANGLE: distant light angular diameter, degrees')
     ap.add_argument('--flip-normals', action='store_true', help='REPROBE_NORMAL_FLIP: negate every vertex normal')
     ap.add_argument('--skip-max', type=float, help='REPROBE_SKIP_MAX: skip draws wider than this (default 5000)')
@@ -54,6 +56,8 @@ def main():
     ap.add_argument('--no-unload', action='store_true', help='do not unload LM Studio models on the laptop first')
     ap.add_argument('--watchdog', type=int, default=90000, help='kill the probe after this many ms (default 90000)')
     a = ap.parse_args()
+    if a.sun_cb is not None and (a.scene is None or not a.sun_cb.is_file()):
+        ap.error('--sun-cb requires --scene and an existing PS CB2 file')
     label = a.label
     assert label.replace('-', '').isalnum(), 'label must be alphanumeric/dashes'
     if a.sample:
@@ -94,6 +98,13 @@ $p | ConvertTo-Json -Compress'''))
                                capture_output=True, text=True)
             if p.returncode:
                 raise RuntimeError('sky transfer failed: ' + p.stderr)
+        # Sun is explicit so a sidecar left by an older diagnostic cannot silently light a new capture.
+        for local, sidecar in ((a.scene.parent / 'scene_lights.bin', 'scene_lights.bin'), (a.sun_cb, 'scene_sun.bin')):
+            if local is not None and local.is_file():
+                p = subprocess.run(['scp', *OPTS, str(local), 'spaghetti:' + remote.replace('\\', '/') + '/' + sidecar],
+                                   capture_output=True, text=True)
+                if p.returncode:
+                    raise RuntimeError(sidecar + ' transfer failed: ' + p.stderr)
         if textures.is_dir():
             p = subprocess.run(['scp', *OPTS, '-r', str(textures), 'spaghetti:' + remote.replace('\\', '/') + '/scene_textures'],
                                capture_output=True, text=True)
@@ -121,7 +132,7 @@ $p | ConvertTo-Json -Compress'''))
 $run='{run}';$exe=Join-Path $run '{exe_name}';$dll='{DLL}'
 if((Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant() -ne '{v['exe_sha256']}'){{throw 'Hash mismatch'}}
 if(Get-Process -Name remix-triangle,remixapi_example_c -ErrorAction SilentlyContinue){{throw 'Another probe is running'}}
-{'' if a.sun is None else "$env:REPROBE_SUN='%s';" % a.sun}{'' if a.sky is None else "$env:REPROBE_SKY='%s';" % a.sky}{'' if a.albedo is None else "$env:REPROBE_ALBEDO='%s';" % a.albedo}{'' if a.mat is None else "$env:REPROBE_MAT='%s';" % a.mat}{'' if a.sky_tex is None else "$env:REPROBE_SKY_TEX='%s';" % a.sky_tex}{'' if a.blend is None else "$env:REPROBE_BLEND='%s';" % a.blend}{'' if a.skip_max is None else "$env:REPROBE_SKIP_MAX='%s';" % a.skip_max}{"$env:REPROBE_NORMAL_FLIP='1';" if a.flip_normals else ''}{'' if a.sun_angle is None else "$env:REPROBE_SUN_ANGLE='%s';" % a.sun_angle}{''.join("$env:%s='%s';" % tuple(e.split('=', 1)) for e in a.env)}$env:DXVK_DUMP_SCREENSHOT_FRAME='{int(a.shot_frame)}';$env:DXVK_SCREENSHOT_PATH=Join-Path $run 'Screenshots';$env:REMIX_DLL=$dll
+{'' if a.sun is None else "$env:REPROBE_SUN='%s';" % a.sun}{'' if a.sky is None else "$env:REPROBE_SKY='%s';" % a.sky}{'' if a.light_scale is None else "$env:REPROBE_LIGHT_SCALE='%s';" % a.light_scale}{'' if a.albedo is None else "$env:REPROBE_ALBEDO='%s';" % a.albedo}{'' if a.mat is None else "$env:REPROBE_MAT='%s';" % a.mat}{'' if a.sky_tex is None else "$env:REPROBE_SKY_TEX='%s';" % a.sky_tex}{'' if a.blend is None else "$env:REPROBE_BLEND='%s';" % a.blend}{'' if a.skip_max is None else "$env:REPROBE_SKIP_MAX='%s';" % a.skip_max}{"$env:REPROBE_NORMAL_FLIP='1';" if a.flip_normals else ''}{'' if a.sun_angle is None else "$env:REPROBE_SUN_ANGLE='%s';" % a.sun_angle}{''.join("$env:%s='%s';" % tuple(e.split('=', 1)) for e in a.env)}$env:DXVK_DUMP_SCREENSHOT_FRAME='{int(a.shot_frame)}';$env:DXVK_SCREENSHOT_PATH=Join-Path $run 'Screenshots';$env:REMIX_DLL=$dll
 $t=[Diagnostics.Stopwatch]::StartNew()
 $p=Start-Process -FilePath $exe -ArgumentList {argv} -WorkingDirectory $run -PassThru -RedirectStandardOutput (Join-Path $run 'stdout.txt') -RedirectStandardError (Join-Path $run 'stderr.txt')
 $handle=$p.Handle;$done=$p.WaitForExit({int(a.watchdog)});$threads=@()

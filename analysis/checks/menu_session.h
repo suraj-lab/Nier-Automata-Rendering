@@ -26,6 +26,10 @@ inline Session from_status(const startup_status::Snapshot& s) {
             r.mode = SessionMode::Custom75;
             r.custom75_available = true;
             return r;
+        case Outcome::Remix50Applied:
+            r.mode = SessionMode::Remix50;
+            r.custom75_available = true;
+            return r;
         case Outcome::Incomplete:
             std::snprintf(r.reason, sizeof r.reason,
                           "Partially applied: renderer scaled without upscale gate. Use Native and restart.");

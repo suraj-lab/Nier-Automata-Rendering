@@ -153,6 +153,16 @@ using HANDLE=void*;
 static DWORD attrs=FILE_ATTRIBUTE_NORMAL,error=0;
 static std::wstring ini_value=L"Custom75", seen_path;
 static bool open_ok=true;
+static std::map<std::wstring,std::wstring> environment;
+static float expected_scale=0.75f;
+static DWORD GetEnvironmentVariableW(const wchar_t* name,wchar_t* out,DWORD cap) {
+    const auto it=environment.find(name);
+    if(it==environment.end()) return 0;
+    const auto& value=it->second;
+    if(value.size()>=cap) return static_cast<DWORD>(value.size()+1);
+    std::copy(value.begin(),value.end(),out);out[value.size()]=0;
+    return static_cast<DWORD>(value.size());
+}
 static int handles=0,depth_calls=0,proxy_calls=0,scale_calls=0,exe_calls=0;
 static std::vector<unsigned char> exe(256);
 alignas(16) static std::uint8_t cave[proxy_patch::kCaveSize];
@@ -187,7 +197,7 @@ namespace scale_patch {
     struct Info { std::uint32_t width=3440,height=1440; float before=1.0f; void* renderer=nullptr; };
     static Result result=Result::Applied;
     static Result try_apply(unsigned char*,std::size_t,float s,bool(*)(const void*,std::size_t),Info*) {
-        assert(s==0.75f); ++scale_calls; return result;
+        assert(s==expected_scale); ++scale_calls; return result;
     }
     static bool retryable(Result r) { return r==Result::NoRenderer; }
     static const char* name(Result) { return "mock"; }
@@ -196,6 +206,7 @@ static void reset() {
     startup_observation.~Publication();new (&startup_observation) startup_status::Publication();
     setter_started=0;thread_create_ok=true;thread_calls=0;proxy_cave=cave;
     attrs=FILE_ATTRIBUTE_NORMAL; error=0; ini_value=L"Custom75"; open_ok=true;
+    environment.clear();expected_scale=0.75f;
     handles=depth_calls=proxy_calls=scale_calls=exe_calls=0; logs.clear();
     depth_result=depth_patch::Result::Applied; proxy_result=proxy_patch::Result::Applied;
     scale_patch::result=scale_patch::Result::Applied;
@@ -259,6 +270,52 @@ int main() {
 '''
 
 
+REMIX_MAIN = r'''
+int main() {
+    using startup_status::Outcome;using startup_status::Failure;using render_settings::Mode;
+    for (auto preset : {L"Native", L"Custom75", L"invalid"}) {
+        for (auto remix : {L"", L"0", L"1", L"true", L"01", L"1 ", L" 1", L"1111111111111111111111"}) {
+            for (auto cheap : {L"", L"0", L"1", L"true", L"01", L"1 ", L" 1", L"1111111111111111111111"}) {
+                reset();ini_value=preset;
+                environment[L"NIER_REMIX"]=remix;environment[L"NIER_REMIX_CHEAP_GAME"]=cheap;
+                const bool valid=ini_value!=L"invalid";
+                const bool enabled=valid && std::wstring(remix)==L"1" && std::wstring(cheap)==L"1";
+                const Mode saved=ini_value==L"Custom75"?Mode::Custom75:Mode::Native;
+                expected_scale=enabled?0.5f:render_settings::scale(saved);
+                setter_thread(nullptr);
+                const bool reduced=expected_scale<1;
+                assert(scale_calls==(reduced?1:0) && depth_calls==(reduced?1:0) && proxy_calls==(reduced?1:0));
+                assert(slot()==expected_scale && handles==0 && ini_value==preset);
+                startup_status::Snapshot observed;assert(startup_observation.read(observed));
+                assert(observed.settings.mode==saved && observed.settings.valid==valid && !observed.settings.defaulted);
+                const auto outcome=enabled?Outcome::Remix50Applied:reduced?Outcome::Custom75Applied:Outcome::NativeBypass;
+                assert(observed.outcome==outcome && observed.failure==(valid?Failure::None:Failure::InvalidConfig));
+            }
+        }
+    }
+    const auto enable=[] {
+        reset();environment[L"NIER_REMIX"]=L"1";environment[L"NIER_REMIX_CHEAP_GAME"]=L"1";expected_scale=0.5f;
+    };
+    enable();attrs=INVALID_FILE_ATTRIBUTES;error=ERROR_FILE_NOT_FOUND;setter_thread(nullptr);
+    startup_status::Snapshot observed;assert(startup_observation.read(observed));
+    assert(slot()==0.5f && observed.settings.defaulted && observed.outcome==Outcome::Remix50Applied);
+    enable();attrs=INVALID_FILE_ATTRIBUTES;error=5;setter_thread(nullptr);assert(depth_calls==0 && scale_calls==0 && slot()==1);
+    enable();open_ok=false;setter_thread(nullptr);assert(depth_calls==0 && scale_calls==0 && handles==0);
+    enable();depth_result=depth_patch::Result::NoMemory;setter_thread(nullptr);
+    assert(scale_calls==0 && slot()==1 && startup_observation.read(observed) && observed.failure==Failure::Depth);
+    enable();proxy_result=proxy_patch::Result::NoMemory;setter_thread(nullptr);
+    assert(scale_calls==0 && slot()==1 && startup_observation.read(observed) && observed.failure==Failure::Proxy);
+    enable();scale_patch::result=scale_patch::Result::NotDefault;setter_thread(nullptr);
+    assert(slot()==1 && startup_observation.read(observed) && observed.failure==Failure::Renderer);
+    enable();scale_patch::result=scale_patch::Result::NoRenderer;setter_thread(nullptr);
+    assert(scale_calls==kPollTries && slot()==1 && startup_observation.read(observed) && observed.failure==Failure::Renderer);
+    enable();proxy_cave=nullptr;setter_thread(nullptr);
+    assert(startup_observation.read(observed) && observed.outcome==Outcome::Incomplete && observed.failure==Failure::MissingGate);
+    std::puts("Remix startup override integration tests: all passed");
+}
+'''
+
+
 class StartupTests(unittest.TestCase):
     def run_cpp(self, source):
         with tempfile.TemporaryDirectory() as td:
@@ -276,7 +333,10 @@ class StartupTests(unittest.TestCase):
         self.run_cpp(COMMON + PROXY + function("apply_proxy_patch") + PROXY_MAIN)
 
     def test_startup_settings(self):
-        self.run_cpp(COMMON + STARTUP + function("read_render_settings") + function("load_render_settings") + function("setter_thread") + function("start_setter_once") + STARTUP_MAIN)
+        self.run_cpp(COMMON + STARTUP + function("read_render_settings") + function("load_render_settings") + function("startup_switch") + function("setter_thread") + function("start_setter_once") + STARTUP_MAIN)
+
+    def test_remix_startup_scale(self):
+        self.run_cpp(COMMON + STARTUP + function("read_render_settings") + function("load_render_settings") + function("startup_switch") + function("setter_thread") + REMIX_MAIN)
 
 
 if __name__ == "__main__":

@@ -12,6 +12,7 @@
 #include "input_layout_hook.h"
 #include "shader_capture.h"
 #include "draw_capture.h"
+#include "live_capture.h"
 #include "input_capture.h"
 #include "remix_live.h"
 #include "../menu-preview/panel.h"
@@ -269,12 +270,14 @@ bool write_capture(const draw_capture::Record& r, const std::wstring& dir, const
 void write_frame() {
     std::vector<draw_capture::Record> draws;
     std::vector<texture_capture::Texture> textures;
+    draw_capture::LightArray lights[2];
     unsigned skipped = 0;
     std::size_t bytes = 0;
     {
         std::lock_guard<std::mutex> lock(draw_capture::mutex);
         draws.swap(draw_capture::frame);
         textures.swap(draw_capture::frame_textures);
+        for (int k = 0; k < 2; ++k) lights[k] = std::move(draw_capture::frame_lights[k]);
         skipped = draw_capture::frame_skipped; bytes = draw_capture::frame_bytes;
     }
     const std::wstring root = host.module_dir + L"NIER_CAPTURE\\";
@@ -302,6 +305,23 @@ void write_frame() {
         wchar_t name[16];
         std::swprintf(name, 16, L"draw_%04u\\", static_cast<unsigned>(i));
         if (draws[i].valid && write_capture(draws[i], dir + name, dir)) ++written;
+    }
+    // Light arrays for the laptop probe (light_convert.h reads the same bytes the live path reads).
+    if (FILE* f = _wfopen((dir + L"lights.json").c_str(), L"w")) {
+        std::fputc('{', f);
+        for (int k = 0; k < 2; ++k) {
+            const auto& a = lights[k];
+            std::fprintf(f, "%s\"t%d\":{\"present\":%d,\"dimension\":%u,\"stride\":%u,\"first\":%u,\"count\":%u,\"bytes\":%zu}",
+                         k ? "," : "", k ? 22 : 20, a.present ? 1 : 0, a.dimension, a.stride, a.first, a.count, a.bytes.size());
+            if (!a.bytes.empty()) {
+                if (FILE* b = _wfopen((dir + (k ? L"lights_t22.bin" : L"lights_t20.bin")).c_str(), L"wb")) {
+                    std::fwrite(a.bytes.data(), 1, a.bytes.size(), b);
+                    std::fclose(b);
+                }
+            }
+        }
+        std::fputs("}\n", f);
+        std::fclose(f);
     }
     if (FILE* f = _wfopen((dir + L"frame.json").c_str(), L"w")) {
         std::fprintf(f, "{\"draws\":%zu,\"written\":%u,\"skipped\":%u,\"bytes\":%zu,\"min_index_count\":%u,"
@@ -430,7 +450,7 @@ HRESULT STDMETHODCALLTYPE present(IDXGISwapChain* self, UINT sync, UINT flags) {
     const bool game_frame = self == target.load(std::memory_order_acquire) && !(flags & DXGI_PRESENT_TEST);
     // Remix replaces the game's image first, so the menu still draws on top. Independent of the menu's phase.
     if (game_frame) {
-        try { remix_live::on_present(self, host.log); } catch (...) {}
+        try { live_capture::end_frame(); camera_capture::end_frame(); remix_live::on_present(self, host.log); } catch (...) {}
     }
     if (game_frame && phase != Phase::Disabled) {
         try {
@@ -440,7 +460,12 @@ HRESULT STDMETHODCALLTYPE present(IDXGISwapChain* self, UINT sync, UINT flags) {
             disable("unexpected exception");
         }
     }
-    return next(self, sync, flags);
+    const HRESULT result = next(self, sync, flags);
+    const DWORD error = GetLastError();
+    // Arm only after downstream Present hooks too: their AA/overlay draws are not the next game frame.
+    if (game_frame && SUCCEEDED(result)) { try { remix_live::begin_game_frame(self); } catch (...) {} }
+    SetLastError(error);
+    return result;
 }
 }  // namespace
 
@@ -454,7 +479,12 @@ void install(ID3D11Device* dev, IDXGISwapChain* swapchain, const Host& h) {
         if (shader_capture::install(dev)) host.log("menu: pixel-shader capture hook installed");
         ID3D11DeviceContext* ctx = nullptr;
         dev->GetImmediateContext(&ctx);
-        if (ctx) { draw_capture::install(ctx); ctx->Release(); host.log("menu: capture hooks installed (F9 = capture next frame)"); }
+        if (ctx) {
+            draw_capture::before_draw = remix_live::before_draw;  // native HUD handoff; inert unless live Remix runs
+            draw_capture::install(ctx);  // live_capture hooks are installed by remix_live, only for a live session
+            ctx->Release();
+            host.log("menu: capture hooks installed (F9 = capture next frame)");
+        }
         IDXGIDevice* dxgi = nullptr;
         IDXGIAdapter* adapter = nullptr;
         IDXGIFactory* factory = nullptr;

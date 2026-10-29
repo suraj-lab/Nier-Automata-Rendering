@@ -2,10 +2,11 @@
 // Contract (pure C++17 header, namespace menu_session, includes only menu_state.h/startup_status.h/<cstdio>):
 //   struct Session { render_menu::SessionMode mode; bool custom75_available; char reason[160]; };
 //   inline Session from_status(const startup_status::Snapshot&);
-// reason is always NUL-terminated; empty ("") exactly when mode is Native or Custom75.
+// reason is always NUL-terminated; empty ("") exactly when an active mode was applied.
 // %d below is Snapshot::detail (std::int32_t, printed as int).
 //   NativeBypass (any failure)        -> Native,   available true,  ""
 //   Custom75Applied (any failure)     -> Custom75, available true,  ""
+//   Remix50Applied (any failure)      -> Remix50,  available true,  ""
 //   NotApplied + Depth                -> NotApplied, false, "Depth patch failed (code %d); scaling skipped."
 //   NotApplied + Proxy                -> NotApplied, false, "Upscale bridge patch failed (code %d); scaling skipped."
 //   NotApplied + Renderer             -> NotApplied, false, "Renderer scale not applied (code %d); scaling skipped."
@@ -57,6 +58,7 @@ int main() {
         for (Failure f : all) {
             expect(Outcome::NativeBypass, f, d, SessionMode::Native, true, "");
             expect(Outcome::Custom75Applied, f, d, SessionMode::Custom75, true, "");
+            expect(Outcome::Remix50Applied, f, d, SessionMode::Remix50, true, "");
             expect(Outcome::Incomplete, f, d, SessionMode::NotApplied, false,
                    "Partially applied: renderer scaled without upscale gate. Use Native and restart.");
         }
