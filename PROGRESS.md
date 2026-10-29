@@ -1,6 +1,9 @@
 # NieR:Automata Rendering — Progress & Resume
 
-**START HERE (2026-10-29 late).** Installed: `d3d11.dll` **`065432e4…f8467e`** (HUD replay shader fix), not yet run.
+**START HERE (2026-10-29 late).** Installed: `d3d11.dll` **`065432e4…f8467e`** (HUD replay shader fix).
+**Live-verified 23:32: the world renders path-traced under the game's own HUD, 2B intact, sun and sky fill working.**
+Screenshot, stats and the evidence images: `media/2026-10-29/` (README there). 1–4 fps: readback 152 ms + CPU 125 ms per
+frame, GPU mostly idle; mesh cache thrashing (built 22223, evicted 19717). Performance is now the top item.
 Rollback `backups/live-scene-20261029T232758586690Z/` (holds `0e9b032b…`, the build whose HUD test showed the bug).
 Latest F9 capture from the user: `NIER_CAPTURE/frame_41686139` (unused so far).
 
@@ -34,15 +37,13 @@ Latest F9 capture from the user: `NIER_CAPTURE/frame_41686139` (unused so far).
 **evicted 7710**, mesh_bytes 537 MB (at the 512 MB budget), light_creates 692, sky 8, untextured 0, textures 141.
 Eviction churn is new and likely from pose-specific skinned keys: a performance problem, not yet investigated.
 
-**Next steps, in order**
-1. Launch the game with `065432e4…`: check the world shows under the HUD (screenshots/recording from the agent:
-   `grim -o DP-2`, `wf-recorder -o DP-2`). Check sun direction, sky fill, 2B moving without stretching.
-   If the sky texture crashes this runtime (PortalRTX's, not the laptop's), delete
-   `analysis/runtime/remix-probe/textured-scene/nier_sky_hdr.dds`.
-2. Investigate eviction churn (built 10220 / evicted 7710 in ~300 frames): budget vs pose keys.
-3. Materials (clay look): only albedo is used; draws bind 4–12 textures. Map slots to normal / gloss / emissive from
+**Next steps, in order** (step 1 done 23:32: world, HUD, 2B, sun and sky all seen live)
+1. Performance: mesh-cache thrash first (pose-specific skinned keys vs 512 MB budget), then asynchronous readback
+   (read the previous frame's copies instead of stalling the GPU on every Map).
+2. Blown-out surfaces on the right of the live shot: sun scale or missing textures; check against frame_41686139.
+3. Laptop (Spark) run of the live build: see `analysis/LAPTOP_PORT.md`; answers whether readback cost is Proton's.
+4. Materials (clay look): only albedo is used; draws bind 4–12 textures. Map slots to normal / gloss / emissive from
    the disassembled pixel shaders, convert to Remix normal/roughness/metallic, laptop A/B first.
-4. Performance: readback is still most of the frame.
 5. Open: DeepSeek P2 (cache purge clears sky classification), Remix crash dialog hidden behind the fullscreen game,
    F10 needs a held key at low fps (polled once per frame).
 

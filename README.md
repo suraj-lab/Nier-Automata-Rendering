@@ -1,5 +1,11 @@
 # NieR RTX — NieR:Automata rendering investigation
 
+![Live NieR:Automata, path-traced through RTX Remix, with the game's own HUD](media/2026-10-29/live-rtx-hud-2b.jpg)
+
+*2026-10-29: the running game path-traced live through RTX Remix: CPU-skinned 2B, the game's sun, sky fill and local
+lights, and NieR's own HUD on top. Albedo-only materials and 1–4 fps for now. Details and before/after evidence:
+[media/2026-10-29](media/2026-10-29/README.md).*
+
 ## Scope and status
 
 Status refreshed 2026-10-28. Intent, scope and the desktop/laptop split: [VISION.md](VISION.md).

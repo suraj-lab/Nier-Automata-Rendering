@@ -1,0 +1,620 @@
+00:08:54.216 pid=356 remix: enabled runtime=Z:\mnt\second\SteamLibrary\steamapps\common\PortalRTX\bin\.trex\d3d9.dll scene=Z:\home\suraj\Projects\Nier-Automata-Rendering\analysis\runtime\remix-probe\textured-scene\scene.bin
+00:08:54.217 pid=356 remix: game backbuffer 1600x900 format=28; starting worker
+00:08:55.029 pid=356 remix: started 1600x900 startup=5 surfaces=1048 sky_skipped=7 untextured=0
+00:25:26.886 pid=356 remix: enabled runtime=Z:\mnt\second\SteamLibrary\steamapps\common\PortalRTX\bin\.trex\d3d9.dll scene=Z:\home\suraj\Projects\Nier-Automata-Rendering\analysis\runtime\remix-probe\textured-scene\scene.bin
+00:25:26.886 pid=356 remix: game backbuffer 1600x900 format=28; starting worker
+00:25:27.616 pid=356 remix: started 1600x900 startup=5 surfaces=1048 sky_skipped=7 untextured=0
+00:25:27.908 pid=356 remix: first frame ready
+00:25:28.138 pid=356 remix: resized to 720x480
+00:32:04.342 pid=356 remix: enabled runtime=Z:\mnt\second\SteamLibrary\steamapps\common\PortalRTX\bin\.trex\d3d9.dll scene=Z:\home\suraj\Projects\Nier-Automata-Rendering\analysis\runtime\remix-probe\textured-scene\scene.bin
+00:32:10.031 pid=356 remix: game backbuffer 720x480 format=28; starting worker
+00:32:10.669 pid=356 remix: started 720x480 startup=5 surfaces=1048 sky_skipped=7 untextured=0
+00:32:10.796 pid=356 remix: first frame ready
+00:32:10.810 pid=356 remix: composited first frame 720x480
+00:32:15.880 pid=356 remix: 59.0 fps over the last 300 frames
+00:32:21.008 pid=356 remix: 58.5 fps over the last 300 frames
+00:32:26.135 pid=356 remix: 58.5 fps over the last 300 frames
+00:32:31.265 pid=356 remix: 58.5 fps over the last 300 frames
+00:32:36.387 pid=356 remix: 58.6 fps over the last 300 frames
+00:32:41.513 pid=356 remix: 58.5 fps over the last 300 frames
+00:32:46.641 pid=356 remix: 58.5 fps over the last 300 frames
+00:32:51.776 pid=356 remix: 58.4 fps over the last 300 frames
+00:32:56.905 pid=356 remix: 58.5 fps over the last 300 frames
+00:33:02.025 pid=356 remix: 58.6 fps over the last 300 frames
+00:33:07.151 pid=356 remix: 58.5 fps over the last 300 frames
+00:33:12.282 pid=356 remix: 58.5 fps over the last 300 frames
+00:33:17.401 pid=356 remix: 58.6 fps over the last 300 frames
+00:33:22.528 pid=356 remix: 58.5 fps over the last 300 frames
+00:33:27.658 pid=356 remix: 58.5 fps over the last 300 frames
+00:33:32.778 pid=356 remix: 58.6 fps over the last 300 frames
+00:33:37.900 pid=356 remix: 58.6 fps over the last 300 frames
+00:33:43.041 pid=356 remix: 58.3 fps over the last 300 frames
+00:33:48.176 pid=356 remix: 58.4 fps over the last 300 frames
+00:33:53.302 pid=356 remix: 58.5 fps over the last 300 frames
+00:33:58.430 pid=356 remix: 58.5 fps over the last 300 frames
+00:34:03.564 pid=356 remix: 58.4 fps over the last 300 frames
+00:34:08.692 pid=356 remix: 58.5 fps over the last 300 frames
+00:34:13.818 pid=356 remix: 58.5 fps over the last 300 frames
+00:34:18.940 pid=356 remix: 58.6 fps over the last 300 frames
+00:34:24.068 pid=356 remix: 58.5 fps over the last 300 frames
+00:34:29.203 pid=356 remix: 58.4 fps over the last 300 frames
+00:34:30.637 pid=356 remix: paused (game backbuffer 3440x1440, Remix 720x480); game frames shown
+00:34:34.852 pid=356 remix: resumed at 720x480
+00:34:38.565 pid=356 remix: 32.0 fps over the last 300 frames
+00:34:43.691 pid=356 remix: 58.5 fps over the last 300 frames
+00:34:48.809 pid=356 remix: 58.6 fps over the last 300 frames
+00:34:53.933 pid=356 remix: 58.5 fps over the last 300 frames
+00:34:59.070 pid=356 remix: 58.4 fps over the last 300 frames
+00:35:04.205 pid=356 remix: 58.4 fps over the last 300 frames
+00:35:09.324 pid=356 remix: 58.6 fps over the last 300 frames
+00:35:14.447 pid=356 remix: 58.5 fps over the last 300 frames
+00:35:19.576 pid=356 remix: 58.5 fps over the last 300 frames
+00:35:24.704 pid=356 remix: 58.5 fps over the last 300 frames
+00:35:29.836 pid=356 remix: 58.4 fps over the last 300 frames
+00:35:34.958 pid=356 remix: 58.6 fps over the last 300 frames
+00:35:40.086 pid=356 remix: 58.5 fps over the last 300 frames
+00:35:45.213 pid=356 remix: 58.5 fps over the last 300 frames
+00:35:50.337 pid=356 remix: 58.5 fps over the last 300 frames
+00:35:55.470 pid=356 remix: 58.4 fps over the last 300 frames
+00:36:00.595 pid=356 remix: 58.5 fps over the last 300 frames
+00:36:05.719 pid=356 remix: 58.5 fps over the last 300 frames
+00:36:10.847 pid=356 remix: 58.5 fps over the last 300 frames
+00:36:15.971 pid=356 remix: 58.5 fps over the last 300 frames
+00:36:21.102 pid=356 remix: 58.5 fps over the last 300 frames
+00:36:26.225 pid=356 remix: 58.5 fps over the last 300 frames
+00:36:31.355 pid=356 remix: 58.5 fps over the last 300 frames
+00:36:36.475 pid=356 remix: 58.6 fps over the last 300 frames
+00:36:41.598 pid=356 remix: 58.5 fps over the last 300 frames
+00:36:46.721 pid=356 remix: 58.5 fps over the last 300 frames
+00:36:51.853 pid=356 remix: 58.4 fps over the last 300 frames
+00:36:56.975 pid=356 remix: 58.6 fps over the last 300 frames
+00:37:02.101 pid=356 remix: 58.5 fps over the last 300 frames
+00:37:07.240 pid=356 remix: 58.4 fps over the last 300 frames
+00:37:12.371 pid=356 remix: 58.5 fps over the last 300 frames
+00:37:17.502 pid=356 remix: 58.5 fps over the last 300 frames
+00:37:22.636 pid=356 remix: 58.4 fps over the last 300 frames
+00:37:27.759 pid=356 remix: 58.5 fps over the last 300 frames
+00:37:32.880 pid=356 remix: 58.6 fps over the last 300 frames
+00:37:38.005 pid=356 remix: 58.5 fps over the last 300 frames
+00:37:43.130 pid=356 remix: 58.5 fps over the last 300 frames
+00:37:48.253 pid=356 remix: 58.5 fps over the last 300 frames
+00:37:53.382 pid=356 remix: 58.5 fps over the last 300 frames
+00:37:58.502 pid=356 remix: 58.6 fps over the last 300 frames
+00:38:03.635 pid=356 remix: 58.4 fps over the last 300 frames
+00:38:08.769 pid=356 remix: 58.4 fps over the last 300 frames
+00:38:13.897 pid=356 remix: 58.5 fps over the last 300 frames
+00:38:19.023 pid=356 remix: 58.5 fps over the last 300 frames
+00:38:24.141 pid=356 remix: 58.6 fps over the last 300 frames
+00:38:29.275 pid=356 remix: 58.4 fps over the last 300 frames
+00:38:34.407 pid=356 remix: 58.4 fps over the last 300 frames
+00:38:39.538 pid=356 remix: 58.5 fps over the last 300 frames
+00:38:44.674 pid=356 remix: 58.4 fps over the last 300 frames
+00:38:49.805 pid=356 remix: 58.5 fps over the last 300 frames
+00:38:54.931 pid=356 remix: 58.5 fps over the last 300 frames
+00:39:00.058 pid=356 remix: 58.5 fps over the last 300 frames
+00:39:05.189 pid=356 remix: 58.4 fps over the last 300 frames
+00:39:10.318 pid=356 remix: 58.5 fps over the last 300 frames
+00:39:15.452 pid=356 remix: 58.4 fps over the last 300 frames
+00:39:20.583 pid=356 remix: 58.5 fps over the last 300 frames
+00:39:25.713 pid=356 remix: 58.5 fps over the last 300 frames
+00:39:30.836 pid=356 remix: 58.6 fps over the last 300 frames
+00:39:35.961 pid=356 remix: 58.5 fps over the last 300 frames
+00:39:41.088 pid=356 remix: 58.5 fps over the last 300 frames
+00:39:46.215 pid=356 remix: 58.5 fps over the last 300 frames
+00:39:51.336 pid=356 remix: 58.6 fps over the last 300 frames
+00:39:56.465 pid=356 remix: 58.5 fps over the last 300 frames
+00:40:01.593 pid=356 remix: 58.5 fps over the last 300 frames
+00:41:30.866 pid=356 remix: enabled runtime=Z:\mnt\second\SteamLibrary\steamapps\common\PortalRTX\bin\.trex\d3d9.dll scene=Z:\home\suraj\Projects\Nier-Automata-Rendering\analysis\runtime\remix-probe\textured-scene\scene.bin
+00:41:30.866 pid=356 remix: starting at monitor size 3440x1440 (game backbuffer 1600x900 format=28)
+00:41:31.499 pid=356 remix: started 3440x1440 startup=5 surfaces=1048 sky_skipped=7 untextured=0
+00:41:31.499 pid=356 remix: paused (game backbuffer 1600x900, Remix 3440x1440); game frames shown
+00:42:24.009 pid=356 remix: resumed at 3440x1440
+00:42:25.798 pid=356 remix: first frame ready
+00:42:25.854 pid=356 remix: composited first frame 3440x1440
+00:42:29.454 pid=356 remix: paused (game backbuffer 720x480, Remix 3440x1440); game frames shown
+00:55:03.020 pid=356 remix: enabled runtime=Z:\mnt\second\SteamLibrary\steamapps\common\PortalRTX\bin\.trex\d3d9.dll scene=Z:\home\suraj\Projects\Nier-Automata-Rendering\analysis\runtime\remix-probe\textured-scene\scene.bin
+00:55:03.020 pid=356 remix: focus -> 00000000000200a0 class=NieR:Automata_MainWindow own_process=1
+00:55:03.020 pid=356 remix: starting at monitor size 3440x1440 (game backbuffer 1600x900 format=28)
+00:55:03.626 pid=356 remix: started 3440x1440 startup=5 surfaces=1048 sky_skipped=7 untextured=0
+00:55:03.627 pid=356 remix: paused (game backbuffer 1600x900, Remix 3440x1440); game frames shown
+00:56:37.737 pid=356 remix: resumed at 3440x1440
+00:56:38.412 pid=356 remix: first frame ready
+00:59:54.662 pid=356 remix: enabled runtime=Z:\mnt\second\SteamLibrary\steamapps\common\PortalRTX\bin\.trex\d3d9.dll scene=Z:\home\suraj\Projects\Nier-Automata-Rendering\analysis\runtime\remix-probe\textured-scene\scene.bin
+00:59:54.662 pid=356 remix: focus -> 00000000000200a0 class=NieR:Automata_MainWindow own_process=1
+00:59:54.662 pid=356 remix: starting at monitor size 3440x1440 (game backbuffer 1600x900 format=28)
+00:59:55.300 pid=356 remix: started 3440x1440 startup=5 surfaces=1048 sky_skipped=7 untextured=0
+00:59:55.300 pid=356 remix: paused (game backbuffer 1600x900, Remix 3440x1440); game frames shown
+00:59:56.002 pid=356 remix: resumed at 3440x1440
+00:59:56.486 pid=356 remix: first frame ready
+00:59:56.525 pid=356 remix: composited first frame 3440x1440
+01:00:37.543 pid=356 remix: 7.3 fps over the last 300 frames
+01:01:19.450 pid=356 remix: 7.2 fps over the last 300 frames
+01:02:00.819 pid=356 remix: 7.3 fps over the last 300 frames
+10:44:57.439 pid=356 remix: cheap game startup override scale=0.500; saved preset unchanged; fallback stays scaled until restart
+10:44:58.894 pid=356 remix: enabled runtime=Z:\mnt\second\SteamLibrary\steamapps\common\PortalRTX\bin\.trex\d3d9.dll scene=Z:\home\suraj\Projects\Nier-Automata-Rendering\analysis\runtime\remix-probe\textured-scene\scene.bin
+10:44:58.894 pid=356 remix: focus -> 00000000000200a0 class=NieR:Automata_MainWindow own_process=1
+10:44:58.894 pid=356 remix: starting at monitor size 3440x1440 (game backbuffer 1600x900 format=28)
+10:44:59.443 pid=356 remix: focus -> 00000000000100cc class=#32770 own_process=1
+10:44:59.443 pid=356 remix: focus returned to the game from 00000000000100cc class=#32770
+10:45:04.900 pid=356 remix: watchdog worker in 'dxvk_CreateD3D9' for 5587 ms; game presents=266, last 1242 ms ago, hook in 'returned to game'
+11:20:24.142 pid=356 remix: cheap game startup override scale=0.500; saved preset unchanged; fallback stays scaled until restart
+11:20:25.569 pid=356 remix: enabled runtime=Z:\mnt\second\SteamLibrary\steamapps\common\PortalRTX\bin\.trex\d3d9.dll scene=Z:\home\suraj\Projects\Nier-Automata-Rendering\analysis\runtime\remix-probe\textured-scene\scene.bin
+11:20:25.569 pid=356 remix: focus -> 00000000000200a0 class=NieR:Automata_MainWindow own_process=1
+11:20:25.569 pid=356 remix: starting at monitor size 3440x1440 (game backbuffer 1600x900 format=28)
+11:20:26.256 pid=356 remix: started 3440x1440 startup=5 surfaces=1048 sky_skipped=7 untextured=0
+11:20:26.256 pid=356 remix: paused (game backbuffer 1600x900, Remix 3440x1440); game frames shown
+11:20:58.795 pid=356 remix: resumed at 3440x1440
+11:20:58.958 pid=356 remix: first frame ready
+11:20:58.967 pid=356 remix: composited first frame 3440x1440
+11:21:08.392 pid=356 remix: 31.8 fps over the last 300 frames
+11:21:13.923 pid=356 remix: paused (game backbuffer 1920x1080, Remix 3440x1440); game frames shown
+11:21:30.793 pid=356 remix: resumed at 3440x1440
+11:21:31.786 pid=356 remix: paused (game backbuffer 1920x1080, Remix 3440x1440); game frames shown
+11:21:34.741 pid=356 remix: resumed at 3440x1440
+11:21:37.664 pid=356 remix: 10.2 fps over the last 300 frames
+11:21:47.083 pid=356 remix: 31.9 fps over the last 300 frames
+11:21:56.439 pid=356 remix: 32.1 fps over the last 300 frames
+11:22:05.858 pid=356 remix: 31.8 fps over the last 300 frames
+11:22:15.256 pid=356 remix: 31.9 fps over the last 300 frames
+11:22:24.639 pid=356 remix: 32.0 fps over the last 300 frames
+11:22:34.019 pid=356 remix: 32.0 fps over the last 300 frames
+11:22:43.408 pid=356 remix: 32.0 fps over the last 300 frames
+11:22:52.830 pid=356 remix: 31.8 fps over the last 300 frames
+11:23:02.230 pid=356 remix: 31.9 fps over the last 300 frames
+11:23:11.666 pid=356 remix: 31.8 fps over the last 300 frames
+11:23:21.050 pid=356 remix: 32.0 fps over the last 300 frames
+11:23:30.419 pid=356 remix: 32.0 fps over the last 300 frames
+11:23:39.808 pid=356 remix: 31.9 fps over the last 300 frames
+11:23:49.172 pid=356 remix: 32.0 fps over the last 300 frames
+11:23:58.580 pid=356 remix: 31.9 fps over the last 300 frames
+11:24:07.991 pid=356 remix: 31.9 fps over the last 300 frames
+11:24:17.399 pid=356 remix: 31.9 fps over the last 300 frames
+11:24:26.835 pid=356 remix: 31.8 fps over the last 300 frames
+11:24:36.274 pid=356 remix: 31.8 fps over the last 300 frames
+11:24:45.684 pid=356 remix: 31.9 fps over the last 300 frames
+11:24:55.076 pid=356 remix: 31.9 fps over the last 300 frames
+11:25:04.457 pid=356 remix: 32.0 fps over the last 300 frames
+11:25:13.819 pid=356 remix: 32.0 fps over the last 300 frames
+11:25:23.200 pid=356 remix: 32.0 fps over the last 300 frames
+11:25:32.575 pid=356 remix: 32.0 fps over the last 300 frames
+11:25:41.930 pid=356 remix: 32.1 fps over the last 300 frames
+11:25:51.350 pid=356 remix: 31.8 fps over the last 300 frames
+11:26:00.736 pid=356 remix: 32.0 fps over the last 300 frames
+11:26:10.121 pid=356 remix: 32.0 fps over the last 300 frames
+11:26:19.520 pid=356 remix: 31.9 fps over the last 300 frames
+11:26:28.934 pid=356 remix: 31.9 fps over the last 300 frames
+11:26:38.331 pid=356 remix: 31.9 fps over the last 300 frames
+11:26:47.717 pid=356 remix: 32.0 fps over the last 300 frames
+11:26:57.083 pid=356 remix: 32.0 fps over the last 300 frames
+11:27:06.480 pid=356 remix: 31.9 fps over the last 300 frames
+11:27:15.842 pid=356 remix: 32.0 fps over the last 300 frames
+11:27:25.222 pid=356 remix: 32.0 fps over the last 300 frames
+11:27:34.609 pid=356 remix: 32.0 fps over the last 300 frames
+11:27:44.009 pid=356 remix: 31.9 fps over the last 300 frames
+11:27:53.408 pid=356 remix: 31.9 fps over the last 300 frames
+11:28:02.804 pid=356 remix: 31.9 fps over the last 300 frames
+11:28:12.207 pid=356 remix: 31.9 fps over the last 300 frames
+11:28:21.615 pid=356 remix: 31.9 fps over the last 300 frames
+11:28:30.986 pid=356 remix: 32.0 fps over the last 300 frames
+11:28:40.351 pid=356 remix: 32.0 fps over the last 300 frames
+21:09:09.375 pid=356 remix: cheap game startup override scale=0.500; saved preset unchanged; fallback stays scaled until restart
+21:09:10.838 pid=356 remix: enabled runtime=Z:\mnt\second\SteamLibrary\steamapps\common\PortalRTX\bin\.trex\d3d9.dll scene=Z:\home\suraj\Projects\Nier-Automata-Rendering\analysis\runtime\remix-probe\textured-scene\scene.bin
+21:09:10.838 pid=356 remix: focus -> 00000000000200a0 class=NieR:Automata_MainWindow own_process=1
+21:09:10.839 pid=356 remix: starting at monitor size 3440x1440 (game backbuffer 1600x900 format=28)
+21:09:11.540 pid=356 remix: started 3440x1440 startup=5 surfaces=0 sky_skipped=0 untextured=0 live=1
+21:09:11.540 pid=356 remix: paused (game backbuffer 1600x900, Remix 3440x1440); game frames shown
+21:09:25.343 pid=356 remix: F10 original-game view on
+21:12:15.943 pid=356 remix: F10 original-game view off
+21:16:42.076 pid=356 remix: resumed at 3440x1440
+21:16:42.076 pid=356 remix: live camera first sample seq=491 pos=0.770,7.480,3.260 fov=50.00
+21:16:42.175 pid=356 remix: live scene first frame draws=19 meshes=0 instances=19 textures=8 skinned=0
+21:18:22.083 pid=356 remix: F10 original-game view on
+21:18:24.302 pid=356 remix: F10 original-game view off
+21:18:49.473 pid=356 remix: F10 original-game view on
+22:29:48.523 pid=356 remix: cheap game startup override scale=0.500; saved preset unchanged; fallback stays scaled until restart
+22:29:49.992 pid=356 remix: enabled runtime=Z:\mnt\second\SteamLibrary\steamapps\common\PortalRTX\bin\.trex\d3d9.dll scene=Z:\home\suraj\Projects\Nier-Automata-Rendering\analysis\runtime\remix-probe\textured-scene\scene.bin
+22:29:49.992 pid=356 remix: focus -> 00000000000200a0 class=NieR:Automata_MainWindow own_process=1
+22:29:49.992 pid=356 remix: starting at monitor size 3440x1440 (game backbuffer 1600x900 format=28)
+22:29:50.778 pid=356 remix: started 3440x1440 startup=5 surfaces=0 sky_skipped=0 untextured=0 live=1
+22:29:50.778 pid=356 remix: paused (game backbuffer 1600x900, Remix 3440x1440); game frames shown
+22:29:52.081 pid=356 remix: resumed at 3440x1440
+22:29:52.094 pid=356 remix: live 2 large buffer writes not mirrored on the CPU (re-read when drawn)
+22:29:54.461 pid=356 remix: live stream empty after 101 frames, showing the captured scene instead
+22:29:54.966 pid=356 remix: first frame ready
+22:29:54.991 pid=356 remix: composited first frame 3440x1440
+22:30:10.231 pid=356 remix: 19.7 fps over the last 300 frames
+22:30:26.972 pid=356 remix: 17.9 fps over the last 300 frames
+22:30:34.354 pid=356 remix: F10 original-game view on
+22:30:35.535 pid=356 remix: F10 original-game view off
+22:30:36.027 pid=356 remix: F10 original-game view on
+22:32:04.593 pid=356 remix: F10 original-game view off
+22:32:04.882 pid=356 remix: live camera first sample seq=1 pos=247.582,10.824,668.337 fov=49.99
+22:32:04.883 pid=356 remix: live scene first frame draws=2023 meshes=128 instances=2795 textures=5 skinned=425
+22:32:05.404 pid=356 remix: F10 original-game view on
+22:34:29.442 pid=356 remix: F10 original-game view off
+22:34:29.668 pid=356 remix: live shadow budget reached (262144 KB); static vertex/index bytes are dropped and re-read only to rebuild
+22:35:16.019 pid=356 remix: 1.0 fps over the last 300 frames
+22:35:16.021 pid=356 remix: 100000.0 fps over the last 300 frames
+22:35:16.037 pid=356 remix: live draws=2892 instances=3479 meshes=1957 built=5629 evicted=133 mesh_bytes=536836104 dropped=0
+22:37:08.790 pid=356 remix: 2.7 fps over the last 300 frames
+22:37:08.792 pid=356 remix: 100000.0 fps over the last 300 frames
+22:37:08.810 pid=356 remix: live draws=2897 instances=3499 meshes=1929 built=16441 evicted=439 mesh_bytes=536859536 dropped=0
+22:39:09.638 pid=356 remix: 2.5 fps over the last 300 frames
+22:39:09.640 pid=356 remix: 100000.0 fps over the last 300 frames
+22:39:09.656 pid=356 remix: live draws=2921 instances=3562 meshes=1902 built=27187 evicted=574 mesh_bytes=536639076 dropped=0
+23:01:57.004 pid=356 remix: cheap game startup override scale=0.500; saved preset unchanged; fallback stays scaled until restart
+23:01:58.484 pid=356 remix: enabled runtime=Z:\mnt\second\SteamLibrary\steamapps\common\PortalRTX\bin\.trex\d3d9.dll scene=Z:\home\suraj\Projects\Nier-Automata-Rendering\analysis\runtime\remix-probe\textured-scene\scene.bin
+23:01:58.484 pid=356 remix: focus -> 00000000000200a0 class=NieR:Automata_MainWindow own_process=1
+23:01:58.484 pid=356 remix: starting at monitor size 3440x1440 (game backbuffer 1600x900 format=28)
+23:01:58.979 pid=356 remix: started 3440x1440 startup=5 surfaces=0 sky_skipped=0 untextured=0 live=1
+23:01:58.979 pid=356 remix: paused (game backbuffer 1600x900, Remix 3440x1440); game frames shown
+23:02:00.482 pid=356 remix: resumed at 3440x1440
+23:02:00.482 pid=356 remix: live 1 large buffer writes not mirrored on the CPU (re-read when drawn)
+23:02:02.563 pid=356 remix: no live draws yet after 101 frames; showing the game's own image until they arrive
+23:02:04.363 pid=356 remix: F10 original-game view on
+23:02:05.381 pid=356 remix: F10 original-game view off
+23:02:11.144 pid=356 remix: F10 original-game view on
+23:02:13.494 pid=356 remix: F10 original-game view off
+23:02:42.500 pid=356 remix: live camera first sample seq=1 pos=0.770,7.480,3.260 fov=50.00
+23:02:42.558 pid=356 remix: live scene first frame draws=15 meshes=0 instances=15 textures=6 skinned=0
+23:03:38.281 pid=356 remix: first frame ready
+23:03:38.303 pid=356 remix: live draws=2269 instances=3004 meshes=224 built=224 evicted=0 identical=0 mesh_bytes=93008664 dropped=0
+23:03:38.418 pid=356 remix: composited first frame 3440x1440
+23:03:38.567 pid=356 remix: live shadow budget reached (262144 KB); static vertex/index bytes are dropped and re-read only to rebuild
+23:03:40.698 pid=356 remix: live released 2 stale buffer references (unused for 1800 frames)
+23:04:38.892 pid=356 remix: 4.9 fps over the last 300 frames
+23:04:38.910 pid=356 remix: live draws=2109 instances=2898 meshes=1773 built=1773 evicted=0 identical=19 mesh_bytes=514851564 dropped=0
+23:04:41.604 pid=356 remix: F10 original-game view on
+23:04:43.523 pid=356 remix: F10 original-game view off
+23:04:45.748 pid=356 remix: F10 original-game view on
+23:04:53.730 pid=356 remix: F10 original-game view off
+23:05:47.449 pid=356 remix: 4.4 fps over the last 300 frames
+23:05:47.467 pid=356 remix: live draws=2251 instances=3249 meshes=1877 built=2032 evicted=155 identical=17 mesh_bytes=536458312 dropped=0
+23:06:06.282 pid=356 remix: F10 original-game view on
+23:06:10.191 pid=356 remix: F10 original-game view off
+23:06:12.818 pid=356 remix: F10 original-game view on
+23:06:13.741 pid=356 remix: F10 original-game view off
+23:06:16.650 pid=356 remix: F10 original-game view on
+23:06:18.296 pid=356 remix: F10 original-game view off
+23:06:19.344 pid=356 remix: F10 original-game view on
+23:06:21.660 pid=356 remix: F10 original-game view off
+23:06:27.048 pid=356 remix: 7.6 fps over the last 300 frames
+23:06:27.080 pid=356 remix: live draws=51 instances=51 meshes=1436 built=2078 evicted=642 identical=0 mesh_bytes=531894456 dropped=0
+23:06:28.133 pid=356 remix: F10 original-game view on
+23:06:30.341 pid=356 remix: F10 original-game view off
+23:06:54.317 pid=356 remix: 11.0 fps over the last 300 frames
+23:06:54.360 pid=356 remix: live draws=51 instances=51 meshes=1436 built=2078 evicted=642 identical=0 mesh_bytes=531894456 dropped=0
+23:08:19.744 pid=356 remix: cheap game startup override scale=0.500; saved preset unchanged; fallback stays scaled until restart
+23:08:21.212 pid=356 remix: disabled (NIER_REMIX_LIVE_TEX must be an absolute path 0); game frames are shown
+23:10:44.617 pid=356 remix: cheap game startup override scale=0.500; saved preset unchanged; fallback stays scaled until restart
+23:10:46.083 pid=356 remix: enabled runtime=Z:\mnt\second\SteamLibrary\steamapps\common\PortalRTX\bin\.trex\d3d9.dll scene=Z:\home\suraj\Projects\Nier-Automata-Rendering\analysis\runtime\remix-probe\textured-scene\scene.bin
+23:10:46.083 pid=356 remix: focus -> 00000000000200a0 class=NieR:Automata_MainWindow own_process=1
+23:10:46.083 pid=356 remix: starting at monitor size 3440x1440 (game backbuffer 1600x900 format=28)
+23:10:46.585 pid=356 remix: started 3440x1440 startup=5 surfaces=0 sky_skipped=0 untextured=0 live=1
+23:10:46.585 pid=356 remix: paused (game backbuffer 1600x900, Remix 3440x1440); game frames shown
+23:10:48.288 pid=356 remix: resumed at 3440x1440
+23:10:48.288 pid=356 remix: live 4 large buffer writes not mirrored on the CPU (re-read when drawn)
+23:10:49.896 pid=356 remix: no live draws yet after 101 frames; showing the game's own image until they arrive
+23:11:07.733 pid=356 remix: live camera first sample seq=1 pos=0.770,7.480,3.260 fov=50.00
+23:11:07.749 pid=356 remix: live scene first frame draws=15 meshes=0 instances=15 textures=6 skinned=0
+23:11:20.940 pid=356 remix: live released 2 stale buffer references (unused for 1800 frames)
+23:11:43.110 pid=356 remix: first frame ready
+23:11:43.124 pid=356 remix: first frame ready
+23:11:43.187 pid=356 remix: first frame ready
+23:11:43.199 pid=356 remix: first frame ready
+23:11:43.205 pid=356 remix: first frame ready
+23:11:43.209 pid=356 remix: composited first frame 3440x1440
+23:11:43.220 pid=356 remix: live draws=2268 instances=3003 meshes=278 built=278 evicted=0 identical=0 mesh_bytes=131646108 dropped=0
+23:11:43.568 pid=356 remix: live shadow budget reached (262144 KB); static vertex/index bytes are dropped and re-read only to rebuild
+23:12:01.884 pid=356 remix: F10 original-game view on
+23:12:04.721 pid=356 remix: F10 original-game view off
+23:12:15.534 pid=356 remix: F10 original-game view on
+23:12:47.645 pid=356 remix: F10 original-game view off
+23:13:18.882 pid=356 remix: 3.1 fps over the last 300 frames
+23:13:18.899 pid=356 remix: live draws=2054 instances=2833 meshes=1699 built=1699 evicted=0 identical=17 mesh_bytes=481180888 dropped=0
+23:14:21.341 pid=356 remix: 4.8 fps over the last 300 frames
+23:14:21.358 pid=356 remix: live draws=2060 instances=2841 meshes=1699 built=1699 evicted=0 identical=17 mesh_bytes=481180888 dropped=0
+23:15:16.936 pid=356 remix: 5.4 fps over the last 300 frames
+23:15:16.953 pid=356 remix: live draws=2062 instances=2843 meshes=1699 built=1699 evicted=0 identical=17 mesh_bytes=481180888 dropped=0
+23:16:12.062 pid=356 remix: 5.4 fps over the last 300 frames
+23:16:12.079 pid=356 remix: live draws=2060 instances=2841 meshes=1699 built=1699 evicted=0 identical=17 mesh_bytes=481180888 dropped=0
+23:17:09.037 pid=356 remix: 5.3 fps over the last 300 frames
+23:17:09.055 pid=356 remix: live draws=2060 instances=2841 meshes=1699 built=1699 evicted=0 identical=17 mesh_bytes=481180888 dropped=0
+23:18:04.843 pid=356 remix: 5.4 fps over the last 300 frames
+23:18:04.860 pid=356 remix: live draws=2060 instances=2841 meshes=1699 built=1699 evicted=0 identical=17 mesh_bytes=481180888 dropped=0
+23:19:00.149 pid=356 remix: 5.4 fps over the last 300 frames
+23:19:00.167 pid=356 remix: live draws=2060 instances=2841 meshes=1699 built=1699 evicted=0 identical=17 mesh_bytes=481180888 dropped=0
+23:19:55.673 pid=356 remix: 5.4 fps over the last 300 frames
+23:19:55.690 pid=356 remix: live draws=2054 instances=2833 meshes=1699 built=1699 evicted=0 identical=17 mesh_bytes=481180888 dropped=0
+23:45:57.641 pid=356 remix: cheap game startup override scale=0.500; saved preset unchanged; fallback stays scaled until restart
+23:45:59.134 pid=356 remix: enabled runtime=Z:\mnt\second\SteamLibrary\steamapps\common\PortalRTX\bin\.trex\d3d9.dll scene=Z:\home\suraj\Projects\Nier-Automata-Rendering\analysis\runtime\remix-probe\textured-scene\scene.bin
+23:45:59.134 pid=356 remix: focus -> 00000000000200a0 class=NieR:Automata_MainWindow own_process=1
+23:45:59.134 pid=356 remix: starting at monitor size 3440x1440 (game backbuffer 1600x900 format=28)
+23:45:59.647 pid=356 remix: started 3440x1440 startup=5 surfaces=0 sky_skipped=0 untextured=0 live=1
+23:45:59.647 pid=356 remix: paused (game backbuffer 1600x900, Remix 3440x1440); game frames shown
+23:46:01.500 pid=356 remix: resumed at 3440x1440
+23:46:01.500 pid=356 remix: live 4 large buffer writes not mirrored on the CPU (re-read when drawn)
+23:46:03.128 pid=356 remix: no live draws yet after 101 frames; showing the game's own image until they arrive
+23:46:20.884 pid=356 remix: live camera first sample seq=1 pos=0.770,7.480,3.260 fov=50.00
+23:46:20.900 pid=356 remix: live scene first frame draws=15 meshes=0 instances=15 textures=6 skinned=0
+23:46:33.967 pid=356 remix: live released 2 stale buffer references (unused for 1800 frames)
+23:46:56.718 pid=356 remix: first frame ready
+23:46:56.732 pid=356 remix: first frame ready
+23:46:56.736 pid=356 remix: first frame ready
+23:46:56.810 pid=356 remix: first frame ready
+23:46:56.833 pid=356 remix: first frame ready
+23:46:56.877 pid=356 remix: first frame ready
+23:46:56.893 pid=356 remix: first frame ready
+23:46:56.893 pid=356 remix: first frame ready
+23:46:56.903 pid=356 remix: composited first frame 3440x1440
+23:46:56.910 pid=356 remix: live draws=2268 instances=3003 meshes=278 built=278 evicted=0 identical=0 mesh_bytes=131646108 dropped=0
+23:46:57.252 pid=356 remix: live shadow budget reached (262144 KB); static vertex/index bytes are dropped and re-read only to rebuild
+23:47:54.396 pid=356 remix: 5.2 fps over the last 300 frames (ms/frame: present 1, copy 0, readback 169, publish 0, other 21)
+23:47:54.414 pid=356 remix: live draws=2054 instances=2831 meshes=1743 built=1743 evicted=0 identical=17 mesh_bytes=505972536 dropped=0
+23:48:48.471 pid=356 remix: 5.5 fps over the last 300 frames (ms/frame: present 1, copy 0, readback 162, publish 0, other 17)
+23:48:48.489 pid=356 remix: live draws=2053 instances=2830 meshes=1743 built=1743 evicted=0 identical=17 mesh_bytes=505972536 dropped=0
+23:49:42.784 pid=356 remix: 5.5 fps over the last 300 frames (ms/frame: present 1, copy 0, readback 163, publish 0, other 17)
+23:49:42.801 pid=356 remix: live draws=2048 instances=2825 meshes=1743 built=1743 evicted=0 identical=17 mesh_bytes=505972536 dropped=0
+23:50:38.624 pid=356 remix: 5.4 fps over the last 300 frames (ms/frame: present 1, copy 0, readback 168, publish 0, other 17)
+23:50:38.641 pid=356 remix: live draws=2053 instances=2830 meshes=1743 built=1743 evicted=0 identical=17 mesh_bytes=505972536 dropped=0
+23:51:33.024 pid=356 remix: 5.5 fps over the last 300 frames (ms/frame: present 1, copy 0, readback 163, publish 0, other 17)
+23:51:33.041 pid=356 remix: live draws=2053 instances=2830 meshes=1743 built=1743 evicted=0 identical=17 mesh_bytes=505972536 dropped=0
+23:52:33.407 pid=356 remix: 5.0 fps over the last 300 frames (ms/frame: present 1, copy 0, readback 183, publish 0, other 17)
+23:52:33.424 pid=356 remix: live draws=2053 instances=2830 meshes=1743 built=1743 evicted=0 identical=17 mesh_bytes=505972536 dropped=0
+23:53:28.573 pid=356 remix: 5.4 fps over the last 300 frames (ms/frame: present 1, copy 0, readback 166, publish 0, other 17)
+23:53:28.591 pid=356 remix: live draws=2053 instances=2830 meshes=1743 built=1743 evicted=0 identical=17 mesh_bytes=505972536 dropped=0
+23:53:56.010 pid=356 remix: F10 original-game view on (capture suspended)
+23:54:34.990 pid=356 remix: F10 original-game view off (capture resumed)
+23:54:46.663 pid=356 remix: 3.8 fps over the last 300 frames (ms/frame: present 1, copy 0, readback 113, publish 0, other 147)
+23:54:46.680 pid=356 remix: live draws=2381 instances=3160 meshes=1670 built=2267 evicted=597 identical=22 mesh_bytes=532883676 dropped=0
+23:55:18.953 pid=356 remix: 9.3 fps over the last 300 frames (ms/frame: present 1, copy 0, readback 90, publish 0, other 17)
+23:55:18.971 pid=356 remix: live draws=2381 instances=3160 meshes=1678 built=2275 evicted=597 identical=22 mesh_bytes=533452060 dropped=0
+23:55:53.556 pid=356 remix: 8.7 fps over the last 300 frames (ms/frame: present 1, copy 0, readback 97, publish 0, other 17)
+23:55:53.573 pid=356 remix: live draws=2383 instances=3162 meshes=1725 built=2323 evicted=598 identical=22 mesh_bytes=536773492 dropped=0
+23:56:24.488 pid=356 remix: 9.7 fps over the last 300 frames (ms/frame: present 1, copy 0, readback 85, publish 0, other 17)
+23:56:24.506 pid=356 remix: live draws=2383 instances=3162 meshes=1725 built=2323 evicted=598 identical=22 mesh_bytes=536773492 dropped=0
+23:57:00.010 pid=356 remix: 8.4 fps over the last 300 frames (ms/frame: present 1, copy 0, readback 101, publish 0, other 17)
+23:57:00.028 pid=356 remix: live draws=2388 instances=3167 meshes=1725 built=2323 evicted=598 identical=22 mesh_bytes=536773492 dropped=0
+23:57:31.267 pid=356 remix: 9.6 fps over the last 300 frames (ms/frame: present 1, copy 0, readback 86, publish 0, other 17)
+23:57:31.285 pid=356 remix: live draws=2428 instances=3207 meshes=1725 built=2323 evicted=598 identical=22 mesh_bytes=536773492 dropped=0
+23:58:02.715 pid=356 remix: 9.5 fps over the last 300 frames (ms/frame: present 1, copy 0, readback 87, publish 0, other 17)
+23:58:02.734 pid=356 remix: live draws=2391 instances=3170 meshes=1725 built=2323 evicted=598 identical=22 mesh_bytes=536773492 dropped=0
+17:32:43.537 pid=356 remix: enabled runtime=Z:\mnt\second\SteamLibrary\steamapps\common\PortalRTX\bin\.trex\d3d9.dll scene=Z:\home\suraj\Projects\Nier-Automata-Rendering\analysis\runtime\remix-probe\textured-scene\scene.bin
+17:32:43.537 pid=356 remix: focus -> 00000000000200a0 class=NieR:Automata_MainWindow own_process=1
+17:32:43.537 pid=356 remix: starting at monitor size 3440x1440 (game backbuffer 1600x900 format=28)
+17:32:44.763 pid=356 remix: started 3440x1440 startup=5 surfaces=0 sky_skipped=0 untextured=0 live=1
+17:32:44.763 pid=356 remix: paused (game backbuffer 1600x900, Remix 3440x1440); game frames shown
+17:32:46.365 pid=356 remix: resumed at 3440x1440
+17:32:46.381 pid=356 remix: live 3 large buffer writes not mirrored on the CPU (re-read when drawn)
+17:32:48.467 pid=356 remix: no live draws yet after 101 frames; showing the game's own image until they arrive
+17:33:27.899 pid=356 remix: live camera first sample seq=1 pos=0.770,7.480,3.260 fov=50.00
+17:33:27.907 pid=356 remix: live scene target 2580x1080 of 3440x1440; 6 draws into other targets skipped (shadow maps, post passes)
+17:33:27.981 pid=356 remix: live scene first frame draws=6 meshes=6 instances=6 textures=5 skinned=0
+17:58:58.631 pid=356 remix: enabled runtime=Z:\mnt\second\SteamLibrary\steamapps\common\PortalRTX\bin\.trex\d3d9.dll scene=Z:\home\suraj\Projects\Nier-Automata-Rendering\analysis\runtime\remix-probe\textured-scene\scene.bin
+17:58:58.631 pid=356 remix: focus -> 00000000000200a0 class=NieR:Automata_MainWindow own_process=1
+17:58:58.631 pid=356 remix: starting at monitor size 3440x1440 (game backbuffer 1600x900 format=28)
+17:58:59.052 pid=356 remix: focus -> 00000000000100ce class=#32770 own_process=1
+17:58:59.053 pid=356 remix: focus returned to the game from 00000000000100ce class=#32770
+17:59:04.020 pid=356 remix: focus -> 00000000000100ce class=#32770 own_process=1
+17:59:04.020 pid=356 remix: focus returned to the game from 00000000000100ce class=#32770
+17:59:04.636 pid=356 remix: watchdog worker in 'dxvk_CreateD3D9' for 5714 ms; game presents=348, last 6 ms ago, hook in 'returned to game'
+17:59:05.178 pid=356 remix: focus -> 00000000000100ce class=#32770 own_process=1
+17:59:05.178 pid=356 remix: focus returned to the game from 00000000000100ce class=#32770
+17:59:34.666 pid=356 remix: watchdog worker in 'dxvk_CreateD3D9' for 35743 ms; game presents=2140, last 6 ms ago, hook in 'returned to game'
+18:00:04.696 pid=356 remix: watchdog worker in 'dxvk_CreateD3D9' for 65774 ms; game presents=3946, last 14 ms ago, hook in 'returned to game'
+18:00:21.717 pid=356 remix: F10 original-game view on (capture suspended)
+18:00:26.412 pid=356 remix: F10 original-game view off (capture resumed)
+18:00:34.726 pid=356 remix: watchdog worker in 'dxvk_CreateD3D9' for 95803 ms; game presents=5690, last 5 ms ago, hook in 'returned to game'
+18:00:36.513 pid=356 remix: F10 original-game view on (capture suspended)
+18:01:04.756 pid=356 remix: watchdog worker in 'dxvk_CreateD3D9' for 125833 ms; game presents=7500, last 14 ms ago, hook in 'returned to game'
+18:01:29.909 pid=356 remix: focus -> 00000000000100ce class=#32770 own_process=1
+18:01:29.909 pid=356 remix: focus returned to the game from 00000000000100ce class=#32770
+18:01:34.786 pid=356 remix: watchdog worker in 'dxvk_CreateD3D9' for 155862 ms; game presents=9201, last 2 ms ago, hook in 'returned to game'
+18:01:50.694 pid=356 remix: focus -> 0000000000010020 class=#32769 own_process=0
+18:01:51.247 pid=356 remix: focus -> 00000000000100ce class=#32770 own_process=1
+18:01:51.247 pid=356 remix: focus returned to the game from 00000000000100ce class=#32770
+18:01:51.819 pid=356 remix: focus -> 00000000000100ce class=#32770 own_process=1
+18:01:51.819 pid=356 remix: focus returned to the game from 00000000000100ce class=#32770
+18:01:52.529 pid=356 remix: focus -> 0000000000010020 class=#32769 own_process=0
+18:01:52.884 pid=356 remix: focus -> 00000000000200a0 class=NieR:Automata_MainWindow own_process=1
+18:01:53.474 pid=356 remix: focus -> 00000000000100ce class=#32770 own_process=1
+18:01:53.475 pid=356 remix: focus returned to the game from 00000000000100ce class=#32770
+18:01:53.508 pid=356 remix: focus -> 00000000000100ce class=#32770 own_process=1
+18:01:53.508 pid=356 remix: focus returned to the game from 00000000000100ce class=#32770
+18:01:54.211 pid=356 remix: focus -> 00000000000100ce class=#32770 own_process=1
+18:01:54.211 pid=356 remix: focus returned to the game from 00000000000100ce class=#32770
+18:01:55.104 pid=356 remix: focus -> 00000000000100ce class=#32770 own_process=1
+18:01:55.104 pid=356 remix: focus returned to the game from 00000000000100ce class=#32770
+18:01:56.242 pid=356 remix: focus -> 00000000000100ce class=#32770 own_process=1
+18:01:56.243 pid=356 remix: focus returned to the game from 00000000000100ce class=#32770
+18:01:57.153 pid=356 remix: focus -> 0000000000010020 class=#32769 own_process=0
+18:01:57.917 pid=356 remix: focus -> 00000000000100ce class=#32770 own_process=1
+18:01:57.917 pid=356 remix: focus returned to the game from 00000000000100ce class=#32770
+18:01:58.597 pid=356 remix: focus -> 00000000000100ce class=#32770 own_process=1
+18:01:58.597 pid=356 remix: focus returned to the game from 00000000000100ce class=#32770
+18:01:59.393 pid=356 remix: focus -> 0000000000010020 class=#32769 own_process=0
+18:02:00.035 pid=356 remix: focus -> 00000000000100ce class=#32770 own_process=1
+18:02:00.036 pid=356 remix: focus returned to the game from 00000000000100ce class=#32770
+18:02:01.915 pid=356 remix: focus -> 00000000000100ce class=#32770 own_process=1
+18:02:01.916 pid=356 remix: focus returned to the game from 00000000000100ce class=#32770
+18:02:02.407 pid=356 remix: focus -> 0000000000010020 class=#32769 own_process=0
+18:02:02.576 pid=356 remix: focus -> 00000000000200a0 class=NieR:Automata_MainWindow own_process=1
+18:02:04.816 pid=356 remix: watchdog worker in 'dxvk_CreateD3D9' for 185892 ms; game presents=10581, last 16 ms ago, hook in 'returned to game'
+18:02:34.846 pid=356 remix: watchdog worker in 'dxvk_CreateD3D9' for 215922 ms; game presents=12117, last 26 ms ago, hook in 'returned to game'
+18:02:48.090 pid=356 remix: focus -> 0000000000010020 class=#32769 own_process=0
+18:02:50.042 pid=356 remix: focus -> 00000000000100ce class=#32770 own_process=1
+18:02:50.042 pid=356 remix: focus returned to the game from 00000000000100ce class=#32770
+18:02:51.087 pid=356 remix: focus -> 00000000000200ce class=#32770 own_process=1
+18:02:51.088 pid=356 remix: focus returned to the game from 00000000000200ce class=#32770
+18:02:52.117 pid=356 remix: focus -> 00000000000200ce class=#32770 own_process=1
+18:02:52.117 pid=356 remix: focus returned to the game from 00000000000200ce class=#32770
+18:02:52.413 pid=356 remix: started 3440x1440 startup=5 surfaces=0 sky_skipped=0 untextured=0 live=1
+18:02:54.468 pid=356 remix: focus -> 0000000000000000 class= own_process=0
+18:02:55.136 pid=356 remix: focus -> 00000000000200a0 class=NieR:Automata_MainWindow own_process=1
+18:03:10.156 pid=356 remix: F10 original-game view off (capture resumed)
+18:03:10.180 pid=356 remix: live camera first sample seq=3313 pos=-1491.743,1778.949,429.496 fov=10.00
+18:03:10.183 pid=356 remix: live 492 large buffer writes not mirrored on the CPU (re-read when drawn)
+18:03:10.834 pid=356 remix: live scene first frame draws=3264 meshes=255 instances=4832 textures=4 skinned=727
+18:03:11.625 pid=356 remix: first frame ready
+18:03:11.627 pid=356 remix: first frame ready
+18:03:11.737 pid=356 remix: first frame ready
+18:03:11.756 pid=356 remix: first frame ready
+18:03:11.757 pid=356 remix: first frame ready
+18:03:11.849 pid=356 remix: first frame ready
+18:03:11.854 pid=356 remix: first frame ready
+18:03:11.919 pid=356 remix: first frame ready
+18:03:11.940 pid=356 remix: first frame ready
+18:03:11.941 pid=356 remix: first frame ready
+18:03:11.959 pid=356 remix: first frame ready
+18:03:11.973 pid=356 remix: first frame ready
+18:03:11.989 pid=356 remix: first frame ready
+18:03:12.005 pid=356 remix: first frame ready
+18:03:12.027 pid=356 remix: first frame ready
+18:03:12.038 pid=356 remix: first frame ready
+18:03:12.054 pid=356 remix: first frame ready
+18:03:12.090 pid=356 remix: first frame ready
+18:03:12.093 pid=356 remix: first frame ready
+18:03:12.112 pid=356 remix: first frame ready
+18:03:12.126 pid=356 remix: first frame ready
+18:03:12.141 pid=356 remix: first frame ready
+18:03:12.159 pid=356 remix: first frame ready
+18:03:12.173 pid=356 remix: first frame ready
+18:03:12.191 pid=356 remix: first frame ready
+18:03:12.193 pid=356 remix: composited first frame 3440x1440
+18:03:12.202 pid=356 remix: live scene target 2580x1080 of 3440x1440; 1304 draws into other targets skipped (shadow maps, post passes)
+18:03:12.202 pid=356 remix: live draws=2044 instances=2829 meshes=762 built=843 evicted=0 identical=0 blended=62 untextured=1157 textures=8 hud=0 small_viewport=0 scene=2580x1080 skipped_pass=1304 fallbacks=0 mesh_bytes=300272148 dropped=0 lights=0 light_creates=0 sky=12
+18:03:13.254 pid=356 remix: live shadow budget reached (262144 KB); static vertex/index bytes are dropped and re-read only to rebuild
+18:03:22.774 pid=356 remix: focus -> 0000000000010020 class=#32769 own_process=0
+18:03:24.035 pid=356 remix: focus -> 00000000000200a0 class=NieR:Automata_MainWindow own_process=1
+18:04:23.689 pid=356 remix: 4.2 fps over the last 300 frames (ms/frame: present 1, copy 0, readback 191, publish 0, other 46)
+18:04:23.727 pid=356 remix: live draws=2086 instances=2881 meshes=1805 built=7968 evicted=5104 identical=0 blended=62 untextured=0 textures=221 hud=0 small_viewport=0 scene=2580x1080 skipped_pass=1310 fallbacks=1 mesh_bytes=574553068 dropped=0 lights=0 light_creates=0 sky=18
+18:06:14.007 pid=356 remix: 2.7 fps over the last 300 frames (ms/frame: present 1, copy 0, readback 333, publish 0, other 34)
+18:06:14.042 pid=356 remix: live draws=2083 instances=2919 meshes=1803 built=16103 evicted=13241 identical=0 blended=58 untextured=0 textures=221 hud=0 small_viewport=0 scene=2580x1080 skipped_pass=1313 fallbacks=1 mesh_bytes=574036728 dropped=0 lights=0 light_creates=0 sky=18
+18:06:14.987 pid=356 remix: focus -> 0000000000010020 class=#32769 own_process=0
+18:06:16.036 pid=356 remix: focus -> 00000000000200a0 class=NieR:Automata_MainWindow own_process=1
+18:06:41.103 pid=356 remix: enabled runtime=Z:\mnt\second\SteamLibrary\steamapps\common\PortalRTX\bin\.trex\d3d9.dll scene=Z:\home\suraj\Projects\Nier-Automata-Rendering\analysis\runtime\remix-probe\textured-scene\scene.bin
+18:06:41.103 pid=356 remix: focus -> 00000000000200a0 class=NieR:Automata_MainWindow own_process=1
+18:06:41.103 pid=356 remix: starting at monitor size 3440x1440 (game backbuffer 1600x900 format=28)
+18:06:41.682 pid=356 remix: started 3440x1440 startup=5 surfaces=0 sky_skipped=0 untextured=0 live=1
+18:06:41.683 pid=356 remix: paused (game backbuffer 1600x900, Remix 3440x1440); game frames shown
+18:06:43.786 pid=356 remix: resumed at 3440x1440
+18:06:43.786 pid=356 remix: live 1 large buffer writes not mirrored on the CPU (re-read when drawn)
+18:06:45.759 pid=356 remix: no live draws yet after 101 frames; showing the game's own image until they arrive
+18:06:50.541 pid=356 remix: F10 original-game view on (capture suspended)
+18:06:52.745 pid=356 remix: F10 original-game view off (capture resumed)
+18:06:53.936 pid=356 remix: F10 original-game view on (capture suspended)
+18:07:40.401 pid=356 remix: F10 original-game view off (capture resumed)
+18:07:40.453 pid=356 remix: live camera first sample seq=1 pos=0.770,7.480,3.260 fov=50.00
+18:07:40.499 pid=356 remix: live scene target 2580x1080 of 3440x1440; 18 draws into other targets skipped (shadow maps, post passes)
+18:07:40.538 pid=356 remix: live scene first frame draws=58 meshes=6 instances=6 textures=4 skinned=0
+18:07:41.769 pid=356 remix: F10 original-game view on (capture suspended)
+18:08:27.930 pid=356 remix: F10 original-game view off (capture resumed)
+18:08:31.032 pid=356 remix: first frame ready
+18:08:31.049 pid=356 remix: live draws=989 instances=948 meshes=380 built=382 evicted=0 identical=17 blended=45 untextured=178 textures=71 hud=0 small_viewport=0 scene=2580x1080 skipped_pass=925 fallbacks=1 mesh_bytes=144241204 dropped=0 lights=0 light_creates=0 sky=16
+18:08:31.253 pid=356 remix: composited first frame 3440x1440
+20:01:06.889 pid=356 remix: enabled runtime=Z:\mnt\second\SteamLibrary\steamapps\common\PortalRTX\bin\.trex\d3d9.dll scene=Z:\home\suraj\Projects\Nier-Automata-Rendering\analysis\runtime\remix-probe\textured-scene\scene.bin
+20:01:06.889 pid=356 remix: focus -> 00000000000200a0 class=NieR:Automata_MainWindow own_process=1
+20:01:06.889 pid=356 remix: starting at monitor size 3440x1440 (game backbuffer 1600x900 format=28)
+20:01:07.873 pid=356 remix: started 3440x1440 startup=5 surfaces=0 sky_skipped=0 untextured=0 live=1
+20:01:07.873 pid=356 remix: paused (game backbuffer 1600x900, Remix 3440x1440); game frames shown
+20:01:09.776 pid=356 remix: resumed at 3440x1440
+20:01:09.805 pid=356 remix: live 1 large buffer writes not mirrored on the CPU (re-read when drawn)
+20:01:11.827 pid=356 remix: no live draws yet after 101 frames; showing the game's own image until they arrive
+20:01:55.221 pid=356 remix: live camera first sample seq=1 pos=0.770,7.480,3.260 fov=50.00
+20:01:55.255 pid=356 remix: live scene target 2580x1080 of 3440x1440; 6 draws into other targets skipped (shadow maps, post passes)
+20:01:55.333 pid=356 remix: live scene first frame draws=3 meshes=3 instances=3 textures=4 skinned=0
+20:02:53.781 pid=356 remix: live released 2 stale buffer references (unused for 1800 frames)
+20:03:36.303 pid=356 remix: first frame ready
+20:03:36.306 pid=356 remix: first frame ready
+20:03:36.323 pid=356 remix: first frame ready
+20:03:36.339 pid=356 remix: first frame ready
+20:03:36.355 pid=356 remix: first frame ready
+20:03:36.369 pid=356 remix: first frame ready
+20:03:36.384 pid=356 remix: first frame ready
+20:03:36.399 pid=356 remix: first frame ready
+20:03:36.441 pid=356 remix: first frame ready
+20:03:36.473 pid=356 remix: first frame ready
+20:03:36.494 pid=356 remix: first frame ready
+20:03:36.496 pid=356 remix: first frame ready
+20:03:36.514 pid=356 remix: first frame ready
+20:03:36.540 pid=356 remix: first frame ready
+20:03:36.545 pid=356 remix: first frame ready
+20:03:36.555 pid=356 remix: composited first frame 3440x1440
+20:03:36.561 pid=356 remix: live draws=569 instances=562 meshes=377 built=404 evicted=0 identical=0 blended=49 untextured=488 textures=25 hud=0 small_viewport=0 scene=2580x1080 skipped_pass=892 fallbacks=2 mesh_bytes=129036244 dropped=0 lights=9 light_creates=9 sky=0 prepass=390 alpha_tested=146 light_state=0xff
+20:04:10.671 pid=356 remix: live shadow budget reached (262144 KB); static vertex/index bytes are dropped and re-read only to rebuild
+20:04:54.466 pid=356 remix: 3.9 fps over the last 300 frames (ms/frame: present 1, copy 0, readback 205, publish 0, other 53)
+20:04:54.516 pid=356 remix: live draws=1299 instances=1432 meshes=1346 built=4193 evicted=2236 identical=45 blended=81 untextured=0 textures=241 hud=0 small_viewport=0 scene=2580x1080 skipped_pass=1363 fallbacks=2 mesh_bytes=531858872 dropped=0 lights=27 light_creates=991 sky=7 prepass=776 alpha_tested=454 light_state=0xff
+20:05:22.952 pid=356 remix: F10 original-game view on (capture suspended)
+20:05:28.641 pid=356 remix: F10 original-game view off (capture resumed)
+20:06:58.957 pid=356 remix: 2.4 fps over the last 300 frames (ms/frame: present 1, copy 0, readback 346, publish 0, other 69)
+20:06:59.007 pid=356 remix: live draws=1243 instances=1420 meshes=1374 built=4230 evicted=2245 identical=45 blended=82 untextured=0 textures=241 hud=0 small_viewport=0 scene=2580x1080 skipped_pass=1355 fallbacks=2 mesh_bytes=440038004 dropped=0 lights=27 light_creates=1991 sky=7 prepass=771 alpha_tested=402 light_state=0xff
+20:08:57.448 pid=356 remix: 2.5 fps over the last 300 frames (ms/frame: present 1, copy 0, readback 345, publish 0, other 50)
+20:08:57.499 pid=356 remix: live draws=1243 instances=1420 meshes=1374 built=4230 evicted=2245 identical=45 blended=82 untextured=0 textures=241 hud=0 small_viewport=0 scene=2580x1080 skipped_pass=1355 fallbacks=2 mesh_bytes=440038004 dropped=0 lights=27 light_creates=2986 sky=7 prepass=771 alpha_tested=402 light_state=0xff
+20:10:56.938 pid=356 remix: 2.5 fps over the last 300 frames (ms/frame: present 1, copy 0, readback 348, publish 0, other 50)
+20:10:56.989 pid=356 remix: live draws=1325 instances=1458 meshes=1437 built=4293 evicted=2245 identical=45 blended=81 untextured=0 textures=241 hud=0 small_viewport=0 scene=2580x1080 skipped_pass=1352 fallbacks=2 mesh_bytes=458818616 dropped=0 lights=27 light_creates=3982 sky=7 prepass=790 alpha_tested=464 light_state=0xff
+20:11:08.628 pid=356 remix: F10 original-game view on (capture suspended)
+23:11:00.700 pid=356 remix: sky dome texture Z:\home\suraj\Projects\Nier-Automata-Rendering\analysis\runtime\remix-probe\textured-scene\nier_sky_hdr.dds strength 2.00
+23:11:00.700 pid=356 remix: enabled runtime=Z:\mnt\second\SteamLibrary\steamapps\common\PortalRTX\bin\.trex\d3d9.dll scene=Z:\home\suraj\Projects\Nier-Automata-Rendering\analysis\runtime\remix-probe\textured-scene\scene.bin
+23:11:00.700 pid=356 remix: focus -> 00000000000200a0 class=NieR:Automata_MainWindow own_process=1
+23:11:00.700 pid=356 remix: starting at monitor size 3440x1440 (game backbuffer 1600x900 format=28)
+23:11:01.290 pid=356 remix: started 3440x1440 startup=5 surfaces=0 sky_skipped=0 untextured=0 live=1
+23:11:01.290 pid=356 remix: paused (game backbuffer 1600x900, Remix 3440x1440); game frames shown
+23:11:03.644 pid=356 remix: resumed at 3440x1440
+23:11:03.654 pid=356 remix: live 1 large buffer writes not mirrored on the CPU (re-read when drawn)
+23:11:05.569 pid=356 remix: no live draws yet after 101 frames; showing the game's own image until they arrive
+23:11:44.922 pid=356 remix: live camera first sample seq=1 pos=0.770,7.480,3.260 fov=50.00
+23:11:44.927 pid=356 remix: live scene target 2580x1080 of 3440x1440; 6 draws into other targets skipped (shadow maps, post passes)
+23:11:44.996 pid=356 remix: live scene first frame draws=3 meshes=3 instances=3 textures=3 skinned=0
+23:12:37.283 pid=356 remix: live released 2 stale buffer references (unused for 1800 frames)
+23:12:47.544 pid=356 remix: first frame ready
+23:12:47.548 pid=356 remix: first frame ready
+23:12:47.571 pid=356 remix: first frame ready
+23:12:47.581 pid=356 remix: first frame ready
+23:12:47.593 pid=356 remix: first frame ready
+23:12:47.610 pid=356 remix: first frame ready
+23:12:47.626 pid=356 remix: first frame ready
+23:12:47.676 pid=356 remix: first frame ready
+23:12:47.714 pid=356 remix: first frame ready
+23:12:47.733 pid=356 remix: first frame ready
+23:12:47.735 pid=356 remix: first frame ready
+23:12:47.751 pid=356 remix: first frame ready
+23:12:47.791 pid=356 remix: first frame ready
+23:12:47.796 pid=356 remix: first frame ready
+23:12:47.798 pid=356 remix: composited first frame 3440x1440
+23:12:47.812 pid=356 remix: live draws=569 instances=562 meshes=395 built=422 evicted=0 identical=0 blended=49 untextured=488 textures=24 hud=0 small_viewport=0 scene=2580x1080 skipped_pass=892 fallbacks=2 mesh_bytes=133915488 dropped=0 lights=9 light_creates=9 sky=0 prepass=390 alpha_tested=146 light_state=0xff
+23:12:48.313 pid=356 remix: native HUD handoff 3440x1440 before game sprites target=3440x1440 viewport=0,0 3440x1440
+23:13:26.911 pid=356 remix: F10 original-game view on (capture suspended)
+23:13:31.352 pid=356 remix: F10 original-game view off (capture resumed)
+23:13:42.837 pid=356 remix: F10 original-game view on (capture suspended)
+23:13:44.901 pid=356 remix: F10 original-game view off (capture resumed)
+23:13:57.482 pid=356 remix: 4.3 fps over the last 300 frames (ms/frame: present 1, copy 0, readback 144, publish 0, other 87)
+23:13:57.571 pid=356 remix: live draws=688 instances=835 meshes=2026 built=10220 evicted=7710 identical=16 blended=45 untextured=0 textures=141 hud=0 small_viewport=0 scene=2580x1080 skipped_pass=984 fallbacks=2 mesh_bytes=536831056 dropped=0 lights=9 light_creates=692 sky=8 prepass=458 alpha_tested=193 light_state=0xff
+23:15:01.659 pid=356 remix: 4.7 fps over the last 300 frames (ms/frame: present 1, copy 0, readback 148, publish 0, other 65)
+23:15:01.725 pid=356 remix: live draws=635 instances=826 meshes=2040 built=18908 evicted=16384 identical=16 blended=45 untextured=0 textures=141 hud=0 small_viewport=0 scene=2580x1080 skipped_pass=982 fallbacks=2 mesh_bytes=535745292 dropped=0 lights=9 light_creates=1292 sky=8 prepass=449 alpha_tested=149 light_state=0xff
+23:16:14.517 pid=356 remix: 4.1 fps over the last 300 frames (ms/frame: present 1, copy 0, readback 148, publish 0, other 94)
+23:16:14.582 pid=356 remix: live draws=699 instances=833 meshes=2012 built=27616 evicted=25120 identical=17 blended=49 untextured=0 textures=144 hud=0 small_viewport=0 scene=2580x1080 skipped_pass=980 fallbacks=2 mesh_bytes=535670208 dropped=0 lights=9 light_creates=1890 sky=8 prepass=452 alpha_tested=210 light_state=0xff
+23:29:04.271 pid=356 remix: sky dome texture Z:\home\suraj\Projects\Nier-Automata-Rendering\analysis\runtime\remix-probe\textured-scene\nier_sky_hdr.dds strength 2.00
+23:29:04.271 pid=356 remix: enabled runtime=Z:\mnt\second\SteamLibrary\steamapps\common\PortalRTX\bin\.trex\d3d9.dll scene=Z:\home\suraj\Projects\Nier-Automata-Rendering\analysis\runtime\remix-probe\textured-scene\scene.bin
+23:29:04.271 pid=356 remix: focus -> 00000000000200a0 class=NieR:Automata_MainWindow own_process=1
+23:29:04.271 pid=356 remix: starting at monitor size 3440x1440 (game backbuffer 1600x900 format=28)
+23:29:04.878 pid=356 remix: started 3440x1440 startup=5 surfaces=0 sky_skipped=0 untextured=0 live=1
+23:29:04.879 pid=356 remix: paused (game backbuffer 1600x900, Remix 3440x1440); game frames shown
+23:29:07.332 pid=356 remix: resumed at 3440x1440
+23:29:07.350 pid=356 remix: live 2 large buffer writes not mirrored on the CPU (re-read when drawn)
+23:29:09.259 pid=356 remix: no live draws yet after 101 frames; showing the game's own image until they arrive
+23:29:51.922 pid=356 remix: live camera first sample seq=1 pos=0.770,7.480,3.260 fov=50.00
+23:29:51.928 pid=356 remix: live scene target 2580x1080 of 3440x1440; 6 draws into other targets skipped (shadow maps, post passes)
+23:29:51.997 pid=356 remix: live scene first frame draws=3 meshes=3 instances=3 textures=3 skinned=0
+23:30:43.916 pid=356 remix: live released 2 stale buffer references (unused for 1800 frames)
+23:30:53.336 pid=356 remix: first frame ready
+23:30:53.342 pid=356 remix: composited first frame 3440x1440
+23:30:53.351 pid=356 remix: first frame ready
+23:30:53.372 pid=356 remix: live draws=569 instances=562 meshes=395 built=422 evicted=0 identical=0 blended=49 untextured=488 textures=24 hud=0 small_viewport=0 scene=2580x1080 skipped_pass=892 fallbacks=2 mesh_bytes=133915488 dropped=0 lights=9 light_creates=9 sky=0 prepass=390 alpha_tested=146 light_state=0xff
+23:30:53.743 pid=356 remix: native HUD handoff 3440x1440 before game sprites target=3440x1440 viewport=0,0 3440x1440
+23:31:35.880 pid=356 remix: live shadow budget reached (262144 KB); static vertex/index bytes are dropped and re-read only to rebuild
+23:32:16.858 pid=356 remix: 3.6 fps over the last 300 frames (ms/frame: present 1, copy 0, readback 152, publish 0, other 125)
+23:32:17.092 pid=356 remix: live draws=1296 instances=1429 meshes=1980 built=22223 evicted=19717 identical=36 blended=80 untextured=0 textures=240 hud=0 small_viewport=0 scene=2580x1080 skipped_pass=1360 fallbacks=2 mesh_bytes=536714248 dropped=0 lights=26 light_creates=970 sky=7 prepass=775 alpha_tested=449 light_state=0xff
+23:33:37.445 pid=356 remix: F10 original-game view on (capture suspended)
+23:33:45.946 pid=356 remix: F10 original-game view off (capture resumed)
+23:34:31.009 pid=356 remix: 2.2 fps over the last 300 frames (ms/frame: present 1, copy 0, readback 230, publish 0, other 216)
+23:34:31.123 pid=356 remix: live draws=1294 instances=1794 meshes=2374 built=59917 evicted=56915 identical=23 blended=53 untextured=0 textures=284 hud=0 small_viewport=0 scene=2580x1080 skipped_pass=1333 fallbacks=2 mesh_bytes=536857948 dropped=0 lights=12 light_creates=1810 sky=9 prepass=842 alpha_tested=412 light_state=0xff
