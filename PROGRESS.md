@@ -38,7 +38,8 @@ Latest F9 capture from the user: `NIER_CAPTURE/frame_41686139` (unused so far).
 Eviction churn is new and likely from pose-specific skinned keys: a performance problem, not yet investigated.
 
 **Next steps, in order** (step 1 done 23:32: world, HUD, 2B, sun and sky all seen live)
-1. Performance: mesh-cache thrash first (pose-specific skinned keys vs 512 MB budget), then asynchronous readback
+1. Performance (research: `analysis/PERF_RESEARCH.md`): capture static buffers at CreateBuffer, mesh-cache thrash
+   (pose-specific skinned keys vs 512 MB budget), then batched/deferred readback
    (read the previous frame's copies instead of stalling the GPU on every Map).
 2. Blown-out surfaces on the right of the live shot: sun scale or missing textures; check against frame_41686139.
 3. Laptop (Spark) run of the live build: see `analysis/LAPTOP_PORT.md`; answers whether readback cost is Proton's.
