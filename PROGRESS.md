@@ -6,6 +6,14 @@ State at this pause: nothing installed on either machine, no game running, lapto
 uncommitted on `main` above `a7a3c0b`. The noon PAUSED note below still applies in substance: do not launch a game or
 render unattended (and a save cannot be loaded without the operator).
 
+**LATEST (2026-10-30 21:44): the world renders on the laptop; popping is skinned-pose churn; FG wastes GPU.**
+Scene-target fix (`df53a3c`) confirmed: scene 2880x1800, 97–423 draws, 1–2 skipped. New rebuild-reason counters
+(`0543ecc`): **82% of mesh rebuilds are skinned poses** (29,900 of ~36,600 in 180 s) — Phase 4 is the fix. The
+runtime log shows **DLSS-FG running into Remix's hidden window** (`DLFG runtime preset: recreating FG for C`) and
+captured textures lacking mips. Next: `rtx.conf` (FG off until Remix presents, DLSS/RR explicit, verified via
+"Effective RtxOption values"), then Phase 4, mips, and FG with Remix owning presentation. Details: newest section of
+`analysis/LAPTOP_PORT.md`.
+
 **STAGE 3 PASSES (2026-10-30 20:58): first live path-traced frame on the laptop, ARM64EC runtime.** Build
 `ec50b132…` (commit `0261808`), undocked, camp: live camera, main scene target 2880x1800, accepted world draws,
 `composited first frame 2880x1800`, native HUD replay ok, no crash. Indicative (battery) cost: 10–11 fps at 60–120

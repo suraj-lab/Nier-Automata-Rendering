@@ -351,3 +351,44 @@ textures and a pale world (mask textures are often pale), and it fits `built` gr
 Next: log the chosen slot and texture identity per logical mesh across rebuilds; make capture fire on demand or after
 a set frame count instead of at the first HUD frame; then stabilise slot selection from the measured shader
 declarations (`analysis/SHADER_DECLARATIONS.md`) before any exposure work.
+
+### The world renders; popping is skinned-pose churn; FG is running into the hidden window — 2026-10-30 21:26–21:44
+
+**Scene-target fix confirmed on hardware** (`df53a3c`, build `64bfc423…`, run `runtime/laptop-port/live-ec-scenefix/`):
+scene target `2880x1800` in every window (was `1440x900`), draws skipped as other targets 1–2 (was 440–1,497), accepted
+draws 97–423 (was 61–234), 143 textures. User: the world renders, but objects pop in and out. 3.6–8 fps (battery).
+Known cost of the fix: at native scale the HUD capture path is off by design (`hud=0`).
+
+**Popping = mesh replacement churn, and the cause is skinned poses** (`0543ecc`, build `a2e59f80…`, run
+`runtime/laptop-port/live-ec-reasons/`, new `live rebuilds` counters). End of the 180 s run:
+
+| reason | count | share |
+| --- | --- | --- |
+| pose (skinned draw, new bone palette) | 29,900 | ~82% |
+| buffer write | 4,096 | 11% |
+| first sight | 2,266 | 6% |
+| texture arrival | 363 | 1% |
+| unknown / evicted | 7 / 0 | ~0% |
+
+Every CPU-baked pose becomes a new mesh (create new hash, destroy old, per `MESH_REPLACEMENT.md`), so skinned geometry
+blinks while Remix builds the replacement. The volume is far beyond a few characters, so many world objects are drawn
+with skinned layouts. This is the handoff's Phase 4 (stable mesh + per-frame bone transforms); whether NieR's palettes
+change every frame because of animation or because they are camera-relative is the first thing to measure there.
+
+**Runtime state, from its own log** (`live-ec-reasons/remix-dxvk.log`, now kept by the launcher):
+- automatic profile: `RTX Spark detected, setting default graphics settings to Medium`; NRC Ultra; Reflex initialised;
+  SER enabled; Opacity Micromap enabled; indirect = spatially hashed radiance cache;
+- **`DLFG runtime preset: recreating FG for C`** — DLSS frame generation is active, presenting into Remix's hidden
+  window (visible=0, off-screen), which nobody sees: pure GPU cost under the current copy-based presentation;
+- every captured texture warns `suboptimal replacement texture ... Please make sure all replacement textures have
+  mip-maps` — `live-textures` are written without mips.
+
+`RtxOptions.md` was not written: the game was still alive when the timer stopped it (`alive_at_end=True`), consistent
+with the file being written on a clean exit. Option names for this exact binary are in
+`analysis/RTX_OPTIONS_1.6.1_A64EC.txt` (1,046, self-checked); types/defaults from the earlier 1.6 dump
+`analysis/runtime/remix-probe/RtxOptions-1.6.md` (`rtx.dlfg.enable` default True, `rtx.enableRayReconstruction` True,
+`rtx.upscalerType` 1, `rtx.qualityDLSS` 4, `rtx.graphicsPreset` 5 = Auto).
+
+Next, in order: (1) `rtx.conf` — `rtx.dlfg.enable = False` while Remix does not present, DLSS/RR set explicitly, each
+line verified in the runtime's "Effective RtxOption values"; (2) Phase 4 for skinned churn; (3) mips for captured
+textures; (4) FG proper, which needs Remix to own presentation.
