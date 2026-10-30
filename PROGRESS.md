@@ -72,6 +72,12 @@ only expiry bounds them. The live `reads=` counters will show whether either mat
   `InstanceInfoBoneTransformsEXT` instead of CPU-baking a new mesh per pose.
 - `remix-probe/RUN_LOG.md` and `runtime/remix-probe/run-facts.csv` regenerated from all 82 receipts.
 
+**Laptop port attempt (same day):** stage 1 passes once the laptop DLAA's `ec_hooks.dll` is kept out (it writes into
+the module named d3d11.dll, i.e. ours); stage 2 (static Remix) dies 0.3 s into Remix startup with a stack overflow in
+NVIDIA's D3D11 driver, Steam overlay on the stack. Details and next experiments: `analysis/LAPTOP_PORT.md` (end).
+Laptop restored to its original state. Also worth reading for later quality work: Kamzik123/ac2-rtx (game-side
+occlusion culling was their biggest win; we do nothing about NieR's culling yet).
+
 **Laptop probe:** `remix-probe/triangle.cpp` `REPROBE_REPLACE=1|2|3` (captured-mesh build), run through
 `run_remote.py`. **Open / next:** GPU skinning via the API is broken upstream (weight stride 1 float; dxvk-remix-plus
 has the one-line fix); the upstream-compatible route is one stable mesh per character with per-frame
