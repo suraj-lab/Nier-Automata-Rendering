@@ -73,6 +73,6 @@ One stable mesh per skinned draw (bind space, 4 bones, three-slot vertices) plus
 geometry that is genuinely blended. That removes the pose rebuild churn (82% of all rebuilds) and the
 frame-to-frame colour flicker that comes from re-creating meshes every frame.
 
-Open: whether the shipped 1.6.1 A64EC runtime matches `main` on the two stride lines. Verify with
-`REPROBE_SPREAD=1` in `runtime/remix-probe/skin-stride-repro/probe.cpp` on the laptop before relying on
-it live.
+Settled on the laptop, 2026-10-30: the shipped 1.6.1 A64EC runtime matches `main`. Probe `f5d2c6d0…` with
+`REPROBE_SPREAD=1` reproduces the four-weight CPU reference to **IoU 1.000 and max 1/255 per pixel**
+(`SKINNING_4BONE_RESULT.md`).
