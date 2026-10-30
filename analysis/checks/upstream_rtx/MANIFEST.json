@@ -1,0 +1,11 @@
+{
+  "repo": "NVIDIAGameWorks/dxvk-remix",
+  "ref": "main",
+  "fetched": "2026-10-30",
+  "why": "The skinning shader that decides how GPU skinning reads weights and indices; pinned so the gate proves which upstream revision it checked.",
+  "files": {
+    "pass/skinning.h": "9432cd093a38a36291c4c33d0494aab292f694c361a4f83d4b641d75723f5a25",
+    "utility/cpu_gpu_compat.h": "5f422deacdd162a2bec2ace9d6681cf3d18bb79857dce9c75f37a5256e042e5f",
+    "utility/cpu_gpu_compat_undef.h": "ffdeb8dbe3a87045ff8bae4ee91ab1ac9b220d508e49128e26c4b0e776daf064"
+  }
+}
