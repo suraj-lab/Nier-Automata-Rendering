@@ -14,6 +14,7 @@
 #include <remix_c.h>
 #include "nscn_scene.h"
 #include "camera_capture.h"
+#include "draw_probe.h"
 #include "live_capture.h"
 #include "live_scene.h"
 #include "hud_replay.h"
@@ -92,6 +93,7 @@ bool absolute(const std::wstring& p) {
 }
 
 State configure() {
+    if (draw_probe::enabled()) return State::Off;  // diagnostic mode must never start the renderer or live buffer capture
     if (env(L"NIER_REMIX") != L"1") return State::Off;
     runtime_path = env(L"NIER_REMIX_RUNTIME");
     scene_path = env(L"NIER_REMIX_SCENE");

@@ -258,6 +258,8 @@ scene (no live frame)`; do not mistake that label for the startup configuration,
 
 The user reports the image looked original and GPU load was very high. This matches the original-image fallback,
 not visual acceptance of path tracing. Native resolution plus active capture may add load; no attribution is proven.
-Need to establish whether the user was in the camp/world or menus before changing capture code or repeating the run.
+**User confirmed:** reached the menu, loaded into camp, and experienced frame drops compared with the base game on
+this device. This is a real live-capture failure, not a menu-only test. Trace context/draw-hook and eligibility gates
+before another heavy run; do not attribute the slowdown to path tracing without a submitted frame/cost measurements.
 Original proxy and `ec_hooks.dll` restored, process stopped. Evidence remains in
 `runtime/laptop-port/stage3-ec-live-camp*`. No screen capture or automated menu/save input was performed.

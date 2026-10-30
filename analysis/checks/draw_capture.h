@@ -11,6 +11,7 @@
 #include "texture_capture.h"
 #include "camera_capture.h"
 #include "live_capture.h"
+#include "draw_probe.h"
 
 namespace draw_capture {
 // 0-based ID3D11DeviceContext vtable slots (IUnknown 0..2, ID3D11DeviceChild 3..6, then VSSetConstantBuffers=7 ...).
@@ -247,6 +248,7 @@ inline void STDMETHODCALLTYPE hooked_draw_indexed(ID3D11DeviceContext* self, UIN
                                                   UINT start_index, INT base_vertex) {
     // Capture BEFORE the draw: the IA/VS state is already bound. Draws below the minimum index count
     // (fullscreen quads, particles) are skipped.
+    try { draw_probe::observe(self, index_count, false); } catch (...) {}
     try { if (draw_capture::before_draw) draw_capture::before_draw(self, index_count); } catch (...) {}
     try { camera_capture::observe(self, index_count); } catch (...) {}
     try { live_capture::observe(self, index_count, start_index, base_vertex, 1, 0); } catch (...) {}
@@ -257,6 +259,7 @@ inline void STDMETHODCALLTYPE hooked_draw_indexed(ID3D11DeviceContext* self, UIN
 
 inline void STDMETHODCALLTYPE hooked_draw_indexed_instanced(ID3D11DeviceContext* self, UINT index_count,
         UINT instance_count, UINT start_index, INT base_vertex, UINT start_instance) {
+    try { draw_probe::observe(self, index_count, true); } catch (...) {}
     if (instance_count) { try { if (draw_capture::before_draw) draw_capture::before_draw(self, index_count); } catch (...) {} }
     if (instance_count) { try { camera_capture::observe(self, index_count); } catch (...) {} }
     try { live_capture::observe(self, index_count, start_index, base_vertex, instance_count, start_instance); } catch (...) {}

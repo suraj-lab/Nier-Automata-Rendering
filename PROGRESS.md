@@ -1,5 +1,30 @@
 # NieR:Automata Rendering — Progress & Resume
 
+## PAUSED — operator leaving for work (2026-10-30)
+
+Stop here; do not launch another game/render unattended. Laptop originals remain restored; no native run was made
+following the failed five-minute stage-3 test. Last successful native DLL remains `cee4d891…` (stage 2 only).
+Last completed push before this pause: `4f0a5f3`.
+
+**Confirmed by user:** loaded into camp; saw original rasterized image, high GPU usage, and frame drops vs base game.
+This is a real pre-frame live-capture failure, not merely a title/menu test. Buffer shadowing was active, but no
+camera/geometry frame reached Remix. Cost attribution is unmeasured: do not infer that the 256 MB shadow cap alone
+caused the slowdown. Both observers share indexed draw hooks; buffer tracking uses other hooks.
+
+**Work saved but not accepted for live installation:** CPU-only `NIER_DRAW_PROBE=1` in `checks/draw_probe.h`, wired
+through `draw_capture.h`, `menu_overlay.cpp`, and `remix_live.cpp`. Overrides Remix to Off, disables F9 captures,
+logs initial/5-second hook health and callback metadata without GPU copies/maps. New `test_draw_probe.py` reproduced
+missing support on old source and now passes four Wine/llvmpipe cases (off, indexed, instanced, F9 suppression).
+No affected camera/menu/Remix/HUD regression suite has run on this new diagnostic build. No new laptop deployment.
+Independent diagnostic review `71b43fb5-2724-4317-aaf7-d9aea2882e26` was stopped on operator request, not accepted.
+Review `c32aa319…` supplied a fault tree, not a proven root cause. Artifacts: `runtime/draw-probe/validation.json`.
+
+**Resume:** review the diagnostic's lifetime/concurrency (including report timer), run the affected offline gates
+sequentially, then coordinate a short CPU-only camp probe with the user. Investigate first-device vs actual game
+context, bypassed indexed hooks/other draw APIs, context identity, missing layouts, and CB0/CB11 contracts. The probe
+only samples indexed callbacks; an absent sample cannot by itself distinguish indirect/deferred rendering from
+missing hooks. No GPU benchmark or live RTX acceptance claim is justified yet.
+
 **START HERE (2026-10-30 noon): laptop port stage 2 now works, including native ARM64EC Remix.** No desktop game
 run or installation. Desktop installed DLL remains `065432e4…`; laptop game folder restored to its original DLAA
 proxy `6ba266d6…` after each bounded run. Latest candidate: `cee4d891154b39ba84d7964ecd63cd212d6f94e7aa62f9bdbf47444308738a93`.
@@ -41,15 +66,16 @@ proxy `6ba266d6…` after each bounded run. Latest candidate: `cee4d891154b39ba8
 
 **Stage 3 attempt (2026-10-30 12:38–12:43):** final candidate `cee4d891…`, ARM64EC, `live=1`, five minutes.
 Process alive at timeout, but no accepted world draws, no first live-camera sample, no live periodic stats or first
-composition. **Not a gameplay pass.** It is not established whether the camp save was loaded. The analyzer's
+composition. **Confirmed live-capture failure:** the user reached the menu, loaded into camp, saw the original
+image, and experienced frame drops/high GPU use versus the base game on this laptop. The analyzer's
 `captured scene (no live frame)` label is inconclusive here: the startup log explicitly says `live=1`. Original
 laptop proxy and ec_hooks restored. Receipt/log/analysis: `runtime/laptop-port/stage3-ec-live-camp*`.
 Launcher now supports `--live` (direct and Steam transport gated, red before implementation/green after); runtime
 source and DLL did not change. The previous full suite was 56/56; the modified launcher gate was rerun separately.
 
-**Next:** confirm whether world gameplay was reached during that stage-3 attempt. If not, repeat when the user can
-load camp. If it was, inspect capture eligibility/camera input using actual draw evidence rather than claiming the
-launch proves animation works. Prefer the now-proven ARM64EC runtime; stock top-2 GPU skinning needs a moving-pose gate before adoption.
+**Next:** trace capture eligibility/context hooks/camera input offline. User confirmation rules out merely waiting
+at the menu. No further heavy game runs until a specific fix or cheap diagnostic discriminates the failure.
+Startup and buffer-shadow activity alone do not prove live rendering; GPU-cost attribution is still unknown. Prefer the now-proven ARM64EC runtime; stock top-2 GPU skinning needs a moving-pose gate before adoption.
 Keep the laptop original chain working; `ec_hooks.dll` still must be set aside for our proxy during test runs.
 
 **Earlier checkpoint (2026-10-30 morning, offline day: no live game run yet).** Four performance changes are gated offline and **not

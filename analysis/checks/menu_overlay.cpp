@@ -506,12 +506,18 @@ HRESULT STDMETHODCALLTYPE present(IDXGISwapChain* self, UINT sync, UINT flags) {
     const bool game_frame = self == target.load(std::memory_order_acquire) && !(flags & DXGI_PRESENT_TEST);
     // Remix replaces the game's image first, so the menu still draws on top. Independent of the menu's phase.
     if (game_frame) {
+        try { draw_probe::report(self, host.log, reinterpret_cast<void*>(&draw_capture::hooked_draw_indexed),
+                                 reinterpret_cast<void*>(&draw_capture::hooked_draw_indexed_instanced)); } catch (...) {}
         try { live_capture::end_frame(); camera_capture::end_frame(); remix_live::on_present(self, host.log); } catch (...) {}
     }
     if (game_frame && phase != Phase::Disabled) {
         try {
             if (phase == Phase::Waiting) initialize(self);
-            if (phase == Phase::Ready) { poll_capture(); render_panel(self); start_armed_capture(); }
+            if (phase == Phase::Ready) {
+                if (!draw_probe::enabled()) poll_capture();
+                render_panel(self);
+                if (!draw_probe::enabled()) start_armed_capture();
+            }
         } catch (...) {
             disable("unexpected exception");
         }
