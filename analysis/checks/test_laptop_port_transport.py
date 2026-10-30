@@ -78,6 +78,19 @@ def main():
             assert 'DXVK_DOCUMENTATION_WRITE_RTX_OPTIONS_MD=1' in base64.b64decode(encoded).decode('utf-8')
             # restore deletes data\rtx-remix, so the run must keep the runtime's own log outside the game folder
             assert "remix-dxvk.log" in scripts[0] and 'remix-dxvk-options-doc.log' in scripts[0], 'runtime log not kept'
+            # --rtx-conf stages the file as rtx.conf in the game folder, and restore must know to remove it.
+            assert 'rtx.conf' in lp.ADDED
+            copied = []
+            with patch.object(lp, 'ps', lambda script, **kw: json.dumps(receipt)), \
+                 patch.object(lp, 'scp', lambda local, remote, recursive=False: copied.append((str(local), remote))):
+                lp.run('conf', True, 5, live=True, rtx_conf='/tmp/x.conf')
+            assert copied == [('/tmp/x.conf', lp.GAME + r'\rtx.conf')], copied
+            try:
+                lp.run('conf-no-remix', False, 5, rtx_conf='/tmp/x.conf')
+            except AssertionError:
+                pass
+            else:
+                raise AssertionError('--rtx-conf without the runtime was accepted')
             try:
                 lp.run('capture-no-live', True, 5, capture=True)
             except AssertionError:

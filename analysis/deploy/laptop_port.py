@@ -4,7 +4,7 @@
   laptop_port.py install            back up the game's d3d11.dll (the NIER_DLAA proxy) and chain it as d3d11_dlaa.dll
                                     behind our hash-checked d3d11.dll; add NIER_RENDER.ini, fonts, steam_appid.txt
                                     (so a direct launch keeps the environment), and the static camp scene
-  laptop_port.py run <label> [--remix] [--seconds N] [--no-ec-hooks] [--steam] [--live] [--draw-probe] [--rehook] [--capture] [--options-doc]
+  laptop_port.py run <label> [--remix] [--seconds N] [--no-ec-hooks] [--steam] [--live] [--draw-probe] [--rehook] [--capture] [--options-doc] [--rtx-conf FILE]
                                     start NieRAutomata.exe in the user's session with the NIER_* environment, stop ONLY
                                     that process after N seconds (default 90), copy back NIER_SCALE.log and a receipt
                                     --live enables the draw stream instead of the static scene; load a save manually
@@ -12,6 +12,7 @@
                                     pass the official d3d9_a64ec.dll for the native ARM64EC renderer)
                                     --capture writes the first composited frame with a HUD to WORK\\composite.raw (live only)
                                     --options-doc asks the runtime to write RtxOptions.md (every option, default, range)
+                                    --rtx-conf FILE copies FILE to the game folder as rtx.conf for this run (restore removes it)
                                     --draw-probe sets NIER_DRAW_PROBE=1 (CPU-only hook-health diagnostic, Remix must be off)
                                     --rehook adds NIER_DRAW_PROBE_REHOOK=1: re-hook draw slots that hold the pristine original again
   laptop_port.py restore            put the original files back exactly (hash-checked) and remove what install added
@@ -40,7 +41,7 @@ BACKUP = WORK + r'\backup'
 RUNTIME = r'C:\Program Files\NVIDIA Corporation\RTX Remix\deps\remix_runtime\runtime\.trex\d3d9.dll'
 ORIGINAL_D3D11 = '6ba266d64a8f6776'                           # NIER_DLAA proxy found in the game folder 2026-10-30
 ADDED = ['d3d11_dlaa.dll', 'NIER_RENDER.ini', 'steam_appid.txt', 'nier_render_fonts', 'NIER_SCALE.log', 'NIER_ENV.ini',
-         'NIER_CAPTURE', r'data\rtx-remix', r'data\metrics.txt', 'RtxOptions.md']  # last: --options-doc  # last three: written by our runs (shader capture, Remix)
+         'NIER_CAPTURE', r'data\rtx-remix', r'data\metrics.txt', 'RtxOptions.md', 'rtx.conf']  # --options-doc, --rtx-conf  # last three: written by our runs (shader capture, Remix)
 OPTS = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10']
 
 
@@ -113,7 +114,7 @@ if ((Get-FileHash -LiteralPath (Join-Path $g 'd3d11.dll') -Algorithm SHA256).Has
 
 
 def run(label, remix, seconds, no_ec_hooks=False, steam=False, live=False, draw_probe=False, rehook=False,
-        runtime=None, capture=False, options_doc=False):
+        runtime=None, capture=False, options_doc=False, rtx_conf=None):
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')
     remix = remix or live
     assert not (draw_probe and remix), 'NIER_DRAW_PROBE=1 is a Remix-off diagnostic: drop --remix/--live'
@@ -125,6 +126,9 @@ def run(label, remix, seconds, no_ec_hooks=False, steam=False, live=False, draw_
         env['NIER_DRAW_PROBE_REHOOK'] = '1'
     if remix:
         env.update(NIER_REMIX_RUNTIME=runtime or RUNTIME, NIER_REMIX_SCENE=WORK + r'\scene\scene.bin')
+    if rtx_conf:
+        assert remix, '--rtx-conf needs the runtime: add --remix or --live'
+        scp(Path(rtx_conf), GAME + r'\rtx.conf')
     if options_doc:
         assert remix, '--options-doc needs the runtime: add --remix or --live'
         env['DXVK_DOCUMENTATION_WRITE_RTX_OPTIONS_MD'] = '1'
@@ -207,6 +211,6 @@ if __name__ == '__main__':
         run(cmd[1], '--remix' in cmd, seconds, '--no-ec-hooks' in cmd, '--steam' in cmd, '--live' in cmd,
             '--draw-probe' in cmd, '--rehook' in cmd,
             cmd[cmd.index('--runtime') + 1] if '--runtime' in cmd else None, '--capture' in cmd,
-            '--options-doc' in cmd)
+            '--options-doc' in cmd, cmd[cmd.index('--rtx-conf') + 1] if '--rtx-conf' in cmd else None)
     else:
         sys.exit(__doc__)
