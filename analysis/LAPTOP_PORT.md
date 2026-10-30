@@ -392,3 +392,28 @@ with the file being written on a clean exit. Option names for this exact binary 
 Next, in order: (1) `rtx.conf` — `rtx.dlfg.enable = False` while Remix does not present, DLSS/RR set explicitly, each
 line verified in the runtime's "Effective RtxOption values"; (2) Phase 4 for skinned churn; (3) mips for captured
 textures; (4) FG proper, which needs Remix to own presentation.
+
+### RTX settings, measured — 2026-10-30 21:49–22:01, plugged in (`a25cb90`…, build `a2e59f80…`)
+
+The runtime reads `rtx.conf` relative to a working directory that is not the game folder ("No config file found at:
+rtx.conf" with the file present), so `--rtx-conf` now stages the file in WORK and sets `DXVK_RTX_CONFIG_FILE` (log:
+"Found config file … Parsed config file"). Effective values are listed only when they differ from the default.
+
+From dxvk-remix source (`rtx_options.h/.cpp`, `rtx_dlss.h`, `rtx_graphics_preset.h`): the default `dlssPreset = On`
+forces `upscalerType = DLSS`, `qualityDLSS = Auto`, `reflexMode = LowLatency`; the graphics preset (Auto → Medium on
+RTX Spark) resets `qualityDLSS` to Auto unless `dlssPreset = Custom`. **DLSS SR, Ray Reconstruction (default True) and
+Reflex were already active in every live run.** Configs: `analysis/deploy/rtx/laptop-{a-fg-off,b-dlss-perf}.conf`.
+
+| run | config | readback | fps (light / heavy views) |
+| --- | --- | --- | --- |
+| `live-ec-reasons` (battery) | defaults, FG on | 48–65 ms | 7.5–7.9 / 3.4–4.1 |
+| `live-conf-a` (plugged, conf not read) | defaults, FG on | 30–36 ms | 8.8–9.3 / 3.8–6.4 |
+| `live-conf-a2` (plugged) | FG off | 30–37 ms | 8.4–9.5 / 2.2–5.7 |
+| `live-conf-b` (plugged) | FG off, `dlssPreset=2`, `qualityDLSS=1` (MaxPerf) | 28–33 ms | 9.1–9.8 / 7.0 |
+
+- Power state was the large effect (battery → plugged: readback −20 to −30 ms).
+- Frame generation off vs on: no measurable change (A vs A2). It stays off while Remix does not present.
+- DLSS Max Performance vs Auto: −2 to −4 ms readback. The remaining ~29 ms is dominated by the fixed full-output
+  (2880x1800) copy/readback, which does not scale with DLSS internal resolution.
+- **The bottleneck is `other` (60–200 ms, CPU side), which tracks rebuild churn.** Renderer settings are not the lever;
+  Phase 4 (stable skinned meshes) and the capture path are.

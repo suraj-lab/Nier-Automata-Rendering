@@ -6,6 +6,13 @@ State at this pause: nothing installed on either machine, no game running, lapto
 uncommitted on `main` above `a7a3c0b`. The noon PAUSED note below still applies in substance: do not launch a game or
 render unattended (and a save cannot be loaded without the operator).
 
+**LATEST (2026-10-30 22:01): RTX settings measured; the GPU is not the bottleneck.** DLSS SR + Ray Reconstruction +
+Reflex were already on (default `dlssPreset = On`, verified from dxvk-remix source); FG off made no measurable
+difference; DLSS Max Performance saved only 2–4 ms. Plugged in: ~9 fps light views, readback ~29 ms (fixed full-output
+copy), **`other` 60–200 ms on the CPU side, tracking skinned-pose rebuild churn** → Phase 4 is the lever. `rtx.conf`
+must be passed by absolute path (`DXVK_RTX_CONFIG_FILE`). Next session: read xoxor4d/l4d2-rtx (skinning via bone
+palettes, anti-culling) and the Remix API skinning path, then Phase 4. Details: newest `analysis/LAPTOP_PORT.md`.
+
 **LATEST (2026-10-30 21:44): the world renders on the laptop; popping is skinned-pose churn; FG wastes GPU.**
 Scene-target fix (`df53a3c`) confirmed: scene 2880x1800, 97–423 draws, 1–2 skipped. New rebuild-reason counters
 (`0543ecc`): **82% of mesh rebuilds are skinned poses** (29,900 of ~36,600 in 180 s) — Phase 4 is the fix. The
