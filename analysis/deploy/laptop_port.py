@@ -4,7 +4,7 @@
   laptop_port.py install            back up the game's d3d11.dll (the NIER_DLAA proxy) and chain it as d3d11_dlaa.dll
                                     behind our hash-checked d3d11.dll; add NIER_RENDER.ini, fonts, steam_appid.txt
                                     (so a direct launch keeps the environment), and the static camp scene
-  laptop_port.py run <label> [--remix] [--seconds N] [--no-ec-hooks]
+  laptop_port.py run <label> [--remix] [--seconds N] [--no-ec-hooks] [--steam]
                                     start NieRAutomata.exe in the user's session with the NIER_* environment, stop ONLY
                                     that process after N seconds (default 90), copy back NIER_SCALE.log and a receipt
   laptop_port.py restore            put the original files back exactly (hash-checked) and remove what install added
@@ -30,7 +30,7 @@ WORK = r'C:\Users\suraj\Downloads\NieR-Laptop-Port'          # scene, backup, la
 BACKUP = WORK + r'\backup'
 RUNTIME = r'C:\Program Files\NVIDIA Corporation\RTX Remix\deps\remix_runtime\runtime\.trex\d3d9.dll'
 ORIGINAL_D3D11 = '6ba266d64a8f6776'                           # NIER_DLAA proxy found in the game folder 2026-10-30
-ADDED = ['d3d11_dlaa.dll', 'NIER_RENDER.ini', 'steam_appid.txt', 'nier_render_fonts', 'NIER_SCALE.log',
+ADDED = ['d3d11_dlaa.dll', 'NIER_RENDER.ini', 'steam_appid.txt', 'nier_render_fonts', 'NIER_SCALE.log', 'NIER_ENV.ini',
          'NIER_CAPTURE', r'data\rtx-remix', r'data\metrics.txt']  # last three: written by our runs (shader capture, Remix)
 OPTS = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10']
 
@@ -88,13 +88,16 @@ if ((Get-FileHash -LiteralPath (Join-Path $g 'd3d11.dll') -Algorithm SHA256).Has
 'installed {dll[:16]}' '''))
 
 
-def run(label, remix, seconds, no_ec_hooks=False):
+def run(label, remix, seconds, no_ec_hooks=False, steam=False):
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')
     env = {'NIER_REMIX': '1' if remix else '0'}
     if remix:
         env.update(NIER_REMIX_RUNTIME=RUNTIME, NIER_REMIX_SCENE=WORK + r'\scene\scene.bin')
-    launch = '@echo off\r\n' + ''.join(f'set "{k}={v}"\r\n' for k, v in env.items()) + \
-             f'cd /d "{GAME}"\r\nstart "" NieRAutomata.exe\r\n'
+    # --steam: settings go into NIER_ENV.ini and Steam starts the game, so per-game Steam settings (overlay) apply.
+    env_ini = base64.b64encode(''.join(f'{k}={v}\r\n' for k, v in env.items()).encode('utf-8')).decode()
+    launch = ('@echo off\r\n"C:\\Program Files (x86)\\Steam\\steam.exe" -applaunch 524220\r\n' if steam else
+              '@echo off\r\n' + ''.join(f'set "{k}={v}"\r\n' for k, v in env.items()) +
+              f'cd /d "{GAME}"\r\nstart "" NieRAutomata.exe\r\n')
     launch_b64 = base64.b64encode(launch.encode('ascii')).decode()
     receipt = json.loads(ps(rf'''$ErrorActionPreference='Stop'
 $g='{GAME}'
@@ -102,12 +105,15 @@ if (Get-Process NieRAutomata -ErrorAction SilentlyContinue) {{ throw 'NieR is al
 $log=Join-Path $g 'NIER_SCALE.log'; $before=if (Test-Path -LiteralPath $log) {{ (Get-Item -LiteralPath $log).Length }} else {{ 0 }}
 $ec=Join-Path $g 'ec_hooks.dll'
 if ({'$true' if no_ec_hooks else '$false'}) {{ Rename-Item -LiteralPath $ec -NewName 'ec_hooks.dll.off' }}  # the DLAA's hook library writes into "the d3d11 module": ours
+$envfile=Join-Path $g 'NIER_ENV.ini'
+if ({'$true' if steam else '$false'}) {{ [IO.File]::WriteAllBytes($envfile,[Convert]::FromBase64String('{env_ini}')) }} elseif (Test-Path -LiteralPath $envfile) {{ Remove-Item -LiteralPath $envfile }}
 $cmd='{WORK}\launch-{label}.cmd'
 [IO.File]::WriteAllBytes($cmd, [Convert]::FromBase64String('{launch_b64}'))
 $a=New-ScheduledTaskAction -Execute 'cmd.exe' -Argument ('/c "'+$cmd+'"')
 $pr=New-ScheduledTaskPrincipal -UserId (whoami) -LogonType Interactive -RunLevel Limited
 Register-ScheduledTask -TaskName NieRPort -Action $a -Principal $pr -Force | Out-Null
 $start=Get-Date; Start-ScheduledTask NieRPort; Start-Sleep 5; Unregister-ScheduledTask NieRPort -Confirm:$false
+Start-Sleep {20 if steam else 0}  # Steam needs a moment to hand the launch to the game
 $seen=@(); $t=[Diagnostics.Stopwatch]::StartNew()
 while ($t.Elapsed.TotalSeconds -lt {seconds}) {{ $p=Get-Process NieRAutomata -ErrorAction SilentlyContinue; if ($p) {{ $seen+=$p.Id }}; Start-Sleep 2 }}
 $alive=Get-Process NieRAutomata -ErrorAction SilentlyContinue
@@ -147,6 +153,6 @@ if __name__ == '__main__':
         restore()
     elif cmd[0] == 'run' and len(cmd) >= 2:
         seconds = int(cmd[cmd.index('--seconds') + 1]) if '--seconds' in cmd else 90
-        run(cmd[1], '--remix' in cmd, seconds, '--no-ec-hooks' in cmd)
+        run(cmd[1], '--remix' in cmd, seconds, '--no-ec-hooks' in cmd, '--steam' in cmd)
     else:
         sys.exit(__doc__)

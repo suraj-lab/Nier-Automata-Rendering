@@ -160,3 +160,13 @@ game lights never worked that way.
   Remix starts. Dump `runtime/laptop-port/dumps/stage2-overlay-off.dmp`.
 - Next: launch through Steam (so the toggle applies) instead of directly. That needs the `NIER_*` settings from a
   file rather than the environment. Then, separately, make our Present hook safe against the overlay's re-entry.
+- Launched **through Steam** with the overlay toggled off for NieR (settings via the new `NIER_ENV.ini`, build
+  `233e5600…`): settings applied, same crash at Remix start. The dump shows `gameoverlayrenderer64.dll` **still
+  loaded**: Steam injects it (screenshots, FPS counter) whatever the toggle says, so the overlay cannot be avoided by
+  configuration. Both of our frames on the overflowing stack are the same return address (the call to the next
+  Present), so the loop is hook-to-hook: ours → Steam's → ours, not our code presenting again. Working hypothesis
+  (unverified): starting Remix makes something touch DXGI, Steam re-hooks Present and stores our hook as its single
+  "original". Fix candidates: forward to DXGI's real Present instead of the vtable's previous entry, or wrap the swap
+  chain instead of patching the shared vtable. Either needs a mock overlay that re-hooks, written first.
+  Dump: `runtime/laptop-port/dumps/stage2-steam.dmp`. The desktop never showed this: under Proton the Steam overlay
+  hooks Vulkan, not DXGI (INFERRED).
