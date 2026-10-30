@@ -46,9 +46,11 @@ def build(work):
     subprocess.run([*gpp, '-municode', str(C / 'menu_overlay_mock_game.cpp'), '-ldinput8', '-ldxguid', '-o', str(work / 'mock.exe')], check=True)  # D3DCompile loaded at runtime
 
 
-def scenario(work, name, ini, fonts, click):
+def scenario(work, name, ini, fonts, click, files=None):
     d = work / name
     d.mkdir()
+    for fname, data in (files or {}).items():  # extra files beside the proxy, e.g. NIER_ENV.ini
+        (d / fname).write_bytes(data)
     for f in ('mock.exe', 'd3d11_dlaa.dll'):
         shutil.copy2(work / f, d / f)
     shutil.copy2(DLL / 'd3d11.dll', d / 'd3d11.dll')

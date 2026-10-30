@@ -6,6 +6,7 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
 #include <cwchar>
 #include <string>
 #include "scale_patch.h"
@@ -15,6 +16,7 @@
 #include "render_settings.h"
 #include "startup_status.h"
 #include "menu_overlay.h"
+#include "env_file.h"
 static constexpr int kPollMs = 250, kPollTries = 480;  // ~120 s for the renderer to appear
 
 typedef HRESULT (WINAPI *PFN_CreateDevice)(IDXGIAdapter*, D3D_DRIVER_TYPE, HMODULE, UINT,
@@ -422,6 +424,32 @@ static void start_setter_once()
     }
 }
 
+// NIER_ENV.ini beside the proxy supplies NIER_* settings a Windows Steam launch cannot pass as environment variables.
+// A variable already in the environment wins. _wputenv_s updates both the process environment (GetEnvironmentVariableW)
+// and the CRT's copy (std::getenv), which shader_capture reads.
+static void apply_env_file()
+{
+    FILE* file = _wfopen((module_dir + L"NIER_ENV.ini").c_str(), L"rb");
+    if (!file) return;
+    std::string text;
+    char chunk[4096];
+    for (std::size_t n; (n = std::fread(chunk, 1, sizeof chunk, file)) > 0 && text.size() <= env_file::kMaxBytes;) text.append(chunk, n);
+    std::fclose(file);
+    if (text.size() > env_file::kMaxBytes) { logf_line("NIER_ENV.ini ignored: larger than %u bytes", unsigned(env_file::kMaxBytes)); return; }
+    const auto wide = [](const std::string& s) {
+        std::wstring w(s.size(), L'\0');
+        w.resize(MultiByteToWideChar(CP_UTF8, 0, s.data(), static_cast<int>(s.size()), w.data(), static_cast<int>(w.size())));
+        return w;
+    };
+    int applied = 0, kept = 0;
+    for (const auto& [key, value] : env_file::parse(text)) {
+        const std::wstring k = wide(key), v = wide(value);
+        if (GetEnvironmentVariableW(k.c_str(), nullptr, 0) || GetLastError() != ERROR_ENVVAR_NOT_FOUND) { ++kept; continue; }
+        if (_wputenv_s(k.c_str(), v.c_str()) == 0) ++applied;
+    }
+    logf_line("NIER_ENV.ini: %d settings applied, %d already set in the environment", applied, kept);
+}
+
 static bool load_real()
 {
     static const bool ready = [] {
@@ -434,6 +462,7 @@ static bool load_real()
         wchar_t* filename = wcsrchr(path, L'\\');
         if (!filename) return false;
         module_dir.assign(path, filename + 1);
+        apply_env_file();
         const std::wstring next = module_dir + L"d3d11_dlaa.dll";
         HMODULE real = LoadLibraryExW(next.c_str(), nullptr,
             LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
