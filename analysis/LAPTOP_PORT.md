@@ -149,3 +149,14 @@ Production fix for `ec_hooks` (not done): either ship without the laptop DLAA (R
 through a copy that resolves the *system* d3d11. Two other notes for the bridge stage, from studying
 Kamzik123/ac2-rtx: the Remix API through the bridge needs `exposeRemixApi = True` in `.trex/bridge.conf`, and their
 game lights never worked that way.
+
+### Same day, later: what kills stage 2
+- Mock game + our proxy + the **real** in-process x64 Remix runtime on the laptop: Remix starts fine, at 1440x900 and
+  (with `__COMPAT_LAYER=HighDpiAware`) at NieR's 2880x1800. So in-process Remix next to native D3D11 on the ARM
+  driver works, and size is not the trigger.
+- NieR with the Steam overlay switched off for the game: same crash. The dump shows the overlay **still loaded**
+  (a direct launch with `steam_appid.txt` gets it from steam_api regardless of the per-game toggle) and a recursion
+  `menu_overlay::present` (ours, `d3d11.dll+0xed90`) → `gameoverlayrenderer64.dll` → … → ours again, starting once
+  Remix starts. Dump `runtime/laptop-port/dumps/stage2-overlay-off.dmp`.
+- Next: launch through Steam (so the toggle applies) instead of directly. That needs the `NIER_*` settings from a
+  file rather than the environment. Then, separately, make our Present hook safe against the overlay's re-entry.
