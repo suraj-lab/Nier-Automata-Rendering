@@ -163,12 +163,17 @@ $alive=Get-Process NieRAutomata -ErrorAction SilentlyContinue
 $ids=@($seen | Sort-Object -Unique)
 if ($alive) {{ $alive | Stop-Process -Force; Start-Sleep 3 }}
 if (Test-Path -LiteralPath "$ec.off") {{ Rename-Item -LiteralPath "$ec.off" -NewName 'ec_hooks.dll' }}
+$rlog=Join-Path $g 'data\rtx-remix\logs\remix-dxvk.log'  # restore deletes data\rtx-remix: keep the runtime's own log
+if (Test-Path -LiteralPath $rlog) {{ Copy-Item -LiteralPath $rlog -Destination '{WORK}\remix-dxvk-{label}.log' -Force }}
 $text=if (Test-Path -LiteralPath $log) {{ $b=[IO.File]::ReadAllBytes($log); [Text.Encoding]::UTF8.GetString($b, $before, $b.Length-$before) }} else {{ '' }}
 $dumps=@(Get-ChildItem -LiteralPath (Join-Path $env:LOCALAPPDATA 'CrashDumps') -Filter '*.dmp' -ErrorAction SilentlyContinue | Where-Object {{ $_.LastWriteTime -gt $start }} | ForEach-Object {{ $_.Name + ' ' + $_.Length }})
 $wer=@($dumps)  # bounded: the previous Get-WinEvent query scanned the whole Application log and cost minutes per run
 [ordered]@{{label='{label}'; remix=${str(remix).lower()}; draw_probe=${str(draw_probe).lower()}; rehook=${str(rehook).lower()}; runtime='{runtime or ""}'; pids=$ids; task_result=$taskResult; alive_at_end=[bool]$alive; log=$text; crash=@($wer)}} | ConvertTo-Json -Depth 3 -Compress''', timeout=seconds + 240))
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / f'{label}-{stamp}.json').write_text(json.dumps(receipt, indent=2) + '\n')
+    if remix:  # the runtime's own log: DLSS/RR/FG state and the effective RTX options live only there
+        subprocess.run(['scp', *OPTS, 'spaghetti:' + (WORK + f'\\remix-dxvk-{label}.log').replace('\\', '/'),
+                        str(OUT / f'{label}-{stamp}-remix-dxvk.log')], capture_output=True, text=True, timeout=300)
     lines = [l for l in (receipt.get('log') or '').splitlines() if l.strip()]
     print(f"{label}: pids={receipt['pids']} task_result={receipt['task_result']} alive_at_end={receipt['alive_at_end']} log_lines={len(lines)} crash={bool(receipt['crash'])}")
     if not receipt['pids'] and not lines:

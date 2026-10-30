@@ -58,7 +58,8 @@ def inside():
         # holding the same character (vertex 0 follows bone 0: x < 20 is the first character, x > 20 the second).
         tex_anim = work / 'textures-animate'
         tex_anim.mkdir()
-        _, r, log, fake = tr.run(work, 'animate', {**base, 'NIER_REMIX_LIVE_TEX': tr.win(tex_anim), 'MOCK_SKIN_ANIMATE': '1'})
+        _, r, log, fake = tr.run(work, 'animate', {**base, 'NIER_REMIX_LIVE_TEX': tr.win(tex_anim), 'MOCK_SKIN_ANIMATE': '1',
+                                                   'NIER_REMIX_LIVE_STATS_EVERY': '10'})
         assert fake and 'VIOLATION' not in fake, (fake or log)[-2000:]
         animated = [l for l in fake.splitlines() if l.startswith('CreateMesh') and 'indices=192 ' in l]
         side = {}
@@ -68,6 +69,12 @@ def inside():
         assert len(animated) >= 20, f'poses were not rebuilt while animating: {len(animated)} builds'
         assert len(side) == 2, f'animated characters made {len(side)} mesh keys, expected 2'
         assert all(len(s) == 1 for s in side.values()), f'a key switched between characters: {side}'
+        # Animation with unchanged buffers is a pose rebuild, not a buffer write: the live laptop picture popped while
+        # meshes were rebuilt constantly, and this counter is how the cause is told apart (rebuild reasons line).
+        why_lines = [x for x in tr.remix_lines(log) if x.startswith('remix: live rebuilds ')]
+        assert why_lines, tr.remix_lines(log)[-6:]
+        why = {k: int(v) for k, v in re.findall(r'(\w+)=(\d+)', why_lines[-1])}
+        assert why['pose'] >= 10 and why['pose'] > why['buffer'], f'animation not counted as pose rebuilds: {why}'
         report = {'passed': True, 'work': str(work), 'poses': sorted(by_pose), 'meshes': len(meshes),
                   'animated_builds': len(animated), 'animated_keys': len(side),
                   'limits': 'Real proxy in a software Wine mock, not the real Remix runtime or live game.'}

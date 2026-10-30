@@ -30,6 +30,19 @@ KEYS = ('reads', 'first', 'trimmed', 'unmirrored', 'const', 'immutable', 'defaul
         'texture_ms', 'skinned', 'created')
 
 
+REASONS = ('first', 'unknown', 'buffer', 'pose', 'texture', 'evicted')
+
+
+def rebuilds(log):
+    # Why geometries were rebuilt: the live world popped in and out on the laptop (2026-10-30) while ~250 meshes a
+    # second were rebuilt, and the cause could not be told from the totals.
+    lines = [x for x in tr.remix_lines(log) if x.startswith('remix: live rebuilds ')]
+    assert lines, 'no "live rebuilds" stats line: ' + str(tr.remix_lines(log)[-6:])
+    last = dict(re.findall(r'(\w+)=(\d+)', lines[-1]))
+    assert set(REASONS) <= set(last), lines[-1]
+    return {k: int(last[k]) for k in REASONS}
+
+
 def reads(log):
     lines = [x for x in tr.remix_lines(log) if x.startswith('remix: live reads=')]
     assert lines, 'no "live reads=" stats line: ' + str(tr.remix_lines(log)[-6:])
@@ -84,13 +97,21 @@ def inside():
                                  'NIER_REMIX_LIVE_BUDGET_KB': '12'})
         v = reads(log)
         assert v['trimmed'] >= 1, f'an evicted mesh rebuilt from dropped static bytes produced no trimmed read: {v}'
-        results['trimmed'] = str(v)
+        why = rebuilds(log)
+        assert why['evicted'] >= 1, f'the evicted mesh drawn again was not counted as an eviction rebuild: {why}'
+        results['trimmed'] = f'{v}; rebuilds {why}'
 
         # 3. Default settings: geometry is mirrored and nothing is dropped, so the only reasons are first sight.
         r, log = run('default', {})
         v = reads(log)
         assert v['trimmed'] == 0 and v['unmirrored'] == 0 and v['first'] >= 1, f'default run: {v}'
-        results['default'] = str(v)
+        why = rebuilds(log)
+        # 'live' draws mesh A, adds mesh B at frame 35 and rewrites A's dynamic buffer at frame 48: two first sights and
+        # exactly one buffer rebuild; nothing is skinned, evicted or waiting for a texture. A first sight of a buffer
+        # created before the capture hooks armed has no tracked version yet and is counted as 'unknown', not 'first'.
+        assert why['first'] + why['unknown'] >= 2 and why['buffer'] == 1, f'default run rebuild reasons: {why}'
+        assert why['pose'] == 0 and why['evicted'] == 0 and why['texture'] == 0, f'default run rebuild reasons: {why}'
+        results['default'] = f'{v}; rebuilds {why}'
 
         # 4. An immutable mesh created with initial data at frame 60, after Remix started: it must be built (z = 7.5)
         #    from the bytes kept at creation, with no staging read of any vertex or index buffer from frame 60 on.

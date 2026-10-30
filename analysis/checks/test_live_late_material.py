@@ -32,7 +32,7 @@ import test_remix_live as tr
 import test_menu_overlay as tmo
 import test_nscn_scene as ts
 
-tr.ENV_KEYS = tuple(tr.ENV_KEYS) + ('NIER_REMIX_LIVE', 'NIER_REMIX_LIVE_TEX', 'NIER_REMIX_LIVE_TEX_PER_FRAME',
+tr.ENV_KEYS = tuple(tr.ENV_KEYS) + ('NIER_REMIX_LIVE_STATS_EVERY', 'NIER_REMIX_LIVE', 'NIER_REMIX_LIVE_TEX', 'NIER_REMIX_LIVE_TEX_PER_FRAME',
                                      'FAKE_REMIX_INSTANCE_LOG')
 
 
@@ -68,7 +68,7 @@ def inside():
                 'NIER_REMIX_LIVE_TEX': tr.win(tex), 'MOCK_CAMERA': 'live-late'}
 
         # One texture per frame: the second texture is deferred, so its geometry is first built without a material.
-        _, r, log, fake = tr.run(work, 'late', {**base, 'NIER_REMIX_LIVE_TEX_PER_FRAME': '1'})
+        _, r, log, fake = tr.run(work, 'late', {**base, 'NIER_REMIX_LIVE_TEX_PER_FRAME': '1', 'NIER_REMIX_LIVE_STATS_EVERY': '10'})
         assert fake and 'VIOLATION' not in fake, fake
         built = meshes_by_hash(fake)
         assert len(built) == 2, f'expected the two live geometries, got {len(built)}: {list(built)}'
@@ -83,6 +83,12 @@ def inside():
             first_bare = next(m['presented'] for m in made if m['materials'] == 0)
             repaired = [m for m in made if m['materials'] >= 1 and m['presented'] > first_bare]
             assert repaired, f'geometry {g} was built without a material and never repaired: {made}'
+        # A repair after a texture lands is a texture rebuild, not a first sight or a buffer write (rebuild reasons line).
+        why_lines = [x for x in tr.remix_lines(log) if x.startswith('remix: live rebuilds ')]
+        assert why_lines, tr.remix_lines(log)[-6:]
+        why = {k: int(v) for k, v in re.findall(r'(\w+)=(\d+)', why_lines[-1])}
+        if bare:
+            assert why['texture'] >= len(bare), f'{len(bare)} texture repairs counted as {why}'
         results['late'] = ('Every geometry ends with a material; %d were first built bare and all were repaired.'
                            % len(bare))
 

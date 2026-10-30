@@ -230,11 +230,25 @@ inline std::map<std::uint64_t, bool>& sky_geometries() { static std::map<std::ui
 inline std::map<std::uint64_t, std::uint64_t>& content_hashes() { static std::map<std::uint64_t, std::uint64_t> m; return m; }
 // Skinned draws of one buffer set seen so far this frame (cleared by begin_frame): the occurrence is part of the key.
 inline std::map<std::uint64_t, unsigned>& skinned_occurrences() { static std::map<std::uint64_t, unsigned> m; return m; }
+// Why a geometry was rebuilt (analysis/LAPTOP_PORT.md, 2026-10-30: the live world popped in and out while ~250 meshes a
+// second were rebuilt with almost no identical content). Counted once per rebuild attempt at the decision below.
+// A key erased for a texture arrival or an eviction comes back looking like first sight, so the erase sites tag it.
+enum RebuildReason : unsigned { kReasonFirst, kReasonUnknown, kReasonBuffer, kReasonPose, kReasonTexture, kReasonEvicted,
+                                kReasonCount };
+inline std::atomic<unsigned long long> rebuild_reasons[kReasonCount]{};
+inline std::map<std::uint64_t, unsigned>& erased_reason() { static std::map<std::uint64_t, unsigned> m; return m; }
+// Buffer part of the version, without the skinning pose, so a pose-only change is told apart from a buffer write.
+inline std::map<std::uint64_t, std::uint64_t>& built_buffer_versions() { static std::map<std::uint64_t, std::uint64_t> m; return m; }
+
 // The worker evicted these meshes: forget that they were built, so they are uploaded again when drawn.
 inline void forget(const std::vector<std::uint64_t>& keys) {
     if (keys.empty()) return;
     std::lock_guard<std::recursive_mutex> lock(mutex());
-    for (std::uint64_t key : keys) { built_versions().erase(key); content_hashes().erase(key); }
+    for (std::uint64_t key : keys) {
+        built_versions().erase(key);
+        content_hashes().erase(key);
+        erased_reason()[key] = kReasonEvicted;
+    }
 }
 
 struct TextureEntry { std::uint32_t id = 0; std::uint64_t used_frame = 0; };  // id 0 = not capturable, do not retry
@@ -925,7 +939,11 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
                         if (id) {  // the texture has landed: rebuild the meshes that were made without it
                             const auto waiter = waiting_materials().find(resource);
                             if (waiter != waiting_materials().end()) {
-                                for (const std::uint64_t key : waiter->second) { built_versions().erase(key); content_hashes().erase(key); }
+                                for (const std::uint64_t key : waiter->second) {
+                                    built_versions().erase(key);
+                                    content_hashes().erase(key);
+                                    erased_reason()[key] = kReasonTexture;
+                                }
                                 waiting_materials().erase(waiter);
                             }
                         }
@@ -1062,6 +1080,25 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     // texture's arrival invalidates it (waiting_materials) so the next draw rebuilds the mesh with the material.
     const bool deferred = !changed && needs_read && read_bytes_this_frame >= read_budget_per_frame;
     const bool rebuild = !deferred && (unknown || previously == built_versions().end() || previously->second != version);
+    std::uint64_t buffer_version = identity(ib);
+    for (unsigned i = 0; i < vb_count; ++i) buffer_version = hash_value(buffer_version ^ identity(vbs[i]));
+    if (rebuild) {
+        unsigned reason = kReasonFirst;
+        if (unknown) {
+            reason = kReasonUnknown;
+        } else if (previously == built_versions().end()) {
+            const auto tag = erased_reason().find(geometry);
+            if (tag != erased_reason().end()) { reason = tag->second; erased_reason().erase(tag); }
+        } else {
+            const auto before = built_buffer_versions().find(geometry);
+            reason = skinned && before != built_buffer_versions().end() && before->second == buffer_version ? kReasonPose
+                                                                                                           : kReasonBuffer;
+        }
+        ++rebuild_reasons[reason];
+        if (built_buffer_versions().size() > 200000) built_buffer_versions().clear();  // bounded like built_versions
+        built_buffer_versions()[geometry] = buffer_version;
+        if (erased_reason().size() > 200000) erased_reason().clear();
+    }
     const std::vector<unsigned char>* ib_bytes = nullptr;
     const std::vector<unsigned char>* vb_bytes[4] = {};
     bool readable = false;

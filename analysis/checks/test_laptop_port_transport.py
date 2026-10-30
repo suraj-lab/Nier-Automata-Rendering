@@ -76,6 +76,8 @@ def main():
                 lp.run('options-doc', True, 5, live=True, options_doc=True)
             encoded = re.search(r"WriteAllBytes\(\$cmd,\s*\[Convert\]::FromBase64String\('([^']+)'\)", scripts[0]).group(1)
             assert 'DXVK_DOCUMENTATION_WRITE_RTX_OPTIONS_MD=1' in base64.b64decode(encoded).decode('utf-8')
+            # restore deletes data\rtx-remix, so the run must keep the runtime's own log outside the game folder
+            assert "remix-dxvk.log" in scripts[0] and 'remix-dxvk-options-doc.log' in scripts[0], 'runtime log not kept'
             try:
                 lp.run('capture-no-live', True, 5, capture=True)
             except AssertionError:
