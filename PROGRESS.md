@@ -54,6 +54,24 @@ captured at creation, update time was counted on frames that were never presente
 exempt from the per-frame read budget (they count as changed); large UpdateSubresource copies are not trimmable, so
 only expiry bounds them. The live `reads=` counters will show whether either matters.
 
+**Laptop renders, afternoon (no game run):**
+- *frame_41686139* (F9 from the 23:15 live session; converted with its own 28 disassembled shaders, 13 cutouts, and
+  the same verified sun as frame_30632051): `media/2026-10-30/laptop-frame41686139-sun-albedo.png`. This frame faces
+  an indoor wall, not the blown-out buildings of the live shot, so it cannot settle that question. What it does show:
+  with every texture present nothing clips (0.0%); the sun at 1/4 barely changes the image (mean 0.120 -> 0.117,
+  auto-exposure), so a plain sun-scale error is unlikely; albedo-less surfaces are twice as bright (0.237). Consistent
+  with the stale-untextured-mesh explanation, not proof. The next live run (with today's fix) decides it.
+- *GPU skinning via the stock runtime works with 2 bones per vertex.* Runtime source: indices are packed per vertex
+  correctly, weights are read at a 1-float stride with the last weight derived, so `bonesPerVertex = 2` with
+  `weights[v]` = vertex v's first weight is exact. On the captured 2B submesh (6639 verts, 82% single-bone) the top-2
+  reduction moves vertices by at most 2.4 mm on 66 cm (0.36%). Laptop: 2-bone GPU vs CPU-baked 4-bone reference
+  silhouette IoU 0.982 and visually identical; 4-bone GPU (the bug) IoU 0.763, torn
+  (`media/2026-10-30/laptop-gpu-skinning-2bone.png`; probe `runtime/remix-probe/skin-stride-repro/probe.cpp`
+  `REPROBE_BONES2=1`, untracked like yesterday's repro). One static pose: proves the layout, not the per-frame cost.
+  Next for this: a per-frame bone-transform run, then a live path that keeps one mesh per character and sends
+  `InstanceInfoBoneTransformsEXT` instead of CPU-baking a new mesh per pose.
+- `remix-probe/RUN_LOG.md` and `runtime/remix-probe/run-facts.csv` regenerated from all 82 receipts.
+
 **Laptop probe:** `remix-probe/triangle.cpp` `REPROBE_REPLACE=1|2|3` (captured-mesh build), run through
 `run_remote.py`. **Open / next:** GPU skinning via the API is broken upstream (weight stride 1 float; dxvk-remix-plus
 has the one-line fix); the upstream-compatible route is one stable mesh per character with per-frame
