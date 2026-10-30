@@ -65,6 +65,18 @@ def main():
             decoded = base64.b64decode(encoded).decode('utf-8')
             assert 'NIER_REMIX_RUNTIME=C:\\ARM64EC\\d3d9_a64ec.dll' in decoded, decoded
             assert lp.RUNTIME not in decoded
+            # --capture asks the host for the composited frame; it only makes sense for a live run.
+            scripts.clear()
+            with patch.object(lp, 'ps', lambda script, **kw: (scripts.append(script) or json.dumps(receipt))):
+                lp.run('ec-capture', True, 5, live=True, capture=True)
+            encoded = re.search(r"WriteAllBytes\(\$cmd,\s*\[Convert\]::FromBase64String\('([^']+)'\)", scripts[0]).group(1)
+            assert 'NIER_REMIX_CAPTURE_COMPOSITE=' + lp.WORK + r'\composite.raw' in base64.b64decode(encoded).decode('utf-8')
+            try:
+                lp.run('capture-no-live', True, 5, capture=True)
+            except AssertionError:
+                pass
+            else:
+                raise AssertionError('--capture without --live was accepted')
         # --draw-probe: CPU-only hook-health diagnostic, so Remix must be off and the probe flag must travel.
         scripts = []
         def fake_ps_probe(script, **kw):

@@ -4,12 +4,13 @@
   laptop_port.py install            back up the game's d3d11.dll (the NIER_DLAA proxy) and chain it as d3d11_dlaa.dll
                                     behind our hash-checked d3d11.dll; add NIER_RENDER.ini, fonts, steam_appid.txt
                                     (so a direct launch keeps the environment), and the static camp scene
-  laptop_port.py run <label> [--remix] [--seconds N] [--no-ec-hooks] [--steam] [--live] [--draw-probe] [--rehook]
+  laptop_port.py run <label> [--remix] [--seconds N] [--no-ec-hooks] [--steam] [--live] [--draw-probe] [--rehook] [--capture]
                                     start NieRAutomata.exe in the user's session with the NIER_* environment, stop ONLY
                                     that process after N seconds (default 90), copy back NIER_SCALE.log and a receipt
                                     --live enables the draw stream instead of the static scene; load a save manually
                                     --runtime <dll> overrides NIER_REMIX_RUNTIME (default: the Toolkit x64 .trex\\d3d9.dll;
                                     pass the official d3d9_a64ec.dll for the native ARM64EC renderer)
+                                    --capture writes the first composited frame with a HUD to WORK\\composite.raw (live only)
                                     --draw-probe sets NIER_DRAW_PROBE=1 (CPU-only hook-health diagnostic, Remix must be off)
                                     --rehook adds NIER_DRAW_PROBE_REHOOK=1: re-hook draw slots that hold the pristine original again
   laptop_port.py restore            put the original files back exactly (hash-checked) and remove what install added
@@ -111,7 +112,7 @@ if ((Get-FileHash -LiteralPath (Join-Path $g 'd3d11.dll') -Algorithm SHA256).Has
 
 
 def run(label, remix, seconds, no_ec_hooks=False, steam=False, live=False, draw_probe=False, rehook=False,
-        runtime=None):
+        runtime=None, capture=False):
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')
     remix = remix or live
     assert not (draw_probe and remix), 'NIER_DRAW_PROBE=1 is a Remix-off diagnostic: drop --remix/--live'
@@ -123,6 +124,9 @@ def run(label, remix, seconds, no_ec_hooks=False, steam=False, live=False, draw_
         env['NIER_DRAW_PROBE_REHOOK'] = '1'
     if remix:
         env.update(NIER_REMIX_RUNTIME=runtime or RUNTIME, NIER_REMIX_SCENE=WORK + r'\scene\scene.bin')
+    if capture:
+        assert live, '--capture records the live composite: add --live'
+        env['NIER_REMIX_CAPTURE_COMPOSITE'] = WORK + r'\composite.raw'
     if live:
         env.update(NIER_REMIX_LIVE='1', NIER_REMIX_LIVE_TEX=WORK + r'\live-textures', NIER_REMIX_LIVE_STATS_EVERY='60')
     # --steam: settings go into NIER_ENV.ini and Steam starts the game, so per-game Steam settings (overlay) apply.
@@ -193,6 +197,6 @@ if __name__ == '__main__':
         seconds = int(cmd[cmd.index('--seconds') + 1]) if '--seconds' in cmd else 90
         run(cmd[1], '--remix' in cmd, seconds, '--no-ec-hooks' in cmd, '--steam' in cmd, '--live' in cmd,
             '--draw-probe' in cmd, '--rehook' in cmd,
-            cmd[cmd.index('--runtime') + 1] if '--runtime' in cmd else None)
+            cmd[cmd.index('--runtime') + 1] if '--runtime' in cmd else None, '--capture' in cmd)
     else:
         sys.exit(__doc__)

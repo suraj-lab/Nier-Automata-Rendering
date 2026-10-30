@@ -293,3 +293,61 @@ to assert the staged file round-trips byte for byte (`scp` → `ssh -File` → `
 The per-run receipt also stopped scanning the Windows Application log (`Get-WinEvent` took minutes per run, which is
 what pushed three finished runs past the client timeout after the game had already been stopped): it now reports crash
 dumps written under `%LOCALAPPDATA%\CrashDumps` since the run started, which is bounded and cheap.
+
+### Stage 3 PASSES — 2026-10-30 20:58, first live path-traced frame on the laptop (ARM64EC)
+
+Build `ec50b1328803ee8821fc129bf10387f147ec3e87621c5188b2f52cb99f5ca5d0` (commit `0261808`, draw-slot repair armed with
+live capture), runtime `upstream-1.6.1-x64\d3d9_a64ec.dll` (`fff99d8f…`), `live=1`, `--no-ec-hooks`, **undocked**, user in
+camp, 180 s. Receipt and log: `runtime/laptop-port/live-ec-undocked/`.
+
+```
+20:58:25  live camera first sample seq=1 pos=0.770,7.480,3.260 fov=50.00
+20:58:25  live scene target 2880x1800 of 2880x1800; 9 draws into other targets skipped (shadow maps, post passes)
+20:58:53  first frame ready
+20:58:53  composited first frame 2880x1800
+20:58:53  hud replay draws=11 verts=56604 srvs=11 ok=1 failed=0
+```
+
+Every line Stage 3 lacked is present: live camera, main scene target, accepted world draws, first composition, periodic
+statistics, native HUD replay. No crash dump; process alive at the end; laptop restored.
+
+Indicative cost only (the laptop was on battery — not a controlled measurement), 13 windows:
+
+- 9.9–10.9 fps with 60–120 scene draws; **4.1–4.9 fps** once the view reached 165–234 draws; 8.6 fps at the end (113).
+- largest bucket is **`other` (59–182 ms)**, then `readback` 21–56 ms (includes the wait for Remix GPU completion),
+  `convert` 8–11 ms; `present` ≈0.7 ms after warm-up, `update`/`submit` ≤0.3 ms.
+- **mesh builds never settle**: `built` 204 → 40,181 in two minutes (~330 per second) while resident meshes went
+  204 → 827. `identical=0`. This is the Phase 3 churn problem, now measurable on the laptop.
+- `live reads` 2.19 GB in the first two windows; `mesh_bytes` 278 MB at the end; shadow budget (256 MB) reached.
+
+`analyze_live_run.py`: 1.1 PASS (scene target), 1.4 PASS (0% untextured, 54 textures); 1.2/1.3/1.5/1.8 LOOK;
+1.9 FAIL (no sky shell submitted); 1.10 FAIL (only 13 samples, not a 10-minute run).
+
+What was in the way, in order: (1) the draw-slot reset (fixed, `DRAW_HOOK_LOSS.md`); (2) **docking** — NieR's own saved
+display setting targeted the ultrawide, so the host sized Remix from 3440x1440 while the game rendered 2880x1800 and
+the host correctly paused Remix (game frames shown, ~8 fps from the capture path alone); (3) a runtime crash at 20:50
+during the display change (execute of unmapped code under system `dxgi`/`d3d11`, dump in
+`runtime/laptop-port/live-ec-panel/remix/`), after which the next launch hung >150 s in `dxvk_CreateD3D9` behind a
+dialog box (`#32770`) that the host's focus-return kept hiding. A clean `restore`/`install` (which deletes
+`data\rtx-remix`) cleared it. Both (2) and (3) are open issues: the host should follow the game window's real monitor
+and size, and must not return focus away from the runtime's own dialogs.
+
+### Live picture, first look — 2026-10-30 21:05 (same build `ec50b132…`, undocked, ARM64EC)
+
+User report: **models (characters/objects) display, the world is white; models shift colour between frames and show
+only part of their textures.**
+
+- Uploaded textures are not white: the 68 files written to `live-textures` (copied to
+  `runtime/laptop-port/live-ec-undocked/live-textures/`) average luma ~103/255 by block-endpoint estimate, 46 of 64
+  dark/mid, 7 pale (4x4–32x32 placeholders and light greys). Formats BC1/BC3/BC5/BC7/BGRA up to 2048². Several are
+  normal maps (`[128,128,255]`) or blue-dominant, i.e. a non-albedo slot was picked for some draws.
+- `--capture` (new launcher flag, `NIER_REMIX_CAPTURE_COMPOSITE`) wrote a full 2880x1800 frame
+  (`runtime/laptop-port/live-ec-capture/composite-half.png`): 0% clipped pixels, mean luma 50/255 — but it is the first
+  composited frame *with a HUD*, a transition frame, not the white view. Content fills only part of the output, which
+  matches the `scene=1440x900` reported in every stats line despite `live scene target 2880x1800`.
+
+Working hypothesis (not proven): texture-slot choice is unstable per rebuild. It explains colour shifting, partial
+textures and a pale world (mask textures are often pale), and it fits `built` growing ~330/s with `identical=0`.
+Next: log the chosen slot and texture identity per logical mesh across rebuilds; make capture fire on demand or after
+a set frame count instead of at the first HUD frame; then stabilise slot selection from the measured shader
+declarations (`analysis/SHADER_DECLARATIONS.md`) before any exposure work.

@@ -6,6 +6,14 @@ State at this pause: nothing installed on either machine, no game running, lapto
 uncommitted on `main` above `a7a3c0b`. The noon PAUSED note below still applies in substance: do not launch a game or
 render unattended (and a save cannot be loaded without the operator).
 
+**STAGE 3 PASSES (2026-10-30 20:58): first live path-traced frame on the laptop, ARM64EC runtime.** Build
+`ec50b132…` (commit `0261808`), undocked, camp: live camera, main scene target 2880x1800, accepted world draws,
+`composited first frame 2880x1800`, native HUD replay ok, no crash. Indicative (battery) cost: 10–11 fps at 60–120
+draws, 4–5 fps at 165–234; biggest bucket `other` 59–182 ms, then readback 21–56 ms; **mesh builds never settle**
+(204 → 40,181 in 2 min). Next: Phase 3 churn, and two host bugs found on the way (Remix sized from the wrong
+monitor when docked; focus-return hides the runtime's own dialogs). Details: newest section of
+`analysis/LAPTOP_PORT.md`; evidence `analysis/runtime/laptop-port/live-ec-undocked/`.
+
 **SOLVED (2026-10-30 19:41): the draw stream is reachable on the laptop.** Repairing the two draw slots from calls
 that happen before drawing starts (`OMSetRenderTargets` slot 33 and `Map` slot 14, pure forwarding hooks) keeps our
 hooks in place through the frame: 120 s in camp, `hook_mask=3` in every window, **4,810,167 indexed / 167,262
