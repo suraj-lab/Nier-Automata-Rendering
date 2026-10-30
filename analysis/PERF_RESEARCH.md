@@ -1,5 +1,10 @@
 # CPU bottleneck: quick research (2026-10-29 night)
 
+**Correction 2026-10-30:** the "readback 152 ms" below is the Remix worker waiting for the path-traced frame
+(`GetRenderTargetData` + `LockRect`), not game-thread buffer readbacks; this note's buffer-readback analysis concerns
+the game thread, which that line never measured. The worker's cost was mesh churn plus stale same-hash rebuilds; see
+PROGRESS.md 2026-10-30 and `MESH_REPLACEMENT.md`.
+
 Live numbers (media/2026-10-29): 3.6 fps, readback 152 ms + other 125 ms per frame, GPU mostly idle; mesh cache
 built 22223 / evicted 19717 against a 512 MB budget.
 

@@ -356,6 +356,8 @@ int wmain(int argc, wchar_t** argv) {
     const bool live_untransformed = camera_mode && !std::strcmp(camera_mode, "live-nocb");
     const bool live_skin_poses = camera_mode && !std::strcmp(camera_mode, "live-skin-poses");
     const bool live_skinned = live_skin_poses || (camera_mode && !std::strcmp(camera_mode, "live-skinned"));
+    // MOCK_SKIN_ANIMATE (live-skin-poses): both characters change pose every frame, as an animated character does.
+    const bool skin_animate = std::getenv("MOCK_SKIN_ANIMATE") != nullptr;
     const bool live_mode = camera_mode && (!std::strcmp(camera_mode, "live") || live_skinned || live_untransformed || live_offset ||
                                            live_box || live_evict || live_passes || live_odd || live_blend || live_additive ||
                                            live_late || live_lights || live_nolights || live_hud);
@@ -390,6 +392,11 @@ int wmain(int argc, wchar_t** argv) {
     ID3D11RasterizerState* native_raster = nullptr;
     static unsigned char sky_template[65 * 20];
     static unsigned char live_vb_template[130 * 20];
+    static unsigned live_ib_template[192];
+    // MOCK_LATE_IMMUTABLE: from frame 60 (Remix running, capture permitted) an IMMUTABLE vertex/index buffer pair with
+    // initial data is created and drawn, the way a streamed-in area's meshes are. z = 7.5 tells it apart.
+    const bool late_immutable = std::getenv("MOCK_LATE_IMMUTABLE") != nullptr;
+    ID3D11Buffer* late_vb = nullptr, *late_ib = nullptr;
     const bool rewrite_same = std::getenv("MOCK_LIVE_REWRITE_SAME") != nullptr;  // same bytes every frame
     const int spender_from = [] { const char* v = std::getenv("MOCK_LIVE_SPENDER_FROM"); return v ? std::atoi(v) : 0; }();
     ID3D11InputLayout* live_layout = nullptr, *live_layout_slot1 = nullptr;
@@ -649,6 +656,7 @@ int wmain(int argc, wchar_t** argv) {
             lindices[li++] = base + 0; lindices[li++] = base + 64; lindices[li++] = base + 1;
         }
         std::memcpy(live_vb_template, lverts, sizeof lverts);
+        std::memcpy(live_ib_template, lindices, sizeof live_ib_template);
         D3D11_BUFFER_DESC lbd{}; lbd.ByteWidth = live_offset ? vertex_count * 20 : sizeof lverts; lbd.Usage = D3D11_USAGE_DYNAMIC;
         lbd.BindFlags = D3D11_BIND_VERTEX_BUFFER; lbd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
         if (FAILED(device->CreateBuffer(&lbd, nullptr, &live_vb))) { std::fprintf(out, "FAIL live vb\n"); return 3; }
@@ -777,7 +785,7 @@ int wmain(int argc, wchar_t** argv) {
                     float* w = static_cast<float*>(lm.pData);
                     std::memset(w, 0, 96);
                     w[0] = w[5] = w[10] = 1.f;              // bone 0: identity
-                    if (live_skin_poses) w[3] = frame < 40 ? 0.f : 10.f;
+                    if (live_skin_poses) w[3] = skin_animate ? frame * 0.25f : (frame < 40 ? 0.f : 10.f);
                     w[12] = w[17] = w[22] = 1.f; w[15] = 5.f; // bone 1: translated on x
                     context->Unmap(live_cb11, 0);
                 }
@@ -801,7 +809,7 @@ int wmain(int argc, wchar_t** argv) {
                         float* w = static_cast<float*>(lm.pData);
                         std::memset(w, 0, 96);
                         w[0] = w[5] = w[10] = w[12] = w[17] = w[22] = 1.f;
-                        w[3] = frame < 40 ? 20.f : 30.f; w[15] = 5.f;
+                        w[3] = skin_animate ? 20.f + frame * 0.25f : (frame < 40 ? 20.f : 30.f); w[15] = 5.f;
                         context->Unmap(live_cb11, 0);
                     }
                     context->DrawIndexed(192, 0, 0);
@@ -947,6 +955,24 @@ int wmain(int argc, wchar_t** argv) {
                         context->DrawIndexed(192, 0, 0);
                         if (live_evict && pass == 1 && frame >= 55) context->DrawIndexed(189, 0, 0);  // mesh C
                     }
+                }
+                if (late_immutable && frame >= 60) {
+                    if (!late_vb) {
+                        unsigned char verts[65 * 20];
+                        std::memcpy(verts, live_vb_template, sizeof verts);
+                        for (unsigned i = 0; i < 65; ++i) reinterpret_cast<float*>(verts + i * 20)[2] = 7.5f;
+                        D3D11_BUFFER_DESC vd{}; vd.ByteWidth = sizeof verts; vd.Usage = D3D11_USAGE_IMMUTABLE;
+                        vd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+                        D3D11_SUBRESOURCE_DATA vs = {verts, 0, 0};
+                        D3D11_BUFFER_DESC id{}; id.ByteWidth = sizeof live_ib_template; id.Usage = D3D11_USAGE_IMMUTABLE;
+                        id.BindFlags = D3D11_BIND_INDEX_BUFFER;
+                        D3D11_SUBRESOURCE_DATA is = {live_ib_template, 0, 0};
+                        if (FAILED(device->CreateBuffer(&vd, &vs, &late_vb)) || FAILED(device->CreateBuffer(&id, &is, &late_ib)))
+                            { std::fprintf(out, "FAIL late immutable\n"); return 3; }
+                    }
+                    context->IASetVertexBuffers(0, 1, &late_vb, &mstride, &moff);
+                    context->IASetIndexBuffer(late_ib, DXGI_FORMAT_R32_UINT, 0);
+                    context->DrawIndexed(192, 0, 0);
                 }
             }
         } else {

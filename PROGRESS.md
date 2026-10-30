@@ -1,5 +1,66 @@
 # NieR:Automata Rendering — Progress & Resume
 
+**START HERE (2026-10-30, offline day: no live game run).** Four performance changes are gated offline and **not
+installed**; installed is still `065432e4…` (below). The day's main finding is a correctness bug, not only a
+performance one: see the checkpoint right below. Next: install the gated build (needs the user), one live run at the
+usual camp spot, read the new `live reads=` and fps lines with `analyze_live_run.py`.
+
+## Checkpoint — 2026-10-30: mesh replacement was broken on the real runtime; churn, counters, readbacks
+
+**Correction to 2026-10-29's diagnosis.** "readback 152 ms" in `remix: N fps ... (ms/frame: ...)` is the Remix
+*worker's* `GetRenderTargetData` + `LockRect` of the path-traced image, i.e. the wait for Remix's GPU frame, not
+game-thread buffer readbacks (`remix_live.cpp` `frame()`). `PERF_RESEARCH.md`'s readback reasoning applies to the game
+thread, which that line never measured. The log does show the mesh churn: ~29 new meshes per Remix frame, fps falling
+from 4.7 to 2.2 as `built` grew from 10k to 60k.
+
+**Laptop finding (real runtime, `analysis/MESH_REPLACEMENT.md`, image `media/2026-10-30/laptop-mesh-replace-modes.png`):**
+`CreateMesh` under a hash that is still live keeps the OLD geometry; destroy-then-create under the same hash crashed
+the runtime; new hash then destroy old works. Confirmed in dxvk-remix source by a researcher subagent
+(`analysis/REMIX_API_PRIOR_ART.md`: `registerExternalMesh` "Ignoring repeated mesh registration"; GMod RTX uses the
+same create-new-then-destroy-old). So every live rebuild under an existing key showed stale geometry, including the
+late-material repair (a mesh built before its texture never showed it). Lights are different (a live hash is
+overwritten in place, documented): no change there.
+
+**Changes (all in `analysis/checks/`, gated, not installed):**
+1. `live_scene::build_mesh`: a new Remix hash per build (capture key in the high 32 bits, a session-wide 32-bit build serial low: unique until 2^32 builds; a 20-bit serial would wrap within minutes of animation, review P1),
+   old handle destroyed after the new one exists. The fake runtime now behaves like the real one (handle == hash,
+   `VIOLATION` on a live or destroyed hash re-created) and logs `key=`; gates group meshes by `key=`.
+   `test_live_scene` 2b rewritten to the measured contract (red on the old header: 4 violations).
+2. Skinned meshes keyed by draw + occurrence in the frame, pose folded into the version: a new pose replaces the
+   character's mesh instead of adding one. `test_live_skinning_capture` changed accordingly (its old "4 poses, 4 keys"
+   rule was the churn) plus an animated run: 158 rebuilds, 2 keys, each key stays with its character (red before:
+   one key per pose).
+3. Counters and timing: stats line `remix: live reads=N first= trimmed= unmirrored= const= immutable= default=
+   dynamic= read_kb= read_ms= texture_ms= skinned= created=` (cumulative, game thread) and the fps line now
+   `update, submit, present, copy, readback (GPU wait), convert (CPU pixel copy), publish, other` in QPC
+   microseconds. `NIER_REMIX_LIVE_STATS_EVERY` (default 300) for tests. Fixed on the way: a buffer first read then
+   rewritten too large to mirror was counted as budget-trimmed (`written` now set). Gate `test_live_read_counters.py`.
+4. Large `UpdateSubresource` writes are mirrored (game's own memory); the >1 MiB skip stays for Map only. Gate:
+   `test_live_capture_skips_big_writes` case 5 (red on the old rule).
+5. `ID3D11Device::CreateBuffer` hook (slot 3, now in `test_live_camera`'s offsetof probe): vertex/index buffers created
+   with initial data while capture runs keep those bytes (budget-trimmable). Buffers from the first level load,
+   created before the host starts, are still read on first sight. Gate: `test_live_read_counters` case 4
+   (`MOCK_LATE_IMMUTABLE`): `created=2`, no late geometry readback (red with capture off: `created=0`).
+
+**Verification.** Full suite 51/51 green on the final tree. Five tests take a header path and fail with "list index
+out of range" when run bare: `test_camera_decode{,_hidden}.py camera_decode.h`, `test_nscn_scene{,_hidden}.py
+nscn_scene.h`, `test_remix_scale.py render_settings.h`. Gated, **not installed** DLL
+(`build_menu_dll.py` -> `runtime/menu-dll/d3d11.dll`): `b8ff96b862be42dc4763bc173e24a1165752125ebb2d2d48ac81f5a69aacd39d`.
+Independent `reviewer` (ledger `review-mesh-hash-perf-20261030`) found a real P1: the first version used a 20-bit
+serial, which animated rebuilds (~1200/s at full fps) would wrap within minutes and re-create a destroyed hash. Fixed
+(32-bit, gated: `test_live_scene` red on the 20-bit header). Also fixed from that review: `STATS_EVERY=1` silently
+disabled stats, a failed device hook disabled every context hook, GPU-writable (UAV / stream-out) buffers were
+captured at creation, update time was counted on frames that were never presented. Deferred: skinned rebuilds are
+exempt from the per-frame read budget (they count as changed); large UpdateSubresource copies are not trimmable, so
+only expiry bounds them. The live `reads=` counters will show whether either matters.
+
+**Laptop probe:** `remix-probe/triangle.cpp` `REPROBE_REPLACE=1|2|3` (captured-mesh build), run through
+`run_remote.py`. **Open / next:** GPU skinning via the API is broken upstream (weight stride 1 float; dxvk-remix-plus
+has the one-line fix); the upstream-compatible route is one stable mesh per character with per-frame
+`InstanceInfoBoneTransformsEXT`, which needs `bonesPerVertex = 2` (one weight per vertex) and would turn a BLAS build
+per pose into an update. Worth a laptop A/B before any code. Batch/defer readbacks (old step 4) waits for the live
+counters.
+
 **START HERE (2026-10-29 late).** Installed: `d3d11.dll` **`065432e4…f8467e`** (HUD replay shader fix).
 **Live-verified 23:32: the world renders path-traced under the game's own HUD, 2B intact, sun and sky fill working.**
 Screenshot, stats and the evidence images: `media/2026-10-29/` (README there). 1–4 fps: readback 152 ms + CPU 125 ms per

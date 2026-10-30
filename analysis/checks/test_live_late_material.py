@@ -45,7 +45,7 @@ def meshes_by_hash(fake):
         kv = dict(re.findall(r'(\w+)=(\S+)', line))
         if abs(float(kv.get('v0', '0').split(',')[0])) > 5000:
             continue
-        out.setdefault(kv['hash'], []).append({'materials': int(kv['materials']),
+        out.setdefault(kv['key'], []).append({'materials': int(kv['materials']),
                                                'presented': int(kv['presented'])})
     return out
 

@@ -64,7 +64,7 @@ def verdict(out, item):
 def main():
     enabled = render('remix: enabled', ['C:\\remix.dll', 'C:\\scene.bin'])
     first = render('remix: live scene first frame', [1400, 10, 1400, 8, 0])
-    fps = render('remix: %.1f fps', [12.0, 1.0, 0.0, 70.0, 0.0, 9.0])
+    fps = render('remix: %.1f fps', [12.0, 300, 1.0, 1.0, 1.0, 0.0, 70.0, 2.0, 0.0, 9.0])
     replay = 'remix: hud replay draws=56 verts=336 srvs=56 ok=1 failed=0'
     assert fmt('remix: hud replay draws=').startswith('remix: hud replay draws=%u verts=%u srvs=%u ok=%d failed=%d')
 
@@ -82,7 +82,7 @@ def main():
                 '1.10': 'PASS'}
     for item, want in expected.items():
         assert verdict(out, item) == want, f'{item}: want {want}, got {verdict(out, item)}\n{out}'
-    assert 'readback is 88% of the frame' in out, f'cost split not parsed from "present N, ..." form:\n{out}'
+    assert 'readback is 83% of the frame' in out, f'cost split not parsed from "present N, ..." form:\n{out}'
 
     # The same good run, broken one way per row: each verdict must flip.
     bad = [enabled, first, 'remix: hud replay draws=56 verts=336 srvs=56 ok=0 failed=1', fps,

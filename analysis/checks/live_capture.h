@@ -100,6 +100,17 @@ inline std::uint64_t expire_frames = 1800;                // ~30-60 s unused: re
 inline std::atomic<unsigned long long> released{0};       // entries released by expiry (logged once)
 // Per-frame cap on first-sight buffer readbacks: each is a GPU stall on the game's thread.
 inline std::size_t read_bytes_this_frame = 0;
+// Game-thread buffer readbacks since the session started (logged cumulatively; diff two stats lines for a rate).
+// Reason: 0 first sight (or dropped by a copy into the buffer), 1 static bytes dropped by the shadow budget, 2 a write
+// too large to mirror. Kind: 0 constant, 1 immutable, 2 default (or other), 3 dynamic.
+inline std::atomic<unsigned long long> read_reasons[3]{}, read_kinds[4]{};
+inline std::atomic<unsigned long long> read_bytes_total{0}, read_us_total{0}, texture_us_total{0};
+inline unsigned long long now_us() {
+    LARGE_INTEGER f, c;
+    QueryPerformanceFrequency(&f);
+    QueryPerformanceCounter(&c);
+    return static_cast<unsigned long long>(c.QuadPart / f.QuadPart * 1000000 + c.QuadPart % f.QuadPart * 1000000 / f.QuadPart);
+}
 inline unsigned fail_vb_reads = 0;                         // test switch only
 // Above this, a write is not mirrored: reading a large write-combined mapping back costs more than the whole draw
 // stream (measured on the real game), so the bytes are dropped. A draw that needs them reads them through a staging
@@ -212,6 +223,8 @@ inline std::map<std::uint64_t, std::uint64_t>& built_versions() { static std::ma
 // so a per-frame recomputation would lose the flag on every frame the mesh is already on the GPU.
 inline std::map<std::uint64_t, bool>& sky_geometries() { static std::map<std::uint64_t, bool> m; return m; }
 inline std::map<std::uint64_t, std::uint64_t>& content_hashes() { static std::map<std::uint64_t, std::uint64_t> m; return m; }
+// Skinned draws of one buffer set seen so far this frame (cleared by begin_frame): the occurrence is part of the key.
+inline std::map<std::uint64_t, unsigned>& skinned_occurrences() { static std::map<std::uint64_t, unsigned> m; return m; }
 // The worker evicted these meshes: forget that they were built, so they are uploaded again when drawn.
 inline void forget(const std::vector<std::uint64_t>& keys) {
     if (keys.empty()) return;
@@ -380,7 +393,16 @@ inline const std::vector<unsigned char>* buffer_bytes(ID3D11Device* device, ID3D
             injected_failures.fetch_add(1, std::memory_order_relaxed);
             return nullptr;
         }
-        if (!read_into(device, context, buffer, desc, bytes)) return nullptr;
+        const unsigned reason = !shadow ? 0u : shadow->written ? 2u : 1u;
+        const unsigned kind = (desc.BindFlags & D3D11_BIND_CONSTANT_BUFFER) ? 0u : desc.Usage == D3D11_USAGE_IMMUTABLE ? 1u
+                            : desc.Usage == D3D11_USAGE_DYNAMIC ? 3u : 2u;
+        const unsigned long long started = now_us();
+        const bool read = read_into(device, context, buffer, desc, bytes);
+        read_us_total.fetch_add(now_us() - started, std::memory_order_relaxed);
+        if (!read) return nullptr;
+        read_reasons[reason].fetch_add(1, std::memory_order_relaxed);
+        read_kinds[kind].fetch_add(1, std::memory_order_relaxed);
+        read_bytes_total.fetch_add(bytes.size(), std::memory_order_relaxed);
         read_bytes_this_frame += bytes.size();
         if (!shadow) shadow = &new_shadow(buffer, desc, false);  // new identity; a re-read keeps the old one
         shadow->bytes.swap(bytes);
@@ -396,18 +418,22 @@ inline const std::vector<unsigned char>* buffer_bytes(ID3D11Device* device, ID3D
 // Every hook below is pure pass-through unless live capture is permitted: a normal launch must not pay for, or
 // be put at risk by, shadowing it never uses. One mapped pointer per resource: engines map several at once.
 
-inline void note_write(ID3D11Buffer* buffer, const void* data, std::size_t size) {
+// `mapped`: the bytes are the game's Map pointer (write-combined: slow to read back, so large writes are dropped).
+// UpdateSubresource hands us the game's own system memory, which is cheap to copy at any size.
+inline void note_write(ID3D11Buffer* buffer, const void* data, std::size_t size, bool mapped = true) {
     if (!buffer || !data || !size) return;
     D3D11_BUFFER_DESC desc{};
     buffer->GetDesc(&desc);
     if (!desc.ByteWidth || size < desc.ByteWidth) return;
-    if (desc.ByteWidth > max_shadow_write && !(desc.BindFlags & D3D11_BIND_CONSTANT_BUFFER)) {
+    if (mapped && desc.ByteWidth > max_shadow_write && !(desc.BindFlags & D3D11_BIND_CONSTANT_BUFFER)) {
         Shadow* shadow = find_shadow(buffer);
         if (!shadow) shadow = &new_shadow(buffer, desc, true);
         else if (!shadow->bytes.empty()) {
             shadow_bytes -= shadow->bytes.size();
             std::vector<unsigned char>().swap(shadow->bytes);
         }
+        shadow->written = true;  // a first-sight read made it look static; it is the game's write that dropped the bytes
+        shadow->trimmable = false;
         ++shadow->generation;  // contents changed: geometry built from them is rebuilt by the next draw
         shadow->used = ++shadow_clock;
         shadow->used_frame = frame_number;
@@ -447,6 +473,33 @@ using CopySubresourceRegionFn = void (STDMETHODCALLTYPE*)(ID3D11DeviceContext*, 
 
 inline std::atomic<void*> g_next_map{nullptr}, g_next_unmap{nullptr}, g_next_update{nullptr};
 inline std::atomic<void*> g_next_copy{nullptr}, g_next_copy_region{nullptr};
+using CreateBufferFn = HRESULT (STDMETHODCALLTYPE*)(ID3D11Device*, const D3D11_BUFFER_DESC*, const D3D11_SUBRESOURCE_DATA*, ID3D11Buffer**);
+inline std::atomic<void*> g_next_create_buffer{nullptr};
+inline std::atomic<unsigned long long> created_captures{0};  // vertex/index buffers whose bytes came from pInitialData
+
+// A vertex/index buffer created with initial data: keep those bytes as its shadow, so its first draw needs no GPU
+// readback. They stay trimmable (budget-governed like any static bytes): a level's geometry can exceed the budget.
+inline HRESULT STDMETHODCALLTYPE hooked_create_buffer(ID3D11Device* self, const D3D11_BUFFER_DESC* desc,
+                                                      const D3D11_SUBRESOURCE_DATA* init, ID3D11Buffer** out) {
+    const HRESULT hr = reinterpret_cast<CreateBufferFn>(g_next_create_buffer.load(std::memory_order_acquire))(self, desc, init, out);
+    if (SUCCEEDED(hr) && out && *out && desc && desc->ByteWidth && init && init->pSysMem &&
+        (desc->BindFlags & (D3D11_BIND_VERTEX_BUFFER | D3D11_BIND_INDEX_BUFFER)) &&
+        !(desc->BindFlags & (D3D11_BIND_CONSTANT_BUFFER | D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_STREAM_OUTPUT)) &&  // GPU-writable: no hook sees those writes
+        permitted.load(std::memory_order_acquire)) try {
+        std::lock_guard<std::recursive_mutex> lock(mutex());
+        if (permitted.load(std::memory_order_acquire) && !find_shadow(*out)) {
+            std::vector<unsigned char> bytes(static_cast<const unsigned char*>(init->pSysMem),
+                                             static_cast<const unsigned char*>(init->pSysMem) + desc->ByteWidth);
+            Shadow& shadow = new_shadow(*out, *desc, false);
+            shadow.bytes.swap(bytes);
+            shadow_bytes += shadow.bytes.size();
+            shadow.used = ++shadow_clock;
+            created_captures.fetch_add(1, std::memory_order_relaxed);
+            trim_shadows();
+        }
+    } catch (...) {}
+    return hr;
+}
 
 inline HRESULT STDMETHODCALLTYPE hooked_map(ID3D11DeviceContext* self, ID3D11Resource* resource, UINT subresource,
                                             D3D11_MAP type, UINT flags, D3D11_MAPPED_SUBRESOURCE* mapped_data) {
@@ -491,7 +544,7 @@ inline void STDMETHODCALLTYPE hooked_update(ID3D11DeviceContext* self, ID3D11Res
             D3D11_BUFFER_DESC desc{};
             buffer->GetDesc(&desc);
             if (!box) {
-                note_write(buffer, data, desc.ByteWidth);
+                note_write(buffer, data, desc.ByteWidth, false);
             } else if (box->left < box->right && box->right <= desc.ByteWidth) {
                 // `data` holds only the boxed bytes: copy exactly those into an existing shadow. Without a shadow
                 // there is nothing to patch; the next use reads the buffer once and sees the update.
@@ -555,7 +608,10 @@ inline TextureResult write_texture(ID3D11Device* device, ID3D11DeviceContext* co
     texture_capture::Texture pixels;
     if (!(desc.BindFlags & dynamic_binds) && desc.Usage != D3D11_USAGE_DYNAMIC && desc.SampleDesc.Count == 1) {
         ++textures_this_frame;
-        if (texture_capture::read_mip0(device, context, texture, desc, pixels)) {
+        const unsigned long long started = now_us();
+        const bool read = texture_capture::read_mip0(device, context, texture, desc, pixels);
+        texture_us_total.fetch_add(now_us() - started, std::memory_order_relaxed);
+        if (read) {
             const std::uint32_t assigned = next_texture_id;
             wchar_t name[64];
             swprintf(name, 64, L"\\live_%u.dds", assigned);
@@ -592,6 +648,7 @@ inline void begin_frame(ID3D11DeviceContext* context, unsigned width = 0, unsign
         lights_read = false;
         read_bytes_this_frame = 0;
         target_sizes().clear();
+        skinned_occurrences().clear();
         expire_entries();
     }
     active_context.store(context, std::memory_order_release);
@@ -822,9 +879,16 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
         ? static_cast<unsigned>(std::min<std::size_t>(256, constants->size() / 48)) : 0;
     if (skinned && !bone_count) { ++frame.skipped; release_all(vbs, 4, ib, layout); device->Release(); return; }
     if (!constants) { ++frame.skipped_untransformed; release_all(vbs, 4, ib, layout); device->Release(); return; }
-    // Baked characters sharing VB/IB can have different poses in the same frame; never alias their meshes.
-    // shortcut: pose-specific meshes use the existing LRU budget; optimise animation uploads after correctness.
-    if (skinned) geometry = hash_mix(geometry, constants->data(), 48ull * bone_count);
+    // Baked characters sharing VB/IB can have different poses in the same frame; never alias their meshes. The key is
+    // the draw plus its occurrence in this frame, not the pose: a pose-keyed mesh per animation frame filled the mesh
+    // budget and evicted the static world (live 2026-10-29: 59917 built, 56915 evicted). The pose goes into the
+    // version instead, so a new pose rebuilds and replaces the mesh under the same key.
+    // shortcut: if the game reorders identical characters between frames, their keys swap and both rebuild each frame.
+    std::uint64_t pose = 0;
+    if (skinned) {
+        geometry = hash_value(geometry ^ (0x5c1d000000000000ull + skinned_occurrences()[geometry]++));
+        pose = hash_mix(1469598103934665603ull, constants->data(), 48ull * bone_count);
+    }
 
     std::uint32_t texture = 0;
     bool texture_deferred = false;
@@ -980,7 +1044,7 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     const auto version_now = [&] {
         std::uint64_t v = identity(ib);
         for (unsigned i = 0; i < vb_count; ++i) v = hash_value(v ^ identity(vbs[i]));
-        return v;
+        return skinned ? hash_value(v ^ pose) : v;
     };
     version = version_now();
     const auto previously = built_versions().find(geometry);
@@ -1162,6 +1226,7 @@ constexpr std::size_t kUnmap = 15;
 constexpr std::size_t kCopySubresourceRegion = 46;
 constexpr std::size_t kCopyResource = 47;
 constexpr std::size_t kUpdateSubresource = 48;
+constexpr std::size_t kCreateBuffer = 3;  // ID3D11Device; checked by test_live_camera's offsetof probe
 
 inline bool install(ID3D11DeviceContext* context) {
     if (!context) return false;
@@ -1173,11 +1238,23 @@ inline bool install(ID3D11DeviceContext* context) {
         return r == vtable_hook::Result::Hooked || r == vtable_hook::Result::AlreadyHooked ||
                r == vtable_hook::Result::RestoreFailed;
     };
-    return ok(vtable_hook::hook(table, kMap, reinterpret_cast<void*>(&hooked_map), g_next_map, protect)) &&
+    ID3D11Device* device = nullptr;
+    context->GetDevice(&device);
+    bool device_ok = false;
+    if (device) {
+        void** device_table = *reinterpret_cast<void***>(device);
+        device_ok = ok(vtable_hook::hook(device_table, kCreateBuffer, reinterpret_cast<void*>(&hooked_create_buffer),
+                                         g_next_create_buffer, protect));
+        device->Release();
+    }
+    // Context hooks do not depend on the device hook: without CreateBuffer the old first-sight read still works.
+    const bool context_ok =
+           ok(vtable_hook::hook(table, kMap, reinterpret_cast<void*>(&hooked_map), g_next_map, protect)) &&
            ok(vtable_hook::hook(table, kUnmap, reinterpret_cast<void*>(&hooked_unmap), g_next_unmap, protect)) &&
            ok(vtable_hook::hook(table, kUpdateSubresource, reinterpret_cast<void*>(&hooked_update), g_next_update, protect)) &&
            ok(vtable_hook::hook(table, kCopyResource, reinterpret_cast<void*>(&hooked_copy_resource), g_next_copy, protect)) &&
            ok(vtable_hook::hook(table, kCopySubresourceRegion, reinterpret_cast<void*>(&hooked_copy_region), g_next_copy_region, protect));
+    return context_ok && device_ok;
 }
 
 }  // namespace live_capture

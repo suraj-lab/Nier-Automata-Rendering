@@ -33,6 +33,7 @@ struct State {
     std::size_t budget = std::size_t(512) << 20;
     std::uint64_t clock = 0;
     unsigned built = 0, evicted = 0;
+    std::uint64_t serial = 0;  // low 32 bits of every mesh hash: unique per build
     unsigned light_creates = 0;  // CreateLight calls for the game's lights: grows when lights move, never per frame for static ones
 };
 
@@ -118,7 +119,13 @@ inline bool build_mesh(const remixapi_Interface& api, State& s, const live_captu
     remixapi_MeshInfo info{};
     info.sType = REMIXAPI_STRUCT_TYPE_MESH_INFO;
     info.pNext = nullptr;
-    info.hash = upload.geometry;  // stable per geometry, so the runtime can reuse work across frames
+    // A new hash for every build: the real runtime keeps the old geometry when a live hash is created again, and crashed
+    // when a destroyed hash was re-created (laptop probe 2026-10-30, REPROBE_REPLACE modes 1 and 2). New hash, then
+    // destroy the old handle (mode 3) is the pattern that rendered the new geometry. The low 32 bits are a session-wide
+    // build serial, so hashes are unique until 2^32 builds (~1000 h of 1200 rebuilds/s); a wrap would re-create a
+    // destroyed hash, which crashed the runtime. The high 32 bits are the capture key's, for logs and the fake runtime.
+    if (!(++s.serial & 0xFFFFFFFFull)) ++s.serial;
+    info.hash = (upload.geometry & 0xFFFFFFFF00000000ull) | (s.serial & 0xFFFFFFFFull);
     info.surfaces_values = &surface;
     info.surfaces_count = 1;
     remixapi_MeshHandle mesh = nullptr;
@@ -127,7 +134,7 @@ inline bool build_mesh(const remixapi_Interface& api, State& s, const live_captu
     const auto previous = s.meshes.find(upload.geometry);
     if (previous != s.meshes.end()) {  // same key rebuilt after a buffer rewrite: replace, do not leak
         s.bytes -= s.mesh_bytes[upload.geometry];
-        if (previous->second != mesh) api.DestroyMesh(previous->second);  // Remix reuses hash-as-handle
+        if (previous->second != mesh) api.DestroyMesh(previous->second);  // after the new one exists (mode 3)
     }
     s.meshes[upload.geometry] = mesh;
     s.mesh_bytes[upload.geometry] = bytes;

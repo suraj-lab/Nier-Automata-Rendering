@@ -178,7 +178,7 @@ def inside():
         # 4 distinct geometries (start_index and base_vertex draws, from both vertex buffers) plus one rebuild
         # each for the two draws that use the rewritten dynamic buffer.
         assert len(offset_meshes) == 9, offset_meshes
-        assert len({re.search(r'hash=(\d+)', m).group(1) for m in offset_meshes}) == 6, offset_meshes
+        assert len({re.search(r'key=(\d+)', m).group(1) for m in offset_meshes}) == 6, offset_meshes
         for line in offset_meshes:
             assert 'verts=65' in line and 'indices=192' in line, line
             assert 'v0=0.000,0.000,2.500' in line, f'start_index/base_vertex ignored: {line}'
@@ -242,7 +242,7 @@ def inside():
                                                  'NIER_REMIX_LIVE': '1', 'NIER_REMIX_LIVE_TEX': tr.win(tex6),
                                                  'NIER_REMIX_LIVE_BUDGET_KB': '12'})
         assert fake and 'VIOLATION' not in fake, fake
-        made = [(re.search(r'hash=(\d+)', x).group(1), int(re.search(r'presented=(\d+)', x).group(1)))
+        made = [(re.search(r'key=(\d+)', x).group(1), int(re.search(r'presented=(\d+)', x).group(1)))
                 for x in world_meshes(fake)]
         # B is the mesh first built when it appears (frames 40-45). It is never rewritten, so a second build can only
         # mean it was evicted while unused (C arrived at 55) and uploaded again when drawn from 65.
@@ -275,7 +275,7 @@ def inside():
                                                   'NIER_REMIX_LIVE_EXPIRE_FRAMES': '10'})
         assert fake and 'VIOLATION' not in fake, fake
         assert any('live released' in x for x in tr.remix_lines(log)), tr.remix_lines(log)[-8:]
-        made = [(re.search(r'hash=(\d+)', x).group(1), int(re.search(r'presented=(\d+)', x).group(1)))
+        made = [(re.search(r'key=(\d+)', x).group(1), int(re.search(r'presented=(\d+)', x).group(1)))
                 for x in world_meshes(fake)]
         a = made[0][0]
         assert sum(1 for h, _ in made if h == a) == 2, f'mesh A drawn every frame was rebuilt by expiry: {made}'
@@ -315,7 +315,7 @@ def inside():
         # at mock frame 50 even though the sky's per-frame read has spent the budget. Without that, seen[-1] stays
         # below 45 and the object on screen keeps its old vertices.
         assert seen[0] < 5 and any(30 <= v < 45 for v in seen) and seen[-1] >= 45, seen
-        assert made[-1]['hash'] == made[0]['hash'], f'must be A rebuilt, not another mesh: {made}'
+        assert made[-1]['key'] == made[0]['key'], f'must be A rebuilt, not another mesh: {made}'
 
         results['changed'] = 'Spent read budget never leaves changed geometry showing its old mesh.'
 
@@ -327,8 +327,8 @@ def inside():
         made = world_meshes(fake)
         parsed = [dict(kv.split('=', 1) for kv in re.findall(r'(\w+=\S+)', x)) for x in made]
         # A, B, and A again after its content change: not zero (never retried), not one per frame (no bounding).
-        assert len(parsed) == 3 and parsed[0]['hash'] == parsed[2]['hash'] != parsed[1]['hash'], \
-            f'expected A, B, A-rebuilt: {[p["hash"] for p in parsed]}'
+        assert len(parsed) == 3 and parsed[0]['key'] == parsed[2]['key'] != parsed[1]['key'], \
+            f'expected A, B, A-rebuilt: {[p["key"] for p in parsed]}'
         assert 'VIOLATION' not in fake, fake[:300]
         results['readfail2'] = 'Failed reads on a shadowed buffer are retried; nothing is recorded as built.'
 
@@ -353,8 +353,8 @@ def inside():
         assert drawn, 'nothing was drawn at all'
         frames = {int(d['presented']) for d in drawn}
         assert len(frames) >= 40, f'the rewritten mesh must be drawn on nearly every frame, saw {len(frames)}'
-        # A is rebuilt after its frame-50 content change: last build repeats A's hash, and differs from B's.
-        assert made[-1]['hash'] == made[0]['hash'] != made[1]['hash'], [m['hash'] for m in made]
+        # A is rebuilt after its frame-50 content change: last build repeats A's key, and differs from B's.
+        assert made[-1]['key'] == made[0]['key'] != made[1]['key'], [m['key'] for m in made]
         results['same'] = 'Rewriting a buffer with identical bytes keeps the uploaded mesh.'
     except Exception as exc:
         (OUT / 'validation.json').write_text(json.dumps({'passed': False, 'error': str(exc)[-3000:], 'results': results,

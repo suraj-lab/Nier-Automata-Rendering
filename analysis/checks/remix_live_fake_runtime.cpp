@@ -11,6 +11,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <atomic>
+#include <cstdint>
+#include <set>
 #include <remix_c.h>
 
 namespace {
@@ -35,6 +37,10 @@ std::atomic<bool> fail_next_copy{false};
 unsigned frames = 0, copies = 0, fail_copy_at = 0, materials = 0, meshes = 0, lights = 0;
 UINT last_w = 0, last_h = 0;
 unsigned long long handle = 0x5000;
+// Mesh handles are the hash, as in the real runtime. Laptop probe 2026-10-30 (analysis/remix-probe REPROBE_REPLACE):
+// CreateMesh under a hash that is still live keeps the OLD geometry, and re-creating a hash after DestroyMesh crashed
+// the runtime (access violation). Both are contract violations here, so the mock gates see what the runtime does.
+std::set<unsigned long long> live_meshes, destroyed_meshes;
 
 remixapi_ErrorCode REMIXAPI_CALL create_d3d9(remixapi_Bool, IDirect3D9Ex** out9) {
     note("CreateD3D9 registered=%d started=%d", registered != nullptr, started);
@@ -53,6 +59,8 @@ remixapi_ErrorCode REMIXAPI_CALL startup(const remixapi_StartupInfo* info) {
          registered != nullptr);
     if (!registered) note("VIOLATION Startup before Register");
     started = true;
+    live_meshes.clear();
+    destroyed_meshes.clear();
     if (info) startup_window = info->hwnd;
     return registered ? REMIXAPI_ERROR_CODE_ALREADY_EXISTS : REMIXAPI_ERROR_CODE_SUCCESS;
 }
@@ -89,11 +97,17 @@ remixapi_ErrorCode REMIXAPI_CALL create_mesh(const remixapi_MeshInfo* i, remixap
     float v0[3] = {0, 0, 0};
     if (i && i->surfaces_count && i->surfaces_values[0].vertices_values && i->surfaces_values[0].vertices_count)
         std::memcpy(v0, i->surfaces_values[0].vertices_values[0].position, sizeof v0);
-    note("CreateMesh hash=%llu surfaces=%u verts=%llu indices=%llu materials=%u skinned=%d bonesPerVertex=%u weights=%llu v0=%.3f,%.3f,%.3f presented=%u started=%d",
+    note("CreateMesh hash=%llu surfaces=%u verts=%llu indices=%llu materials=%u skinned=%d bonesPerVertex=%u weights=%llu v0=%.3f,%.3f,%.3f presented=%u started=%d key=%llu",
          i ? static_cast<unsigned long long>(i->hash) : 0ull, i ? i->surfaces_count : 0u, verts, indices, materials,
-         skinned ? 1 : 0, bones_per_vertex, weights, v0[0], v0[1], v0[2], frames, started);
+         skinned ? 1 : 0, bones_per_vertex, weights, v0[0], v0[1], v0[2], frames, started,
+         i ? static_cast<unsigned long long>(i->hash) >> 32 : 0ull);  // live_scene: capture key in the high 32 bits
     if (!started) note("VIOLATION CreateMesh before Startup");
-    *h = reinterpret_cast<remixapi_MeshHandle>(handle++); return REMIXAPI_ERROR_CODE_SUCCESS;
+    const unsigned long long hash = i ? static_cast<unsigned long long>(i->hash) : 0ull;
+    if (!hash) { *h = reinterpret_cast<remixapi_MeshHandle>(handle++); return REMIXAPI_ERROR_CODE_SUCCESS; }
+    if (live_meshes.count(hash)) note("VIOLATION CreateMesh hash=%llu reused while live: the runtime keeps the old geometry", hash);
+    if (destroyed_meshes.count(hash)) note("VIOLATION CreateMesh hash=%llu re-created after DestroyMesh: the runtime crashed", hash);
+    live_meshes.insert(hash);
+    *h = reinterpret_cast<remixapi_MeshHandle>(hash); return REMIXAPI_ERROR_CODE_SUCCESS;
 }
 remixapi_ErrorCode REMIXAPI_CALL create_light(const remixapi_LightInfo* info, remixapi_LightHandle* h) {
     ++lights; *h = reinterpret_cast<remixapi_LightHandle>(handle++);
@@ -219,7 +233,11 @@ extern "C" __declspec(dllexport) remixapi_ErrorCode REMIXAPI_CALL remixapi_Initi
     api->CreateMaterial = create_material;
     api->DestroyMaterial = [](remixapi_MaterialHandle) { return REMIXAPI_ERROR_CODE_SUCCESS; };
     api->CreateMesh = create_mesh;
-    api->DestroyMesh = [](remixapi_MeshHandle) { return REMIXAPI_ERROR_CODE_SUCCESS; };
+    api->DestroyMesh = [](remixapi_MeshHandle m) {
+        const auto hash = static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(m));
+        if (live_meshes.erase(hash)) destroyed_meshes.insert(hash);
+        return REMIXAPI_ERROR_CODE_SUCCESS;
+    };
     api->SetupCamera = setup_camera;
     api->DrawInstance = draw_instance;
     api->CreateLight = create_light;

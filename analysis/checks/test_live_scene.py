@@ -164,24 +164,46 @@ int main() {
         check("rebuild leaked a handle", s.meshes.size() == 1 && live_meshes.size() == live_before + 1);
     }
 
-    // 2b. Actual Remix uses hash-as-handle: registration replaces the old mesh in place.
+    // 2b. Actual Remix uses hash-as-handle, and (laptop probe 2026-10-30, analysis/MESH_REPLACEMENT.md) keeps the OLD
+    // geometry when a live hash is created again and crashed when a destroyed hash was re-created. So every rebuild must
+    // use a hash never used before, the new mesh must exist before the old one is destroyed, and a failed rebuild must
+    // keep the old mesh.
     {
         hash_mesh_handles = true;
         live_scene::State s;
         const auto before = destroyed_meshes;
         auto up = make_upload(777, 20);
         check("first hash mesh failed", live_scene::build_mesh(api, s, up));
-        const auto handle = s.meshes[777];
+        const auto first = s.meshes[777];
         up.vertices[0].position[0] = 3.f;
         check("hash mesh replacement failed", live_scene::build_mesh(api, s, up));
-        check("replacement destroyed itself", live_meshes.count(reinterpret_cast<void*>(handle)) == 1);
-        check("same handle was destroyed", destroyed_meshes == before);
+        const auto second = s.meshes[777];
+        check("rebuild reused a live hash (runtime keeps the old geometry)", second != first);
+        check("old mesh not destroyed after the rebuild", !live_meshes.count(first) && destroyed_meshes == before + 1);
+        check("rebuilt mesh missing", live_meshes.count(second) == 1);
         fail_mesh_creation = true;
         check("failed replacement accepted", !live_scene::build_mesh(api, s, up));
-        check("failed replacement lost old mesh", s.meshes[777] == handle && live_meshes.count(reinterpret_cast<void*>(handle)) == 1);
+        check("failed replacement lost old mesh", s.meshes[777] == second && live_meshes.count(second) == 1);
         fail_mesh_creation = false;
+        // Evicted and rebuilt, or rebuilt many times: no hash is ever handed to CreateMesh twice.
+        std::map<void*, int> seen{{first, 1}, {second, 1}};
+        bool reused = false;
+        for (int i = 0; i < 50; ++i) {
+            check("repeated rebuild failed", live_scene::build_mesh(api, s, up));
+            reused = reused || seen[s.meshes[777]]++ > 0;
+        }
+        // Across the point where a narrow serial would wrap (review P1, 2026-10-30): a long animated session rebuilds
+        // ~1200 meshes/s, so a 20-bit serial would hand out the first build's (destroyed) hash again within minutes.
+        s.serial = (1ull << 20) - 1;
+        for (int i = 0; i < 3; ++i) {
+            check("rebuild across the wrap point failed", live_scene::build_mesh(api, s, up));
+            reused = reused || seen[s.meshes[777]]++ > 0;
+        }
+        check("a destroyed hash was created again (runtime crashed on this)", !reused);
+        const auto last = s.meshes[777];
         live_scene::destroy(api, s);
-        check("hash mesh not freed at teardown", destroyed_meshes == before + 1);
+        check("hash mesh not freed at teardown", !live_meshes.count(last));
+        check("a handle was leaked or destroyed twice", destroyed_meshes == before + 55);  // 55 creates: 54 replaced + 1 teardown
         hash_mesh_handles = false;
     }
 

@@ -91,9 +91,19 @@ int main() {
                          grow_shadow->generation == 2 && live_capture::skipped_writes.load() == 2 &&
                          live_capture::shadow_bytes == (8u << 10) + 64 && grow->refs == 1;
 
+    // 5. The same 4 MiB size written through UpdateSubresource (mapped=false): the source is the game's own memory, not
+    //    a write-combined mapping, so it is copied exactly and never needs a readback (2026-10-30).
+    FakeBuffer* updated = make(4u << 20, D3D11_BIND_VERTEX_BUFFER, D3D11_USAGE_DEFAULT);
+    std::vector<unsigned char> update_data(updated->desc.ByteWidth);
+    for (std::size_t i = 0; i < update_data.size(); ++i) update_data[i] = static_cast<unsigned char>(i * 13 + 5);
+    live_capture::note_write(updated, update_data.data(), update_data.size(), false);
+    const live_capture::Shadow* updated_shadow = live_capture::find_shadow(updated);
+    const bool update_copied = updated_shadow && updated_shadow->bytes == update_data && updated_shadow->written &&
+                               live_capture::skipped_writes.load() == 2;
+
     const ULONG big_refs = big->refs;
-    std::printf("skipped=%d copied=%d constant=%d dropped=%d skipped_count=%llu big_refs=%lu desc_calls=%d\n",
-                skipped ? 1 : 0, copied ? 1 : 0, constant ? 1 : 0, dropped ? 1 : 0,
+    std::printf("skipped=%d copied=%d constant=%d dropped=%d update_copied=%d skipped_count=%llu big_refs=%lu desc_calls=%d\n",
+                skipped ? 1 : 0, copied ? 1 : 0, constant ? 1 : 0, dropped ? 1 : 0, update_copied ? 1 : 0,
                 live_capture::skipped_writes.load(), big_refs, big->desc_calls);
     return 0;
 }
@@ -112,7 +122,7 @@ def main():
     env = {**os.environ, 'WINEPREFIX': str(PREFIX), 'WINEDEBUG': '-all'}
     run = subprocess.run(['wine', str(work / 'probe.exe')], capture_output=True, text=True, env=env, timeout=180)
     line = next((l for l in run.stdout.splitlines() if l.startswith('skipped=')), '')
-    ok = line == 'skipped=1 copied=1 constant=1 dropped=1 skipped_count=2 big_refs=1 desc_calls=1'
+    ok = line == 'skipped=1 copied=1 constant=1 dropped=1 update_copied=1 skipped_count=2 big_refs=1 desc_calls=1'
     print(json.dumps({'passed': ok, 'observed': line} if ok else
                      {'passed': False, 'error': f'observed {line!r} (stderr: {run.stderr[-300:]!r})'}, indent=2))
     sys.exit(0 if ok else 1)

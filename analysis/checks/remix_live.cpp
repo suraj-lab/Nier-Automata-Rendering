@@ -33,6 +33,7 @@ bool live_enabled = false;  // NIER_REMIX_LIVE=1: build the scene from the game'
 std::uint64_t live_sequence = 0;        // worker only
 std::wstring live_texture_dir;
 std::size_t live_mesh_budget = std::size_t(512) << 20;
+unsigned long long stats_every = 300;  // NIER_REMIX_LIVE_STATS_EVERY
 
 struct Frame { std::vector<unsigned char> pixels; UINT width = 0, height = 0; DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN; unsigned long long seq = 0; };
 // Guarded by `published`: the newest finished frame, and what the game currently presents.
@@ -143,6 +144,9 @@ State configure() {
             const float v = std::wcstof(s.c_str(), nullptr);
             if (v > 0 && v < 1e6f) live_scene::light_scale = v;
         }
+        // NIER_REMIX_LIVE_STATS_EVERY: Remix frames between stats lines (default 300; tests use a small value).
+        if (const std::wstring n = env(L"NIER_REMIX_LIVE_STATS_EVERY"); !n.empty())
+            if (const unsigned long long v = _wcstoui64(n.c_str(), nullptr, 10); v >= 2) stats_every = std::min<unsigned long long>(v, 100000);  // % 1 never == 1
         if (const std::wstring n = env(L"NIER_REMIX_LIVE_TEX_PER_FRAME"); !n.empty())
             live_capture::textures_per_frame = std::min<unsigned>(static_cast<unsigned>(_wcstoui64(n.c_str(), nullptr, 10)), 64);
     }
@@ -364,7 +368,9 @@ struct Worker {
             if (frame.valid() && frame.sequence != live_sequence) {
                 live_sequence = frame.sequence;
                 stage("live update");
+                const unsigned long long u0 = live_capture::now_us();
                 if (!live_scene::update(api, std::move(uploads), textures, frame, live, live_options)) { fail("live scene update"); return false; }
+                update_pending += live_capture::now_us() - u0;  // counted when a frame is presented (same bucket as n)
                 live_capture::forget(live_scene::take_evicted(live));
                 if (!live_reported) {
                     live_reported = true;
@@ -378,8 +384,20 @@ struct Worker {
                     return true;
                 }
                 stage("submit");
+                const unsigned long long s0 = live_capture::now_us();
                 if (const remixapi_ErrorCode r = live_scene::submit(api, frame, live, scene.camera, aspect)) { fail("live submit", r); return false; }
-                if (seq % 300 == 1)
+                t_submit += live_capture::now_us() - s0;
+                if (seq % stats_every == 1) {
+                    // Game-thread readbacks, cumulative since start: diff two lines for a rate.
+                    logger.load()("remix: live reads=%llu first=%llu trimmed=%llu unmirrored=%llu const=%llu immutable=%llu "
+                                  "default=%llu dynamic=%llu read_kb=%llu read_ms=%llu texture_ms=%llu skinned=%u created=%llu",
+                                  live_capture::read_reasons[0].load() + live_capture::read_reasons[1].load() + live_capture::read_reasons[2].load(),
+                                  live_capture::read_reasons[0].load(), live_capture::read_reasons[1].load(), live_capture::read_reasons[2].load(),
+                                  live_capture::read_kinds[0].load(), live_capture::read_kinds[1].load(),
+                                  live_capture::read_kinds[2].load(), live_capture::read_kinds[3].load(),
+                                  live_capture::read_bytes_total.load() >> 10, live_capture::read_us_total.load() / 1000,
+                                  live_capture::texture_us_total.load() / 1000, frame.skinned,
+                                  live_capture::created_captures.load());
                     logger.load()("remix: live draws=%u instances=%u meshes=%u built=%u evicted=%u identical=%u "
                                   "blended=%u untextured=%u textures=%u hud=%u small_viewport=%u scene=%ux%u skipped_pass=%u "
                                   "fallbacks=%u mesh_bytes=%llu dropped=%u lights=%u light_creates=%u sky=%u prepass=%u alpha_tested=%u light_state=0x%x",
@@ -391,6 +409,7 @@ struct Worker {
                                   frame.target_fallbacks, static_cast<unsigned long long>(live.bytes),
                                   live_capture::dropped_uploads.load(), static_cast<unsigned>(frame.lights.size()), live.light_creates, frame.sky,
                                   frame.skipped_prepass, frame.alpha_tested, frame.light_state);
+                }
                 live_wait_frames = 0;
             } else if (!uploads.empty() || !textures.empty()) {
                 // Geometry queued while no new frame arrived still has to be built.
@@ -415,20 +434,21 @@ struct Worker {
             if (const remixapi_ErrorCode r = nscn::submit(api, scene, built, aspect)) { fail("submit", r); return false; }
         }
         stage("present");
-        const ULONGLONG t0 = GetTickCount64();
+        const unsigned long long t0 = live_capture::now_us();
         if (const remixapi_ErrorCode r = api.Present(nullptr)) { fail("Present", r); return false; }
-        const ULONGLONG t1 = GetTickCount64();
+        const unsigned long long t1 = live_capture::now_us();
         stage("copy");
         if (const remixapi_ErrorCode r = api.dxvk_CopyRenderingOutput(target, REMIXAPI_DXVK_COPY_RENDERING_OUTPUT_TYPE_FINAL_COLOR)) {
             fail("CopyRenderingOutput", r);
             return false;
         }
-        const ULONGLONG t2 = GetTickCount64();
+        const unsigned long long t2 = live_capture::now_us();
         stage("readback");
         if (FAILED(device->GetRenderTargetData(target, readback))) { fail("GetRenderTargetData"); return false; }
         D3DLOCKED_RECT locked{};
         stage("lock");
         if (FAILED(readback->LockRect(&locked, nullptr, D3DLOCK_READONLY))) { fail("LockRect"); return false; }
+        const unsigned long long t_locked = live_capture::now_us();  // GetRenderTargetData waits for Remix's frame
         back.pixels.resize(static_cast<std::size_t>(width) * height * 4);
         const bool swap = rgba(format);  // source is A8R8G8B8 = bytes B,G,R,A
         for (UINT y = 0; y < height; ++y) {
@@ -440,18 +460,22 @@ struct Worker {
         }
         readback->UnlockRect();
         back.width = width; back.height = height; back.format = format; back.seq = ++seq;
-        const ULONGLONG t3 = GetTickCount64();
+        const unsigned long long t3 = live_capture::now_us();
         stage("publish");
         std::lock_guard<std::mutex> lock(published);
         std::swap(back, ready);
-        const ULONGLONG t4 = GetTickCount64();
-        t_present += t1 - t0; t_copy += t2 - t1; t_readback += t3 - t2; t_publish += t4 - t3; ++t_frames;
+        const unsigned long long t4 = live_capture::now_us();
+        t_update += update_pending; update_pending = 0;
+        t_present += t1 - t0; t_copy += t2 - t1; t_readback += t_locked - t2; t_convert += t3 - t_locked;
+        t_publish += t4 - t3; ++t_frames;
         return true;
     }
 
     // Milliseconds per stage, averaged over the reporting window. GetTickCount64 is 1 ms, which is enough at 200 ms
     // frames and useless below 16 ms; that is fine for finding which stage dominates now.
-    ULONGLONG t_submit = 0, t_present = 0, t_copy = 0, t_readback = 0, t_publish = 0, t_frames = 0;
+    // Microseconds (QueryPerformanceCounter): GetTickCount64 could not resolve the sub-millisecond stages.
+    // readback = GetRenderTargetData + LockRect (waits for Remix's GPU frame); convert = the CPU pixel copy after it.
+    unsigned long long update_pending = 0, t_update = 0, t_submit = 0, t_present = 0, t_copy = 0, t_readback = 0, t_convert = 0, t_publish = 0, t_frames = 0;
 
     void run(UINT w, UINT h) {
         if (!start(w, h)) return;
@@ -481,16 +505,18 @@ struct Worker {
                               r.left, r.top, r.right - r.left, r.bottom - r.top);
                 EnumWindows(list_window, 0);
             }
-            if (seq % 300 == 1 && seq > 1) {
+            if (seq % stats_every == 1 && seq > 1) {
                 const ULONGLONG now = GetTickCount64();
                 const ULONGLONG elapsed = now - window_start;
                 if (elapsed >= 100 && t_frames) {
-                    const double n = static_cast<double>(t_frames);
-                    logger.load()("remix: %.1f fps over the last 300 frames (ms/frame: present %.0f, copy %.0f, "
-                                  "readback %.0f, publish %.0f, other %.0f)",
-                                  300000.0 / static_cast<double>(elapsed), t_present / n, t_copy / n, t_readback / n,
-                                  t_publish / n, static_cast<double>(elapsed) / n - (t_present + t_copy + t_readback + t_publish) / n);
-                    t_submit = t_present = t_copy = t_readback = t_publish = t_frames = 0;
+                    const double n = static_cast<double>(t_frames), ms = 1000.0 * n;  // stage sums are microseconds
+                    const double staged = static_cast<double>(t_update + t_submit + t_present + t_copy + t_readback + t_convert + t_publish);
+                    logger.load()("remix: %.1f fps over the last %llu frames (ms/frame: update %.1f, submit %.1f, present %.1f, "
+                                  "copy %.1f, readback %.1f, convert %.1f, publish %.1f, other %.1f)",
+                                  1000.0 * n / static_cast<double>(elapsed), t_frames, t_update / ms, t_submit / ms,
+                                  t_present / ms, t_copy / ms, t_readback / ms, t_convert / ms, t_publish / ms,
+                                  static_cast<double>(elapsed) / n - staged / ms);
+                    t_update = t_submit = t_present = t_copy = t_readback = t_convert = t_publish = t_frames = 0;
                     window_start = now;
                 }
             }

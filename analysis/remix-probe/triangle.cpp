@@ -1046,6 +1046,23 @@ int render(const wchar_t* dll, bool hold) {
         if (quit || !IsWindow(window.handle)) break;
         if (!quiet) std::printf("Frame %u\n",submitted);
         if (hold && submitted==16) quiet=true;  // keep the startup + first frames trace, then go quiet
+#ifdef CAPTURED_MESH
+        // REPROBE_REPLACE=1: re-create the mesh under the same hash every frame, moved +0.1 x per frame, the way the
+        // live path replaces an animated character's pose. Same rule as live_scene::build_mesh: destroy the old
+        // handle only if the runtime returned a different one (it returns the hash, so normally never).
+        // =2: DestroyMesh first, then CreateMesh under the same hash. =3: a new hash every frame, old one destroyed after.
+        if (getenv("REPROBE_REPLACE") && submitted>0) {
+            const int replace_mode=std::atoi(getenv("REPROBE_REPLACE"));
+            for (auto& v : vertices) v.position[0]+=0.1f;
+            if (replace_mode==2) { stage("DestroyMesh(replace)"); api.DestroyMesh(mesh); }
+            if (replace_mode==3) mesh_info.hash=2+submitted;
+            remixapi_MeshHandle replaced=nullptr;
+            stage("CreateMesh(replace)");
+            if (!check(api.CreateMesh(&mesh_info,&replaced),"CreateMesh(replace)") || !replaced) return 1;
+            if (replace_mode!=2 && replaced!=mesh) { std::printf("replace: new handle\n"); api.DestroyMesh(mesh); }
+            mesh=replaced; instance.mesh=mesh;
+        }
+#endif
         stage("SetupCamera"); if (!check(api.SetupCamera(&camera),"SetupCamera")) return 1;
         stage("DrawInstance"); if (!check(api.DrawInstance(&instance),"DrawInstance")) return 1;
         // NieR's live path submits ~3000 SEPARATE instances per frame, while the scene path above is one mesh

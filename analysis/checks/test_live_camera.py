@@ -35,6 +35,8 @@ static_assert(offsetof(ID3D11DeviceContextVtbl, Map)/sizeof(void*) == 14);
 static_assert(offsetof(ID3D11DeviceContextVtbl, Unmap)/sizeof(void*) == 15);
 static_assert(offsetof(ID3D11DeviceContextVtbl, CopySubresourceRegion)/sizeof(void*) == 46);
 static_assert(offsetof(ID3D11DeviceContextVtbl, UpdateSubresource)/sizeof(void*) == 48);
+static_assert(offsetof(ID3D11DeviceVtbl, CreateBuffer)/sizeof(void*) == 3);
+static_assert(offsetof(ID3D11DeviceVtbl, CreateInputLayout)/sizeof(void*) == 11);
 ''')
         subprocess.run(['x86_64-w64-mingw32-g++', '-std=c++17', '-Wall', '-Wextra', '-Werror', '-c', str(probe), '-o', str(work / 'slots.o')], check=True)
         tmo.build(work)

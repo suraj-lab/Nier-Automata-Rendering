@@ -137,12 +137,12 @@ def main():
     # Cost split, for stage B.
     if fps_lines:
         line = fps_lines[-1]
-        split = {k: num(line, k, float) for k in ('present', 'copy', 'readback', 'publish', 'other')}
+        split = {k: num(line, k, float) for k in ('update', 'submit', 'present', 'copy', 'readback', 'convert', 'publish', 'other')}
         total = sum(v for v in split.values() if v)
         print(f'\ncost           {line}')
         if split['readback'] is not None and total:
             print(f'               readback is {100 * split["readback"] / total:.0f}% of the frame'
-                  + (' — the copy path is the limiter (stage B, route B1)' if split['readback'] / total > 0.5 else ''))
+                  + (" — the worker waits on Remix's GPU frame (GetRenderTargetData), not on a copy" if split['readback'] / total > 0.5 else ''))
 
 
 if __name__ == '__main__':

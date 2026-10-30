@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Wine mock gate: CPU skinning updates with CB11 and keeps two simultaneous poses of shared geometry distinct."""
+"""Wine mock gate: CPU skinning updates with CB11 and keeps two simultaneous poses of shared geometry distinct.
+
+Key rule (changed 2026-10-30): a skinned mesh is keyed by its draw and its occurrence in the frame, not by its pose.
+Keying by pose made every animation frame a new mesh: live 2026-10-29 built ~29 meshes per Remix frame and evicted
+56915 of 59917, which is the churn behind the falling fps. Two characters drawn in one frame must still get two keys;
+a new pose must replace the mesh under the same key.
+"""
 import json
 import os
 import re
@@ -27,23 +33,43 @@ def inside():
         (scene / 'scene.bin').write_bytes(ts.scene_bytes(ts.CAMERA, ts.DRAWS, ts.TEXTURES, ts.TRIS))
         tex = work / 'textures'
         tex.mkdir()
-        _, r, log, fake = tr.run(work, 'poses', {'NIER_REMIX_RUNTIME': tr.win(work / 'fake_remix.dll'),
+        base = {'NIER_REMIX_RUNTIME': tr.win(work / 'fake_remix.dll'),
             'NIER_REMIX_SCENE': tr.win(scene / 'scene.bin'), 'MOCK_FRAME_MS': '40', 'MOCK_CAMERA': 'live-skin-poses',
-            'NIER_REMIX': '1', 'NIER_REMIX_LIVE': '1', 'NIER_REMIX_LIVE_TEX': tr.win(tex), 'FAKE_REMIX_INSTANCE_LOG': '1'})
+            'NIER_REMIX': '1', 'NIER_REMIX_LIVE': '1', 'NIER_REMIX_LIVE_TEX': tr.win(tex), 'FAKE_REMIX_INSTANCE_LOG': '1'}
+        _, r, log, fake = tr.run(work, 'poses', base)
         assert fake and 'VIOLATION' not in fake, (fake or log)[-2000:]
         meshes = [l for l in fake.splitlines() if l.startswith('CreateMesh') and 'indices=192 ' in l]
         assert meshes and all('skinned=0 ' in l for l in meshes), 'GPU skinning data still submitted: ' + str(meshes[:2])
         by_pose = {}
         for l in meshes:
             x = float(re.search(r'v0=([-\d.]+),', l).group(1))
-            by_pose.setdefault(x, set()).add(re.search(r'hash=(\d+)', l).group(1))
+            by_pose.setdefault(x, set()).add(re.search(r'key=(\d+)', l).group(1))
         assert set(by_pose) == {0, 10, 20, 30}, f'pose updates or simultaneous characters lost: {by_pose}'
-        assert len(set.union(*by_pose.values())) == 4, 'different poses alias a mesh key'
+        assert all(len(h) == 1 for h in by_pose.values()), f'one pose built under several keys: {by_pose}'
+        first, second = by_pose[0] | by_pose[10], by_pose[20] | by_pose[30]
+        assert len(first) == 1 and len(second) == 1, f'a pose change made a new key instead of replacing: {by_pose}'
+        assert first != second, 'two characters drawn in one frame share a mesh key'
         assert len(meshes) <= 5, f'unchanged poses rebuilt every frame: {len(meshes)}'
         draws = [l for l in fake.splitlines() if l.startswith('DrawInstance')]
         assert draws and all('bones=0 ' in l and 'row0=1.000,0.000,0.000,0.000' in l for l in draws), 'double transform/GPU palette'
         assert int(r['geometry_reads']) <= 3, f'CPU skinning introduced per-frame geometry readback: {r}'
+
+        # Animated: both characters change pose every frame. The resident set must stay at two keys, each always
+        # holding the same character (vertex 0 follows bone 0: x < 20 is the first character, x > 20 the second).
+        tex_anim = work / 'textures-animate'
+        tex_anim.mkdir()
+        _, r, log, fake = tr.run(work, 'animate', {**base, 'NIER_REMIX_LIVE_TEX': tr.win(tex_anim), 'MOCK_SKIN_ANIMATE': '1'})
+        assert fake and 'VIOLATION' not in fake, (fake or log)[-2000:]
+        animated = [l for l in fake.splitlines() if l.startswith('CreateMesh') and 'indices=192 ' in l]
+        side = {}
+        for l in animated:
+            x = float(re.search(r'v0=([-\d.]+),', l).group(1))
+            side.setdefault(re.search(r'key=(\d+)', l).group(1), set()).add(x > 20)
+        assert len(animated) >= 20, f'poses were not rebuilt while animating: {len(animated)} builds'
+        assert len(side) == 2, f'animated characters made {len(side)} mesh keys, expected 2'
+        assert all(len(s) == 1 for s in side.values()), f'a key switched between characters: {side}'
         report = {'passed': True, 'work': str(work), 'poses': sorted(by_pose), 'meshes': len(meshes),
+                  'animated_builds': len(animated), 'animated_keys': len(side),
                   'limits': 'Real proxy in a software Wine mock, not the real Remix runtime or live game.'}
         (OUT / 'validation.json').write_text(json.dumps(report, indent=2) + '\n')
         print(json.dumps(report))
