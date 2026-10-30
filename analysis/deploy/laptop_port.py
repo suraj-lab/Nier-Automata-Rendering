@@ -4,7 +4,7 @@
   laptop_port.py install            back up the game's d3d11.dll (the NIER_DLAA proxy) and chain it as d3d11_dlaa.dll
                                     behind our hash-checked d3d11.dll; add NIER_RENDER.ini, fonts, steam_appid.txt
                                     (so a direct launch keeps the environment), and the static camp scene
-  laptop_port.py run <label> [--remix] [--seconds N] [--no-ec-hooks] [--steam] [--live] [--draw-probe] [--rehook] [--capture] [--options-doc] [--rtx-conf FILE]
+  laptop_port.py run <label> [--remix] [--seconds N] [--no-ec-hooks] [--steam] [--live] [--draw-probe] [--rehook] [--capture] [--options-doc] [--rtx-conf FILE] [--env KEY=VALUE ...]
                                     start NieRAutomata.exe in the user's session with the NIER_* environment, stop ONLY
                                     that process after N seconds (default 90), copy back NIER_SCALE.log and a receipt
                                     --live enables the draw stream instead of the static scene; load a save manually
@@ -12,6 +12,7 @@
                                     pass the official d3d9_a64ec.dll for the native ARM64EC renderer)
                                     --capture writes the first composited frame with a HUD to WORK\\composite.raw (live only)
                                     --options-doc asks the runtime to write RtxOptions.md (every option, default, range)
+                                    --env NIER_*=VALUE adds one NIER_ setting (repeatable), e.g. NIER_REMIX_LIVE_TEX_PER_FRAME=16
                                     --rtx-conf FILE stages FILE in WORK and points DXVK_RTX_CONFIG_FILE at it (a relative
                                     rtx.conf in the game folder is not found: the runtime parses it against another cwd)
                                     --draw-probe sets NIER_DRAW_PROBE=1 (CPU-only hook-health diagnostic, Remix must be off)
@@ -43,6 +44,10 @@ RUNTIME = r'C:\Program Files\NVIDIA Corporation\RTX Remix\deps\remix_runtime\run
 ORIGINAL_D3D11 = '6ba266d64a8f6776'                           # NIER_DLAA proxy found in the game folder 2026-10-30
 ADDED = ['d3d11_dlaa.dll', 'NIER_RENDER.ini', 'steam_appid.txt', 'nier_render_fonts', 'NIER_SCALE.log', 'NIER_ENV.ini',
          'NIER_CAPTURE', r'data\rtx-remix', r'data\metrics.txt', 'RtxOptions.md', 'rtx.conf']  # --options-doc; rtx.conf: earlier --rtx-conf runs  # last three: written by our runs (shader capture, Remix)
+# Created by the user during a run: restore MOVES these into WORK\kept\<stamp>\ instead of deleting them. (2026-10-30:
+# an F9 capture, 168 MB, was deleted by the old restore two minutes after it was taken.) The Remix consent answer is
+# kept the same way and put back by install, so the runtime does not ask again on every launch.
+KEEP = ['NIER_CAPTURE', r'data\rtx-remix\logs\.sentry-native\user-consent']
 OPTS = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10']
 
 
@@ -110,12 +115,14 @@ Copy-Item -LiteralPath '{WORK}\d3d11.dll' -Destination (Join-Path $g 'd3d11.dll'
 Copy-Item -LiteralPath '{WORK}\nier_render_fonts' -Destination (Join-Path $g 'nier_render_fonts') -Recurse
 Set-Content -LiteralPath (Join-Path $g 'NIER_RENDER.ini') -Value "[Rendering]`r`nPreset=Native" -NoNewline -Encoding ascii
 Set-Content -LiteralPath (Join-Path $g 'steam_appid.txt') -Value '524220' -NoNewline -Encoding ascii
+$consent=Get-ChildItem -LiteralPath '{WORK}\kept' -Recurse -File -Filter 'user-consent' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+if ($consent) {{ $d=Join-Path $g 'data\rtx-remix\logs\.sentry-native'; New-Item -ItemType Directory -Force -Path $d | Out-Null; Copy-Item -LiteralPath $consent.FullName -Destination (Join-Path $d 'user-consent') }}
 if ((Get-FileHash -LiteralPath (Join-Path $g 'd3d11.dll') -Algorithm SHA256).Hash.ToLowerInvariant() -ne '{dll}') {{ throw 'installed hash mismatch' }}
 'installed {dll[:16]}' '''))
 
 
 def run(label, remix, seconds, no_ec_hooks=False, steam=False, live=False, draw_probe=False, rehook=False,
-        runtime=None, capture=False, options_doc=False, rtx_conf=None):
+        runtime=None, capture=False, options_doc=False, rtx_conf=None, extra_env=()):
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')
     remix = remix or live
     assert not (draw_probe and remix), 'NIER_DRAW_PROBE=1 is a Remix-off diagnostic: drop --remix/--live'
@@ -126,7 +133,12 @@ def run(label, remix, seconds, no_ec_hooks=False, steam=False, live=False, draw_
         assert draw_probe, '--rehook only applies to a --draw-probe run'
         env['NIER_DRAW_PROBE_REHOOK'] = '1'
     if remix:
+        env['RTX_HIDE_SPLASH_MESSAGE'] = '1'  # the 'Welcome to RTX Remix / ALT+X' banner over the game
         env.update(NIER_REMIX_RUNTIME=runtime or RUNTIME, NIER_REMIX_SCENE=WORK + r'\scene\scene.bin')
+    for item in extra_env:
+        key, _, value = item.partition('=')
+        assert key.startswith('NIER_') and value and '"' not in value, f'--env takes NIER_KEY=VALUE, got {item!r}'
+        env[key] = value
     if rtx_conf:
         assert remix, '--rtx-conf needs the runtime: add --remix or --live'
         staged = WORK + rf'\rtx-{label}.conf'
@@ -196,6 +208,12 @@ if (Get-Process NieRAutomata -ErrorAction SilentlyContinue) {{ throw 'NieR is ru
 $h=(Get-FileHash -LiteralPath '{BACKUP}\d3d11.dll' -Algorithm SHA256).Hash.ToLowerInvariant()
 if (-not $h.StartsWith('{ORIGINAL_D3D11}')) {{ throw "backup is not the original: $h" }}
 Copy-Item -LiteralPath '{BACKUP}\d3d11.dll' -Destination (Join-Path $g 'd3d11.dll') -Force
+$kept='{WORK}\kept\' + (Get-Date -Format 'yyyyMMddTHHmmss')
+foreach ($f in {', '.join(repr(x) for x in KEEP)}) {{ $p=Join-Path $g $f; if (Test-Path -LiteralPath $p) {{
+  $dest=Join-Path $kept $f; New-Item -ItemType Directory -Force -Path (Split-Path $dest) | Out-Null
+  Move-Item -LiteralPath $p -Destination $dest
+  if (-not (Test-Path -LiteralPath $dest)) {{ throw "could not keep $f" }}
+  'kept ' + $f + ' -> ' + $dest }} }}
 foreach ($f in {', '.join(repr(x) for x in ADDED)}) {{ $p=Join-Path $g $f; if (Test-Path -LiteralPath $p) {{ Remove-Item -LiteralPath $p -Recurse -Force }} }}
 if (Test-Path -LiteralPath (Join-Path $g 'ec_hooks.dll.off')) {{ Rename-Item -LiteralPath (Join-Path $g 'ec_hooks.dll.off') -NewName 'ec_hooks.dll' }}
 $now=(Get-FileHash -LiteralPath (Join-Path $g 'd3d11.dll') -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -214,6 +232,7 @@ if __name__ == '__main__':
         run(cmd[1], '--remix' in cmd, seconds, '--no-ec-hooks' in cmd, '--steam' in cmd, '--live' in cmd,
             '--draw-probe' in cmd, '--rehook' in cmd,
             cmd[cmd.index('--runtime') + 1] if '--runtime' in cmd else None, '--capture' in cmd,
-            '--options-doc' in cmd, cmd[cmd.index('--rtx-conf') + 1] if '--rtx-conf' in cmd else None)
+            '--options-doc' in cmd, cmd[cmd.index('--rtx-conf') + 1] if '--rtx-conf' in cmd else None,
+            [cmd[i + 1] for i, a in enumerate(cmd[:-1]) if a == '--env'])
     else:
         sys.exit(__doc__)

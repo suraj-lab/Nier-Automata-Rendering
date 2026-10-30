@@ -30,7 +30,7 @@ import test_remix_live as tr
 import test_menu_overlay as tmo
 import test_nscn_scene as ts
 
-tr.ENV_KEYS = tuple(tr.ENV_KEYS) + ('NIER_REMIX_LIVE', 'NIER_REMIX_LIVE_TEX', 'NIER_REMIX_LIVE_ALL_TARGETS',
+tr.ENV_KEYS = tuple(tr.ENV_KEYS) + ('NIER_REMIX_LIVE_STATS_EVERY', 'NIER_REMIX_LIVE', 'NIER_REMIX_LIVE_TEX', 'NIER_REMIX_LIVE_ALL_TARGETS',
                                      'FAKE_REMIX_INSTANCE_LOG')
 
 
@@ -163,6 +163,20 @@ def inside():
         native = {f for f, n in per_frame.items() if f >= 10 and n >= 3}  # the three scene draws, not the one pass draw
         assert len(native) >= 25, f'native-size world not drawn: {sorted(per_frame.items())[:8]}'
         results['native-half'] = 'A native-size world beats a smaller same-aspect pass for the scene target.'
+
+        # The same, but every 7th frame the pass briefly out-draws the world. The scene target must not flip for one
+        # frame: on the laptop that dropped accepted draws 246 -> 71 and the whole world vanished (sky=0).
+        _, r, log, fake = tr.run(work, 'native-burst', {**base, 'MOCK_CAMERA': 'live-passes', 'MOCK_SCENE_FULL': '1',
+                                                        'MOCK_HALF_PASS': '1', 'MOCK_HALF_PASS_BURST': '7',
+                                                        'MOCK_LIVE_DRAWS': '3', 'NIER_REMIX_LIVE_STATS_EVERY': '1'})
+        assert fake and 'VIOLATION' not in fake, fake
+        stats = [x for x in tr.remix_lines(log) if 'live draws=' in x]
+        scenes = [re.search(r'scene=(\d+x\d+)', x).group(1) for x in stats]
+        assert stats and set(scenes) == {'1920x1080'}, f'scene target flipped to the burst pass: {sorted(set(scenes))}'
+        per_frame = instances_per_frame(fake)
+        lost = sorted(f for f in range(12, 78) if per_frame.get(f, 0) < 3)
+        assert not lost, f'frames that lost the world after a burst: {lost[:10]} ({sorted(per_frame.items())[:6]})'
+        results['native-burst'] = 'A pass that briefly out-draws the world does not flip the scene target.'
         _, r, log, fake = tr.run(work, 'full', {**base, 'MOCK_CAMERA': 'live-blend', 'MOCK_SCENE_FULL': '1'})
         assert fake and 'VIOLATION' not in fake, fake
         full = {f for f, n in instances_per_frame(fake).items() if f >= 10 and n}

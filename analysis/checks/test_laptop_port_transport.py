@@ -132,6 +132,28 @@ def main():
             pass
         else:
             raise AssertionError('--draw-probe with --remix was accepted')
+    # --env passes NIER_ settings only (it is not a back door for arbitrary environment), and the value travels.
+    env_scripts = []
+    with patch.object(lp, 'ps', lambda script, **kw: (env_scripts.append(script) or json.dumps(receipt))):
+        lp.run('env', True, 5, live=True, extra_env=['NIER_REMIX_LIVE_TEX_PER_FRAME=16'])
+    encoded = re.search(r"WriteAllBytes\(\$cmd,\s*\[Convert\]::FromBase64String\('([^']+)'\)", env_scripts[0]).group(1)
+    decoded = base64.b64decode(encoded).decode('utf-8')
+    assert 'NIER_REMIX_LIVE_TEX_PER_FRAME=16' in decoded and 'RTX_HIDE_SPLASH_MESSAGE=1' in decoded, decoded
+    for bad in ('PATH=x', 'NIER_X=', 'NIER_X=a"b'):
+        try:
+            lp.run('env-bad', True, 5, live=True, extra_env=[bad])
+        except AssertionError:
+            continue
+        raise AssertionError(f'--env accepted {bad!r}')
+    # restore must never delete what the user made during a run: captures and the consent answer are moved to WORK,
+    # and the move happens before anything is deleted (2026-10-30: an F9 capture was lost to the old restore).
+    restore_scripts = []
+    with patch.object(lp, 'ps', lambda script, **kw: (restore_scripts.append(script) or 'restored')):
+        lp.restore()
+    rs = restore_scripts[0]
+    assert 'NIER_CAPTURE' in lp.KEEP
+    assert rs.index('Move-Item') < rs.index('Remove-Item'), 'restore deletes before it keeps the user data'
+    assert "'NIER_CAPTURE'" in rs.split('Move-Item')[0], 'NIER_CAPTURE is not in the keep list of the restore script'
     print('test_laptop_port_transport: passed (staged-file transport, direct/Steam live launch, draw-probe and runtime overrides)')
 
 

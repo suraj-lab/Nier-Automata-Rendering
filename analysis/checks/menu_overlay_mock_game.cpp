@@ -1038,10 +1038,15 @@ int wmain(int argc, wchar_t** argv) {
                     context->DrawIndexed(192, 0, 0);
                     context->DrawIndexed(192, 0, 0);
                     if (half_pass) {
+                        // MOCK_HALF_PASS_BURST=N: every N frames the half-size pass briefly out-draws the scene (6 vs 3),
+                        // as when the laptop camera looked at open sky. A per-frame "most draws" choice then flips to
+                        // the pass for the next frame and the whole world vanishes (recording 2026-10-30 21:55:38).
+                        static const int burst = [] { const char* v = std::getenv("MOCK_HALF_PASS_BURST"); return v ? std::atoi(v) : 0; }();
+                        const int half_draws = burst > 0 && frame % burst == 0 ? 6 : 1;
                         context->OMSetRenderTargets(1, &half_rtv, nullptr);
                         D3D11_VIEWPORT hvp{0, 0, 960.f, 540.f, 0, 1};
                         context->RSSetViewports(1, &hvp);
-                        context->DrawIndexed(192, 0, 0);
+                        for (int i = 0; i < half_draws; ++i) context->DrawIndexed(192, 0, 0);
                     }
                     context->OMSetRenderTargets(1, &mesh_rtv, nullptr);
                     context->RSSetViewports(1, &lvp);

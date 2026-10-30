@@ -137,6 +137,7 @@ inline std::map<std::pair<unsigned, unsigned>, unsigned>& target_counts() {
     return m;
 }
 inline unsigned scene_width = 0, scene_height = 0;  // chosen from the previous frame; 0 = not known yet
+inline unsigned scene_switch_frames = 30;  // consecutive frames another target must win before the scene moves
 inline unsigned final_width = 0, final_height = 0;  // the image that reaches the screen
 inline bool scene_target_enabled = true;
 inline unsigned scene_target_fallbacks = 0;      // empty frames seen this session (reported)
@@ -213,6 +214,19 @@ inline void choose_scene_target() {
         }
     }
     counts.clear();
+    // Hysteresis: the choice is re-made every frame from the previous frame's counts, and a pass that briefly out-draws
+    // the world (looking at open sky on the laptop, 2026-10-30 21:55:38: accepted draws 246 -> 71, sky=0) flipped it for
+    // a frame and the whole world vanished. Keep the current target until another one wins this many frames in a row.
+    static std::pair<unsigned, unsigned> candidate{0, 0};
+    static unsigned streak = 0;
+    const std::pair<unsigned, unsigned> current{scene_width, scene_height};
+    if (current.first && best != current) {
+        streak = best == candidate ? streak + 1 : 1;
+        candidate = best;
+        if (streak < scene_switch_frames) return;  // not sustained: keep the world target
+    }
+    streak = 0;
+    candidate = {0, 0};
     scene_width = best.first;
     scene_height = best.second;
 }
