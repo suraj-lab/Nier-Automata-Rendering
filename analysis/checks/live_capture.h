@@ -181,30 +181,35 @@ inline std::pair<unsigned, unsigned> target_size(ID3D11RenderTargetView* rtv) {
 }
 
 // Called between frames: pick the scene target for the frame that follows.
-// The scene is the largest target that is strictly smaller than the final image and has the final image's aspect
-// ratio: an engine renders the scene at the display aspect and at some internal scale, while shadow atlases are
-// square-ish and bloom chains are half-size. If no target qualifies, the game draws the scene at final size.
+// The scene is the target with the final image's aspect ratio, no larger than the final image, that received the most
+// opaque world-sized draws: shadow atlases fail the aspect test, and the HUD is blended so it is not counted. Picking
+// the most-drawn target rather than the largest strictly-smaller one keeps native render scale working: on the laptop
+// (2026-10-30) a 2880x1800 world sits next to a 1440x900 same-aspect pass, and the old rule took the pass and skipped
+// the world (test_live_scene_target 'native-half'). If no target qualifies, the game draws the scene at final size.
 // A wrong pick empties the frame, which `end_frame` detects and latches the filter off.
 inline void choose_scene_target() {
     auto& counts = target_counts();
     std::pair<unsigned, unsigned> best{0, 0};
-    unsigned best_area = 0;
+    unsigned best_draws = 0;
     if (final_width && final_height) {
         for (const auto& [size, draws] : counts) {
             if (!draws || !size.first || !size.second) continue;
-            if (size.first >= final_width || size.second >= final_height) continue;  // the final image itself
+            if (size.first > final_width || size.second > final_height) continue;  // larger than the final image
             // Same aspect within 1%, in integer arithmetic: cross-multiplied aspect equality with tolerance.
             const unsigned long long lhs = static_cast<unsigned long long>(size.first) * final_height;
             const unsigned long long rhs = static_cast<unsigned long long>(size.second) * final_width;
             const unsigned long long diff = lhs > rhs ? lhs - rhs : rhs - lhs;
             if (diff * 100ull > rhs) continue;
-            const unsigned area = size.first * size.second;
-            if (area > best_area) { best = size; best_area = area; }
+            // Ties go to the larger target, the higher-resolution copy of the same view.
+            if (draws > best_draws || (draws == best_draws && size.first * size.second > best.first * best.second)) {
+                best = size;
+                best_draws = draws;
+            }
         }
         if (!best.first) best = {final_width, final_height};
     } else {
         for (const auto& [size, draws] : counts) {  // final size unknown: the most-drawn target is the best guess
-            if (draws > best_area) { best = size; best_area = draws; }
+            if (draws > best_draws) { best = size; best_draws = draws; }
         }
     }
     counts.clear();
@@ -830,7 +835,7 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     const std::pair<unsigned, unsigned> target = early_target;
     {
         std::lock_guard<std::recursive_mutex> lock(mutex());
-        ++target_counts()[target];
+        if (!blended) ++target_counts()[target];  // the HUD is blended: it must not vote for the scene target
         if (scene_target_enabled && scene_width && target != std::pair<unsigned, unsigned>{scene_width, scene_height} && !ui_pass) {
             ++building().skipped_pass;
             release_all(vbs, 4, ib, layout);

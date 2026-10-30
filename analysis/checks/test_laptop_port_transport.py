@@ -71,6 +71,11 @@ def main():
                 lp.run('ec-capture', True, 5, live=True, capture=True)
             encoded = re.search(r"WriteAllBytes\(\$cmd,\s*\[Convert\]::FromBase64String\('([^']+)'\)", scripts[0]).group(1)
             assert 'NIER_REMIX_CAPTURE_COMPOSITE=' + lp.WORK + r'\composite.raw' in base64.b64decode(encoded).decode('utf-8')
+            scripts.clear()
+            with patch.object(lp, 'ps', lambda script, **kw: (scripts.append(script) or json.dumps(receipt))):
+                lp.run('options-doc', True, 5, live=True, options_doc=True)
+            encoded = re.search(r"WriteAllBytes\(\$cmd,\s*\[Convert\]::FromBase64String\('([^']+)'\)", scripts[0]).group(1)
+            assert 'DXVK_DOCUMENTATION_WRITE_RTX_OPTIONS_MD=1' in base64.b64decode(encoded).decode('utf-8')
             try:
                 lp.run('capture-no-live', True, 5, capture=True)
             except AssertionError:

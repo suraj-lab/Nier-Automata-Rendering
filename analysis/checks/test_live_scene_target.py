@@ -150,6 +150,19 @@ def inside():
 
         # Native scale: the scene target is as large as the final image. Blended scene draws into it are world
         # geometry; taking them for HUD sprites would empty the scene without ever tripping the latch.
+        # Native render scale next to a same-aspect half-size pass (laptop, 2026-10-30: 2880x1800 world, 1440x900 pass).
+        # The scene must be the native-size target; picking the half-size pass drops the world and leaves only the
+        # few draws that land there (the user saw a white world with only some objects).
+        _, r, log, fake = tr.run(work, 'native-half', {**base, 'MOCK_CAMERA': 'live-passes', 'MOCK_SCENE_FULL': '1',
+                                                       'MOCK_HALF_PASS': '1', 'MOCK_LIVE_DRAWS': '3'})
+        assert fake and 'VIOLATION' not in fake, fake
+        stats = [x for x in tr.remix_lines(log) if 'live draws=' in x]
+        scenes = {re.search(r'scene=(\d+x\d+)', x).group(1) for x in stats}
+        assert scenes == {'1920x1080'}, f'native-size world lost to a smaller same-aspect pass: scene={sorted(scenes)}'
+        per_frame = instances_per_frame(fake)
+        native = {f for f, n in per_frame.items() if f >= 10 and n >= 3}  # the three scene draws, not the one pass draw
+        assert len(native) >= 25, f'native-size world not drawn: {sorted(per_frame.items())[:8]}'
+        results['native-half'] = 'A native-size world beats a smaller same-aspect pass for the scene target.'
         _, r, log, fake = tr.run(work, 'full', {**base, 'MOCK_CAMERA': 'live-blend', 'MOCK_SCENE_FULL': '1'})
         assert fake and 'VIOLATION' not in fake, fake
         full = {f for f, n in instances_per_frame(fake).items() if f >= 10 and n}

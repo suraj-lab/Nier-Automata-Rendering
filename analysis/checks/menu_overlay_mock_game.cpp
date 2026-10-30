@@ -990,6 +990,19 @@ int wmain(int argc, wchar_t** argv) {
                 }
                 const UINT mstride = 20, moff = 0;
                 context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);  // real games always set it
+                // MOCK_HALF_PASS: a same-aspect half-size pass next to a native-size scene (the laptop's 1440x900 next
+                // to a 2880x1800 world). A "largest target strictly smaller than the final image" rule picks this pass
+                // and skips the world, which is what left the laptop with a white, structure-less picture.
+                static const bool half_pass = std::getenv("MOCK_HALF_PASS") != nullptr;
+                static ID3D11Texture2D* half_tex = nullptr;
+                static ID3D11RenderTargetView* half_rtv = nullptr;
+                if (half_pass && !half_rtv) {
+                    D3D11_TEXTURE2D_DESC hd{}; hd.Width = 960; hd.Height = 540; hd.MipLevels = 1; hd.ArraySize = 1;
+                    hd.Format = DXGI_FORMAT_R8G8B8A8_UNORM; hd.SampleDesc.Count = 1; hd.Usage = D3D11_USAGE_DEFAULT;
+                    hd.BindFlags = D3D11_BIND_RENDER_TARGET;
+                    if (FAILED(device->CreateTexture2D(&hd, nullptr, &half_tex)) ||
+                        FAILED(device->CreateRenderTargetView(half_tex, nullptr, &half_rtv))) { std::fprintf(out, "FAIL half rtv\n"); return 3; }
+                }
                 if (live_passes && !atlas_rtv) {
                     D3D11_TEXTURE2D_DESC atd{}; atd.Width = 256; atd.Height = 256; atd.MipLevels = 1; atd.ArraySize = 1;
                     atd.Format = DXGI_FORMAT_R8G8B8A8_UNORM; atd.SampleDesc.Count = 1; atd.Usage = D3D11_USAGE_DEFAULT;
@@ -1024,6 +1037,12 @@ int wmain(int argc, wchar_t** argv) {
                     context->IASetIndexBuffer(live_ib, DXGI_FORMAT_R32_UINT, 0);
                     context->DrawIndexed(192, 0, 0);
                     context->DrawIndexed(192, 0, 0);
+                    if (half_pass) {
+                        context->OMSetRenderTargets(1, &half_rtv, nullptr);
+                        D3D11_VIEWPORT hvp{0, 0, 960.f, 540.f, 0, 1};
+                        context->RSSetViewports(1, &hvp);
+                        context->DrawIndexed(192, 0, 0);
+                    }
                     context->OMSetRenderTargets(1, &mesh_rtv, nullptr);
                     context->RSSetViewports(1, &lvp);
                 }
