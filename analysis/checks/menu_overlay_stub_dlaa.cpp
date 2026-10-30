@@ -67,7 +67,8 @@ static HRESULT STDMETHODCALLTYPE stub_present(IDXGISwapChain* self, UINT sync, U
 
 static HRESULT STDMETHODCALLTYPE stub_create(IDXGIFactory* self, IUnknown* dev, DXGI_SWAP_CHAIN_DESC* desc, IDXGISwapChain** out) {
     const HRESULT hr = real_create(self, dev, desc, out);
-    if (SUCCEEDED(hr) && out && *out && !real_present)
+    // STUB_NO_PRESENT_HOOK: like NIER_DLAA behind our proxy on the laptop, whose hooks never initialise.
+    if (SUCCEEDED(hr) && out && *out && !real_present && !std::getenv("STUB_NO_PRESENT_HOOK"))
         real_present = reinterpret_cast<PresentFn>(patch(*out, 8, reinterpret_cast<void*>(&stub_present)));
     return hr;
 }

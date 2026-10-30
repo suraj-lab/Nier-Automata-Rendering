@@ -36,9 +36,13 @@ OPTS = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10']
 
 
 def ps(script, timeout=600):
-    enc = base64.b64encode(script.encode('utf-16le')).decode()
+    # cmd.exe on the SSH server limits command lines to 8191 characters. Keep the command fixed and carry the
+    # (possibly long, Unicode) script on stdin instead. Base64 also avoids the remote console's code-page conversion.
+    bootstrap = "$s=[Text.Encoding]::Unicode.GetString([Convert]::FromBase64String([Console]::In.ReadToEnd())); & ([scriptblock]::Create($s))"
+    enc = base64.b64encode(bootstrap.encode('utf-16le')).decode()
+    payload = base64.b64encode(script.encode('utf-16le')).decode()
     p = subprocess.run(['ssh', *OPTS, 'spaghetti', 'powershell -NoProfile -NonInteractive -EncodedCommand ' + enc],
-                       capture_output=True, text=True, errors='replace', timeout=timeout)
+                       input=payload, capture_output=True, text=True, errors='replace', timeout=timeout)
     out = '\n'.join(l for l in p.stdout.splitlines() if not l.startswith(('#< CLIXML', '<Objs')))
     if p.returncode:
         import re
@@ -111,8 +115,11 @@ $cmd='{WORK}\launch-{label}.cmd'
 [IO.File]::WriteAllBytes($cmd, [Convert]::FromBase64String('{launch_b64}'))
 $a=New-ScheduledTaskAction -Execute 'cmd.exe' -Argument ('/c "'+$cmd+'"')
 $pr=New-ScheduledTaskPrincipal -UserId (whoami) -LogonType Interactive -RunLevel Limited
-Register-ScheduledTask -TaskName NieRPort -Action $a -Principal $pr -Force | Out-Null
-$start=Get-Date; Start-ScheduledTask NieRPort; Start-Sleep 5; Unregister-ScheduledTask NieRPort -Confirm:$false
+$settings=New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 10)
+Register-ScheduledTask -TaskName NieRPort -Action $a -Principal $pr -Settings $settings -Force | Out-Null
+$start=Get-Date; Start-ScheduledTask NieRPort; Start-Sleep 5
+$taskResult=(Get-ScheduledTaskInfo NieRPort).LastTaskResult
+Unregister-ScheduledTask NieRPort -Confirm:$false
 Start-Sleep {20 if steam else 0}  # Steam needs a moment to hand the launch to the game
 $seen=@(); $t=[Diagnostics.Stopwatch]::StartNew()
 while ($t.Elapsed.TotalSeconds -lt {seconds}) {{ $p=Get-Process NieRAutomata -ErrorAction SilentlyContinue; if ($p) {{ $seen+=$p.Id }}; Start-Sleep 2 }}
@@ -122,11 +129,13 @@ if ($alive) {{ $alive | Stop-Process -Force; Start-Sleep 3 }}
 if (Test-Path -LiteralPath "$ec.off") {{ Rename-Item -LiteralPath "$ec.off" -NewName 'ec_hooks.dll' }}
 $text=if (Test-Path -LiteralPath $log) {{ $b=[IO.File]::ReadAllBytes($log); [Text.Encoding]::UTF8.GetString($b, $before, $b.Length-$before) }} else {{ '' }}
 $wer=@(try {{ Get-WinEvent -FilterHashtable @{{LogName='Application'; ProviderName='Application Error'; StartTime=$start}} -ErrorAction Stop | Where-Object {{ $_.Message -like '*NieRAutomata*' }} | Select-Object -First 2 | ForEach-Object {{ $_.Message.Substring(0,[Math]::Min(600,$_.Message.Length)) }} }} catch {{ }})
-[ordered]@{{label='{label}'; remix=${str(remix).lower()}; pids=$ids; alive_at_end=[bool]$alive; log=$text; crash=@($wer)}} | ConvertTo-Json -Depth 3 -Compress''', timeout=seconds + 240))
+[ordered]@{{label='{label}'; remix=${str(remix).lower()}; pids=$ids; task_result=$taskResult; alive_at_end=[bool]$alive; log=$text; crash=@($wer)}} | ConvertTo-Json -Depth 3 -Compress''', timeout=seconds + 240))
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / f'{label}-{stamp}.json').write_text(json.dumps(receipt, indent=2) + '\n')
     lines = [l for l in (receipt.get('log') or '').splitlines() if l.strip()]
-    print(f"{label}: pids={receipt['pids']} alive_at_end={receipt['alive_at_end']} log_lines={len(lines)} crash={bool(receipt['crash'])}")
+    print(f"{label}: pids={receipt['pids']} task_result={receipt['task_result']} alive_at_end={receipt['alive_at_end']} log_lines={len(lines)} crash={bool(receipt['crash'])}")
+    if not receipt['pids'] and not lines:
+        print('NO LAUNCH OBSERVED: this run did not test the proxy.')
     for l in lines[-25:]:
         print('  ' + l[:220])
 

@@ -1,6 +1,49 @@
 # NieR:Automata Rendering — Progress & Resume
 
-**START HERE (2026-10-30, offline day: no live game run).** Four performance changes are gated offline and **not
+**START HERE (2026-10-30 noon): laptop port stage 2 now works, including native ARM64EC Remix.** No desktop game
+run or installation. Desktop installed DLL remains `065432e4…`; laptop game folder restored to its original DLAA
+proxy `6ba266d6…` after each bounded run. Latest candidate: `cee4d891154b39ba84d7964ecd63cd212d6f94e7aa62f9bdbf47444308738a93`.
+
+## Checkpoint — 2026-10-30 noon: Windows Present hooks fixed; real ARM64EC renderer tested
+
+- **Two hook problems, both tested:** a Present detour in DXGI's shared vtable can be re-discovered and code-hooked
+  by another overlay, forming a cycle. Use an object-private copy instead, preserving its original downstream chain.
+  Also, factory hooks see driver/Remix-created swapchains: adopting those replaced the game target and crashed
+  Remix's presentation startup. Bind the controlling-IUnknown device identity at the first swapchain adoption
+  (not the first proxy-created device: enumeration may create temporary devices). Ignore other devices afterwards.
+  With both fixes, the real laptop stopped crashing.
+- **Gates:** `test_present_overlay_rehook.py` first reproduced 51 looping frames; now 80 overlay calls/0 loops. Its
+  second case catches changing the first chain when another swapchain is adopted; third catches foreign-device
+  adoption, including a temporary proxy-created device before the game device. `test_present_interface_floor.py` catches an undersized table when COM QI aliases differ; factory v1
+  returns keep at least 29 slots. `test_live_camera` asserts the table sizes against MinGW SDK headers. Relevant
+  camera/menu/Remix/native-HUD/transport gates all pass. **Full suite 56/56 green** on the final candidate;
+  runner verified that source hashes stayed unchanged throughout (`runtime/present-overlay-rehook/full-suite.json`).
+- **Actual laptop runs, logs only, each 90 s, same static captured camp scene (not live gameplay):** x64 renderer
+  (`.trex/d3d9.dll`) and ARM64EC (`upstream-1.6.1-x64/d3d9_a64ec.dll`) both logged first composition at 2880x1800,
+  survived to the end, no crash dumps. Late windows: x64 19.8/23.2/23.0 fps, EC 19.5/24.1/23.9 fps. Sequential,
+  on battery; not a controlled speedup claim. Warmup/first reporting window has negative `other` (timing bucket
+  reset issue), so do not interpret that first split. Receipts: `analysis/runtime/laptop-port/stage2-private-game-device*.json`.
+- **ARM correction:** installed `.trex_arm64/d3d9.dll` is plain ARM64 and the x64 loader rejects it (193). Official
+  upstream 1.6.1 **x64-game package** also contains `d3d9_a64ec.dll`; despite PE Machine 8664 it has CHPE metadata
+  (not an ordinary x64 image). Verified against the published per-file checksum, x64 loader passes, real render
+  passes. Source/probe, archive and DLL hashes: `analysis/LAPTOP_PORT.md` (newest section).
+- **Launcher fixes:** SSH PowerShell script is sent base64 on stdin (cmd.exe has an 8191-character command limit).
+  Task explicitly allows battery operation; old defaults silently prevented launches on battery. Empty/no-PID/no-log
+  runs are not evidence of compatibility. `test_laptop_port_transport.py` covers long Unicode scripts locally.
+- After review's temporary-device ordering fix, final candidate `cee4d891…` passed another 60-second native EC run:
+  first composition at 2880x1800, 19.2/18.0 fps late windows, no crash, game folder restored. Not controlled
+  performance numbers. Receipt: `runtime/laptop-port/stage2-ec-final-owner-deferred-*.json`.
+- **Remix Plus evaluated, not installed:** `analysis/REMIX_PLUS_EVALUATION.md`. Canonical v2 uses API 1.0.0 (not the
+  FNV branch's 0.1000.1); do not mix ABI tables. Four-bone skinning and same-hash refresh are useful. The advertised
+  shared D3D11 output handle is an implementation failure stub, and direct D3D11 rendering requires the fork's own
+  DXVK device. No automatic removal of readback by swapping the runtime. Next fork work, if useful: an isolated,
+  pinned skinning/morph probe only, leaving both installed stacks alone.
+
+**Next:** laptop stage 3 (live draw stream) needs actual world gameplay, not the static camp scene over the title
+screen. Prefer the now-proven ARM64EC runtime; stock top-2 GPU skinning needs a moving-pose gate before adoption.
+Keep the laptop original chain working; `ec_hooks.dll` still must be set aside for our proxy during test runs.
+
+**Earlier checkpoint (2026-10-30 morning, offline day: no live game run yet).** Four performance changes are gated offline and **not
 installed**; installed is still `065432e4…` (below). The day's main finding is a correctness bug, not only a
 performance one: see the checkpoint right below. Next: install the gated build (needs the user), one live run at the
 usual camp spot, read the new `live reads=` and fps lines with `analyze_live_run.py`.

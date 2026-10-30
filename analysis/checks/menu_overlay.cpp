@@ -1,7 +1,9 @@
 #include "menu_overlay.h"
-#include <dxgi1_2.h>
+#include <dxgi1_5.h>
 #include <d3dcompiler.h>
 #include <atomic>
+#include <algorithm>
+#include <mutex>
 #include <cstdio>
 #include <cstring>
 #include <exception>
@@ -46,6 +48,16 @@ Host host;
 std::atomic<bool> installed{false};
 std::atomic<void*> next_create{nullptr}, next_create_hwnd{nullptr}, next_present{nullptr};
 std::atomic<IDXGISwapChain*> target{nullptr};  // latest game swapchain; identity only, not owned
+std::atomic<IUnknown*> game_device{nullptr};  // bound at first swapchain adoption, not first device creation
+
+bool owns_device(IUnknown* candidate) {
+    IUnknown* identity = nullptr;
+    if (!candidate || FAILED(candidate->QueryInterface(__uuidof(IUnknown), reinterpret_cast<void**>(&identity)))) return false;
+    const auto owner = game_device.load(std::memory_order_acquire);
+    const bool same = identity && (!owner || identity == owner);
+    if (identity) identity->Release();
+    return same;
+}
 
 // Render-thread state: touched only inside Present on the target swapchain.
 enum class Phase { Waiting, Ready, Disabled };
@@ -78,19 +90,63 @@ bool hook(void* object, std::size_t index, void* replacement, std::atomic<void*>
 
 HRESULT STDMETHODCALLTYPE present(IDXGISwapChain* self, UINT sync, UINT flags);
 
-std::atomic<void**> present_table{nullptr};
+std::atomic<void**> present_table{nullptr};  // the shared class vtable whose slot 8 is next_present
 
-void adopt(IDXGISwapChain* swapchain) {
+// Our Present lives in a PRIVATE copy of the vtable, installed on the game's swapchain object only; DXGI's shared vtable
+// is never written. An overlay that finds Present through the shared vtable (a dummy swapchain) must find DXGI's
+// function, not ours: the Steam overlay re-discovered Present when Remix started, patched OUR function and kept one
+// global "original", so Present looped ours -> overlay -> ours until the stack overflowed (laptop 2026-10-30;
+// test_present_overlay_rehook.py). Slots copied = the interfaces this object answers, so no read past its vtable:
+// IDXGISwapChain 18, 1: 29, 2: 36, 3: 40, 4: 41 (checked against the header by test_live_camera's offsetof probe).
+// shortcut: one small table per adopted swapchain, never freed; games create a handful.
+std::size_t swapchain_slots(IDXGISwapChain* swapchain, std::size_t minimum) {
+    const std::pair<REFIID, std::size_t> levels[] = {{__uuidof(IDXGISwapChain1), 29}, {__uuidof(IDXGISwapChain2), 36},
+                                                     {__uuidof(IDXGISwapChain3), 40}, {__uuidof(IDXGISwapChain4), 41}};
+    std::size_t slots = minimum;
+    for (const auto& [iid, count] : levels) {
+        void* same = nullptr;
+        if (FAILED(swapchain->QueryInterface(iid, &same)) || !same) break;
+        static_cast<IUnknown*>(same)->Release();
+        if (same != static_cast<void*>(swapchain)) break;  // a different object/vptr: stop at what the primary has
+        slots = std::max(slots, count);
+    }
+    return slots;
+}
+
+void adopt(IDXGISwapChain* swapchain, IUnknown* owner, std::size_t minimum = 18) {
     if (!swapchain) return;
+    static std::mutex adopting;
+    std::lock_guard<std::mutex> lock(adopting);
+    if (!owns_device(owner)) return;
+    if (!game_device.load(std::memory_order_acquire)) {
+        IUnknown* identity = nullptr;
+        if (FAILED(owner->QueryInterface(__uuidof(IUnknown), reinterpret_cast<void**>(&identity))) || !identity) return;
+        game_device.store(identity, std::memory_order_release);  // held for the session, like the menu's device/context
+    }
     void** table = *reinterpret_cast<void***>(swapchain);
+    if (table[kPresent] == reinterpret_cast<void*>(&present)) {  // already ours (a private table from an earlier adopt)
+        target.store(swapchain, std::memory_order_release);
+        return;
+    }
     void** expected = nullptr;
-    // One saved "next Present" serves one vtable; a different swapchain class would chain wrongly.
-    if (present_table.compare_exchange_strong(expected, table)) {
-        if (!hook(swapchain, kPresent, reinterpret_cast<void*>(&present), next_present, "Present")) return;
-    } else if (expected != table) {
+    // One saved "next Present" serves one class vtable; a different swapchain class would chain wrongly.
+    if (!present_table.compare_exchange_strong(expected, table) && expected != table) {
         host.log("menu: swapchain %p has a different class; menu stays on the first one", static_cast<void*>(swapchain));
         return;
     }
+    if (expected && table[kPresent] != next_present.load(std::memory_order_acquire)) {
+        host.log("menu: shared Present changed; keep the first downstream chain and leave the new swapchain untouched");
+        return;
+    }
+    const std::size_t slots = swapchain_slots(swapchain, minimum);
+    void** copy = new void*[slots];
+    std::memcpy(copy, table, slots * sizeof(void*));
+    next_present.store(table[kPresent], std::memory_order_release);
+    copy[kPresent] = reinterpret_cast<void*>(&present);
+    // Publish fully initialized, on the factory return path before the game receives the object. Inner hooks must not
+    // hand it to another rendering thread before returning from CreateSwapChain.
+    __atomic_store_n(reinterpret_cast<void***>(swapchain), copy, __ATOMIC_RELEASE);
+    host.log("menu: hook Present slot 8 -> 0 (private vtable, %zu slots; shared vtable untouched)", slots);
     target.store(swapchain, std::memory_order_release);
 }
 
@@ -103,7 +159,7 @@ HRESULT STDMETHODCALLTYPE create_swapchain(IDXGIFactory* self, IUnknown* dev, DX
     const auto next = reinterpret_cast<CreateSwapChainFn>(next_create.load(std::memory_order_acquire));
     ++creating;
     const HRESULT hr = next(self, dev, desc, out);
-    if (--creating == 0 && SUCCEEDED(hr) && out) adopt(*out);
+    if (--creating == 0 && SUCCEEDED(hr) && out && owns_device(dev)) adopt(*out, dev);
     return hr;
 }
 
@@ -112,7 +168,7 @@ HRESULT STDMETHODCALLTYPE create_for_hwnd(IDXGIFactory2* self, IUnknown* dev, HW
     const auto next = reinterpret_cast<CreateForHwndFn>(next_create_hwnd.load(std::memory_order_acquire));
     ++creating;
     const HRESULT hr = next(self, dev, hwnd, desc, fs, output, out);
-    if (--creating == 0 && SUCCEEDED(hr) && out) adopt(*out);
+    if (--creating == 0 && SUCCEEDED(hr) && out && owns_device(dev)) adopt(*out, dev, 29);  // factory promises v1 even when QI returns aliases
     return hr;
 }
 
@@ -473,6 +529,8 @@ void install(ID3D11Device* dev, IDXGISwapChain* swapchain, const Host& h) {
     if (!dev) return;
     if (!installed.exchange(true)) {
         host = h;
+        // Device enumeration may create temporary devices first. Bind ownership only at swapchain adoption; after
+        // that, factory hooks must ignore driver/Remix swapchains (test_present_overlay_rehook foreign case).
         input_layout_hook::install(dev);
         // Pixel-shader bytecode, so an offline tool can answer "is this draw a cutout" (see
         // test_dxbc_discard.py). Writes only when NIER_SHADER_DIR is set.
@@ -505,6 +563,6 @@ void install(ID3D11Device* dev, IDXGISwapChain* swapchain, const Host& h) {
         if (adapter) adapter->Release();
         if (dxgi) dxgi->Release();
     }
-    adopt(swapchain);
+    if (owns_device(dev)) adopt(swapchain, dev);
 }
 }  // namespace menu_overlay

@@ -18,6 +18,7 @@
 #include <limits>
 #include <functional>
 #include "vtable_hook.h"
+#include <map>
 
 // The live-camera gate verifies this slot with offsetof(ID3D11DeviceContextVtbl, CopyResource).
 static std::atomic<void*> next_copy{nullptr};
@@ -41,6 +42,65 @@ static void STDMETHODCALLTYPE spy_copy(ID3D11DeviceContext* self, ID3D11Resource
     }
     using Fn = void (STDMETHODCALLTYPE*)(ID3D11DeviceContext*, ID3D11Resource*, ID3D11Resource*);
     reinterpret_cast<Fn>(next_copy.load())(self, dst, src);
+}
+
+// ---- a stand-in for an overlay that finds Present through the SHARED DXGI vtable (MOCK_OVERLAY_REHOOK=N) ----
+// Typical overlay code: discover Present from a dummy swapchain's vtable, patch the start of that function's code,
+// and keep ONE global "original" that its single detour calls. Re-discovery (Steam does it when another graphics API
+// loads; on the laptop that is when Remix starts) patches the newly found function and overwrites the global. If the
+// shared slot then holds another layer's hook, the old patch now leads back into that layer: an endless Present loop.
+// "Calling the original" is done by unpatching around the call; loops are cut at depth 16 and counted.
+using OvPresentFn = HRESULT (STDMETHODCALLTYPE*)(IDXGISwapChain*, UINT, UINT);
+struct OvPatch { bool on = false; unsigned char saved[14] = {}; };
+static std::map<void*, OvPatch>& ov_patches() { static std::map<void*, OvPatch> m; return m; }
+static void* ov_orig = nullptr;
+static int ov_depth = 0;
+static unsigned ov_calls = 0, ov_loops = 0, ov_discoveries = 0;
+static OvPresentFn second_next = nullptr;
+static unsigned second_calls = 0, second_created = 0, foreign_hooked = 0, foreign_created = 0;
+static HRESULT STDMETHODCALLTYPE second_present(IDXGISwapChain* self, UINT sync, UINT flags) {
+    ++second_calls;
+    return second_next(self, sync, flags);
+}
+static void ov_write(void* fn, const unsigned char* bytes) {
+    DWORD old = 0;
+    VirtualProtect(fn, 14, PAGE_EXECUTE_READWRITE, &old);
+    std::memcpy(fn, bytes, 14);
+    VirtualProtect(fn, 14, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), fn, 14);
+}
+static HRESULT STDMETHODCALLTYPE ov_present(IDXGISwapChain* self, UINT sync, UINT flags);
+static void ov_patch(void* fn) {
+    auto& entry = ov_patches()[fn];
+    if (entry.on) return;
+    std::memcpy(entry.saved, fn, 14);
+    unsigned char jump[14] = {0xFF, 0x25, 0, 0, 0, 0};  // jmp [rip+0]; dq target
+    void* detour = reinterpret_cast<void*>(&ov_present);
+    std::memcpy(jump + 6, &detour, 8);
+    ov_write(fn, jump);
+    entry.on = true;
+}
+static void ov_unpatch(void* fn) {
+    auto it = ov_patches().find(fn);
+    if (it == ov_patches().end() || !it->second.on) return;
+    ov_write(fn, it->second.saved);
+    it->second.on = false;
+}
+static HRESULT STDMETHODCALLTYPE ov_present(IDXGISwapChain* self, UINT sync, UINT flags) {
+    if (ov_depth >= 16) { ++ov_loops; return S_OK; }  // the real overlay would overflow the stack here
+    ++ov_depth; ++ov_calls;
+    void* orig = ov_orig;
+    ov_unpatch(orig);
+    const HRESULT hr = reinterpret_cast<OvPresentFn>(orig)(self, sync, flags);
+    ov_patch(orig);
+    --ov_depth;
+    return hr;
+}
+static void ov_discover(IDXGISwapChain* dummy) {
+    void* fn = (*reinterpret_cast<void***>(dummy))[8];
+    ov_patch(fn);
+    ov_orig = fn;
+    ++ov_discoveries;
 }
 
 static void key(WORD vk, bool down) {
@@ -91,11 +151,37 @@ int wmain(int argc, wchar_t** argv) {
     };
 
     HMODULE proxy = LoadLibraryW(L"d3d11.dll");
+    // MOCK_OVERLAY_REHOOK: the overlay's dummy swapchain comes from the system d3d11 before the game device exists (so
+    // before our proxy hooks anything); first discovery now, re-discovery at frame N.
+    const int overlay_rehook = std::getenv("MOCK_OVERLAY_REHOOK") ? std::atoi(std::getenv("MOCK_OVERLAY_REHOOK")) : 0;
+    IDXGISwapChain* overlay_dummy = nullptr;
+    if (overlay_rehook) {
+        HWND dummy_window = CreateWindowW(wc.lpszClassName, L"overlay-dummy", WS_OVERLAPPEDWINDOW, 0, 0, 64, 64, nullptr,
+                                          nullptr, wc.hInstance, nullptr);
+        auto system_create = reinterpret_cast<decltype(&D3D11CreateDeviceAndSwapChain)>(reinterpret_cast<void*>(
+            GetProcAddress(LoadLibraryW(L"C:\\windows\\system32\\d3d11.dll"), "D3D11CreateDeviceAndSwapChain")));
+        DXGI_SWAP_CHAIN_DESC dd{};
+        dd.BufferCount = 1; dd.BufferDesc.Width = 64; dd.BufferDesc.Height = 64; dd.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        dd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT; dd.OutputWindow = dummy_window; dd.SampleDesc.Count = 1; dd.Windowed = TRUE;
+        ID3D11Device* dummy_device = nullptr;
+        if (!system_create || FAILED(system_create(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, 0, nullptr, 0, D3D11_SDK_VERSION,
+                                                   &dd, &overlay_dummy, &dummy_device, nullptr, nullptr)) || !overlay_dummy) {
+            std::fprintf(out, "FAIL overlay dummy\n"); return 3;
+        }
+        ov_discover(overlay_dummy);
+    }
     HMODULE stub = GetModuleHandleW(L"d3d11_dlaa.dll");
     auto create = reinterpret_cast<decltype(&D3D11CreateDevice)>(reinterpret_cast<void*>(GetProcAddress(proxy, "D3D11CreateDevice")));
     char self_path[MAX_PATH] = ""; GetModuleFileNameA(proxy, self_path, MAX_PATH);
     std::fprintf(out, "proxy=%s\n", self_path);
     ID3D11Device* device = nullptr; ID3D11DeviceContext* context = nullptr;
+    if (create && std::getenv("MOCK_PROXY_FIRST_DEVICE")) {
+        // Device enumeration can create a throwaway device through our proxy before the game makes its real one.
+        ID3D11Device* probe_device = nullptr; ID3D11DeviceContext* probe_context = nullptr;
+        if (FAILED(create(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, 0, nullptr, 0, D3D11_SDK_VERSION,
+                          &probe_device, nullptr, &probe_context))) { std::fprintf(out, "FAIL probe device\n"); return 3; }
+        probe_context->Release(); probe_device->Release();
+    }
     if (!create || FAILED(create(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, 0, nullptr, 0, D3D11_SDK_VERSION, &device, nullptr, &context))) {
         std::fprintf(out, "FAIL device\n"); return 3;
     }
@@ -725,6 +811,46 @@ int wmain(int argc, wchar_t** argv) {
     bool failure_observed = false, previous_present_failed = false;
     double live_frame_ms = 0.0;
     for (int frame = 1; frame <= 80; ++frame) {
+        if (overlay_dummy && frame == overlay_rehook) {
+            if (std::getenv("MOCK_FOREIGN_SWAPCHAIN")) {
+                // An internal driver/Remix DXGI swapchain uses a different device. Our global factory hooks see it,
+                // but it must never receive our private Present or replace the game's target.
+                HWND foreign_window = CreateWindowW(wc.lpszClassName, L"foreign", WS_OVERLAPPEDWINDOW, 0, 0, 64, 64,
+                                                    nullptr, nullptr, wc.hInstance, nullptr);
+                auto system_create = reinterpret_cast<decltype(&D3D11CreateDeviceAndSwapChain)>(reinterpret_cast<void*>(
+                    GetProcAddress(GetModuleHandleW(L"C:\\windows\\system32\\d3d11.dll"), "D3D11CreateDeviceAndSwapChain")));
+                DXGI_SWAP_CHAIN_DESC fd = sd; fd.OutputWindow = foreign_window; fd.BufferDesc.Width = fd.BufferDesc.Height = 64;
+                IDXGISwapChain* foreign = nullptr; ID3D11Device* foreign_device = nullptr;
+                if (FAILED(system_create(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, 0, nullptr, 0, D3D11_SDK_VERSION,
+                                         &fd, &foreign, &foreign_device, nullptr, nullptr)) || !foreign) {
+                    std::fprintf(out, "FAIL foreign swapchain\n"); return 3;
+                }
+                ++foreign_created;
+                foreign_hooked = (*reinterpret_cast<void***>(foreign))[8] == (*reinterpret_cast<void***>(swapchain))[8];
+                foreign->Release(); foreign_device->Release(); DestroyWindow(foreign_window);
+            } else if (std::getenv("MOCK_SECOND_PRESENT_CHAIN")) {
+                // A second swapchain of the same class, after another mod changed its shared Present slot. It must not
+                // overwrite the saved downstream chain used by the first object's private vtable (review P1).
+                void** shared = *reinterpret_cast<void***>(overlay_dummy);
+                second_next = reinterpret_cast<OvPresentFn>(shared[8]);
+                DWORD old = 0; VirtualProtect(&shared[8], sizeof(void*), PAGE_READWRITE, &old);
+                shared[8] = reinterpret_cast<void*>(&second_present);
+                VirtualProtect(&shared[8], sizeof(void*), old, &old);
+                HWND other_window = CreateWindowW(wc.lpszClassName, L"second-chain", WS_OVERLAPPEDWINDOW, 0, 0, 64, 64,
+                                                  nullptr, nullptr, wc.hInstance, nullptr);
+                DXGI_SWAP_CHAIN_DESC other = sd; other.OutputWindow = other_window;
+                other.BufferDesc.Width = other.BufferDesc.Height = 64;
+                IDXGISwapChain* second = nullptr;
+                if (FAILED(factory->CreateSwapChain(device, &other, &second)) || !second) {
+                    std::fprintf(out, "FAIL second swapchain\n"); return 3;
+                }
+                ++second_created;
+                second->Release(); DestroyWindow(other_window);
+                VirtualProtect(&shared[8], sizeof(void*), PAGE_READWRITE, &old);
+                shared[8] = reinterpret_cast<void*>(second_next);
+                VirtualProtect(&shared[8], sizeof(void*), old, &old);
+            } else ov_discover(overlay_dummy);
+        }
         mock_frame_index = frame;
         MSG msg; while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) { TranslateMessage(&msg); DispatchMessageW(&msg); }
         // Frame capture: F9 held 1-4 records exactly one frame; the mesh is drawn twice every frame 1-6, so
@@ -1089,6 +1215,8 @@ int wmain(int argc, wchar_t** argv) {
                            static_cast<LPCWSTR>((*reinterpret_cast<void***>(context))[14]), &owner);
         std::fprintf(out, "ctx_map_in_proxy=%d\n", owner == proxy);
     }
+    if (overlay_rehook) std::fprintf(out, "overlay_calls=%u overlay_loops=%u overlay_discoveries=%u second_calls=%u second_created=%u foreign_hooked=%u foreign_created=%u\n",
+                                    ov_calls, ov_loops, ov_discoveries, second_calls, second_created, foreign_hooked, foreign_created);
     std::fprintf(out, "presented=%u stub_presents=%u foreground=%d cs_lost=%u\n", presented, count(),
                  GetForegroundWindow() == hwnd, cs_lost);
     if (camera_mode) std::fprintf(out, "geometry_reads_late=%u\n", geometry_reads_late);

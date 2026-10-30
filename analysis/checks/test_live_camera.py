@@ -27,7 +27,13 @@ def inside():
         probe = work / 'slots.cpp'
         probe.write_text('''#define CINTERFACE
 #include <d3d11.h>
+#include <dxgi1_5.h>
 #include <cstddef>
+static_assert(sizeof(IDXGISwapChainVtbl)/sizeof(void*) == 18);
+static_assert(sizeof(IDXGISwapChain1Vtbl)/sizeof(void*) == 29);
+static_assert(sizeof(IDXGISwapChain2Vtbl)/sizeof(void*) == 36);
+static_assert(sizeof(IDXGISwapChain3Vtbl)/sizeof(void*) == 40);
+static_assert(sizeof(IDXGISwapChain4Vtbl)/sizeof(void*) == 41);
 static_assert(offsetof(ID3D11DeviceContextVtbl, CopyResource)/sizeof(void*) == 47);
 static_assert(offsetof(ID3D11DeviceContextVtbl, DrawIndexed)/sizeof(void*) == 12);
 static_assert(offsetof(ID3D11DeviceContextVtbl, DrawIndexedInstanced)/sizeof(void*) == 20);
