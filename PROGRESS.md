@@ -6,6 +6,23 @@ State at this pause: nothing installed on either machine, no game running, lapto
 uncommitted on `main` above `a7a3c0b`. The noon PAUSED note below still applies in substance: do not launch a game or
 render unattended (and a save cannot be loaded without the operator).
 
+**LATEST (2026-10-30 23:45): the vanishing world is FIXED; remaining popping is genuine skinned animation.**
+`6cfba08` (build `dbbdd551…`). User: "looks a lot more stable now". Recording `runtime/laptop-port/live-rigid/recording/`:
+20 consecutive Remix frames all show the full camp (the 21:54 recording had 4 of 20 frames with the world gone).
+- Cause of the vanishing: another layer resets the DrawIndexed/DrawIndexedInstanced slots **mid-frame**, after our
+  OMSetRenderTargets repair (camera log: camera continuous, 54 of 540 frames lost most world draws with skipped passes
+  flat). Fix: repair also from IASetInputLayout/IASetVertexBuffers/IASetIndexBuffer. Gate `midframe-reset` (red/green).
+  The scene-target hysteresis (`490f6d0`) and the wrong-camera theory were not the cause (camera log ruled it out).
+- **Skinned geometry is mostly really animated** (142 skinned main-view draws, real vertex buffers from F9): 110 blended
+  (77%), 24 single-bone rigid, 8 piecewise rigid. Weights sum to exactly 255/255. Influences per vertex: 1 = 46%,
+  2 = 13%, 3 = 12%, **4 = 29%**; a 2-bone cut drops up to 49% weight (median worst per draw 18%; only 51/142 draws
+  within 5%). The rigid path (`6cfba08`) covers the 24% that is rigid; **the rest needs 4-bone GPU skinning (Phase 4)**.
+- Candidate for exact 4-bone GPU skinning on the public runtime: it reads weights at a 1-float stride (vertex v reads
+  weights v..v+2, 4th derived), so **space real vertices 3 apart** (vertex i at slot 3i; slots 3i+1, 3i+2 are padding
+  no index references). Being verified against the upstream skinning shader before any implementation.
+- Still visible: 2B's colours vary frame to frame (blended-skin rebuild churn), HUD/minimap present only in some frames
+  (HUD capture is off by design at native scale), Remix consent dialog.
+
 **LATEST (2026-10-30 22:01): RTX settings measured; the GPU is not the bottleneck.** DLSS SR + Ray Reconstruction +
 Reflex were already on (default `dlssPreset = On`, verified from dxvk-remix source); FG off made no measurable
 difference; DLSS Max Performance saved only 2–4 ms. Plugged in: ~9 fps light views, readback ~29 ms (fixed full-output
