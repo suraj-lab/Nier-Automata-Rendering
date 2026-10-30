@@ -106,3 +106,23 @@ The GPU sampler `analysis/measurements/sample_gpu.py` was produced by local-work
 caught non-finite optional readings leaking into CSV; lead reproduced it, added a regression test,
 and changed those readings to None/blank cells. All 8 fake-sysfs tests pass. Live sampling/A/B capture
 remain parked while the FAR/menu direction is discussed. Do not run local inference during captures.
+
+## FAR hook targets verified in our exe — 2026-10-30 (static, REA/Ghidra)
+
+Target: `NieRAutomata.exe` `5171bed09e6fec7b…` (identical on desktop and laptop), Steamless-unpacked
+`NieRAutomata_win10.exe.unpacked.exe` `44ee2dc0e1f2fd93…`, decompiled with the REA CLI against a copy of
+`offline-gameexe/unpacked_snapshot.json` (`runtime/far-verify/decomp-*.json`). FAR source: SpecialK `src/plugins/nier.cpp`
+at `1f39b92c`, `far_lod_patch_s`.
+
+| FAR (`HookAddr` etc., base 0x140000000) | our build |
+| --- | --- |
+| `sub_84CD60` (8 args, `NA_Mesh*` first) | `FUN_14084cd60`: 8 parameters; `param_1[0xa4]` = byte **0x520** `|= 0x10` — FAR's "UseCullAABB sets/removes 0x10 flag" |
+| `sub_84D070` (same signature) | `FUN_14084d070`: 8 parameters, sets `+0x5C0 |= 2`, forwards all arguments to `FUN_14084cd60` |
+| `IsAOAllowed` `0x78BC20` | `FUN_14078bc20`: returns 0/1 from global flags (`DAT_1410297e4 & 0x80000`, `DAT_14102add0 & 4`) |
+
+All touched offsets fall inside FAR's `NA_Mesh` layout (0x5EC). `DistRates` (+0x3F0) and `UseLostLOD` (+0x400) are not
+touched in `FUN_14084cd60` itself (likely in callee `FUN_140847070`, not checked). Static evidence only: runtime effect of
+`DisableLODs` on this build is untested. Uses for this project: anti-culling (Phase 7; needs a code detour, not a
+vtable hook), the game camera at `0x141605400`/`0x141605410` as an independent check on the CB-captured camera, and
+menu/loading/hacking flags (`0x14190D494`/`0x14198F0A0`/`0x1410FA090`) for Phase 10 fallbacks — the data addresses are
+not yet verified for this build.
