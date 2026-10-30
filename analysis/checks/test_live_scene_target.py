@@ -30,7 +30,7 @@ import test_remix_live as tr
 import test_menu_overlay as tmo
 import test_nscn_scene as ts
 
-tr.ENV_KEYS = tuple(tr.ENV_KEYS) + ('NIER_REMIX_LIVE_STATS_EVERY', 'NIER_REMIX_LIVE', 'NIER_REMIX_LIVE_TEX', 'NIER_REMIX_LIVE_ALL_TARGETS',
+tr.ENV_KEYS = tuple(tr.ENV_KEYS) + ('MOCK_RESET_DRAW_MIDFRAME', 'NIER_REMIX_LIVE_STATS_EVERY', 'NIER_REMIX_LIVE', 'NIER_REMIX_LIVE_TEX', 'NIER_REMIX_LIVE_ALL_TARGETS',
                                      'FAKE_REMIX_INSTANCE_LOG')
 
 
@@ -177,6 +177,17 @@ def inside():
         lost = sorted(f for f in range(12, 78) if per_frame.get(f, 0) < 3)
         assert not lost, f'frames that lost the world after a burst: {lost[:10]} ({sorted(per_frame.items())[:6]})'
         results['native-burst'] = 'A pass that briefly out-draws the world does not flip the scene target.'
+
+        # Another layer resets the two draw slots mid-frame, after the render targets are bound (laptop, 2026-10-30: 54 of
+        # 540 frames lost most of their world draws). Every frame must still deliver its scene draws.
+        _, r, log, fake = tr.run(work, 'midframe-reset', {**base, 'MOCK_CAMERA': 'live', 'MOCK_LIVE_DRAWS': '3',
+                                                          'MOCK_RESET_DRAW_MIDFRAME': '5'})
+        assert fake and 'VIOLATION' not in fake, fake
+        assert int(r.get('midframe_resets', 0)) >= 10, f'the mock reset did not replace a hooked slot: {r}'
+        per_frame = instances_per_frame(fake)
+        lost = sorted(f for f in range(15, 78) if per_frame.get(f, 0) < 3)
+        assert not lost, f'frames that lost their draws after a mid-frame slot reset: {lost[:12]}'
+        results['midframe-reset'] = 'Draw slots reset mid-frame are repaired before the following draws.'
         _, r, log, fake = tr.run(work, 'full', {**base, 'MOCK_CAMERA': 'live-blend', 'MOCK_SCENE_FULL': '1'})
         assert fake and 'VIOLATION' not in fake, fake
         full = {f for f, n in instances_per_frame(fake).items() if f >= 10 and n}

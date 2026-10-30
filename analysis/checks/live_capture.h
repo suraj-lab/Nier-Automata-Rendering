@@ -253,6 +253,29 @@ inline std::atomic<unsigned long long> rebuild_reasons[kReasonCount]{};
 inline std::map<std::uint64_t, unsigned>& erased_reason() { static std::map<std::uint64_t, unsigned> m; return m; }
 // Buffer part of the version, without the skinning pose, so a pose-only change is told apart from a buffer write.
 inline std::map<std::uint64_t, std::uint64_t>& built_buffer_versions() { static std::map<std::uint64_t, std::uint64_t> m; return m; }
+// Skinned draws whose every vertex is weighted to one and the same bone are rigid objects: NieR draws most of its static
+// world this way (live capture 2026-10-30: 85% of main-view draws carried BLENDINDICES, many with a 1-bone palette). They
+// are built once in their own space and drawn with that bone as the instance transform, instead of being re-baked into a
+// new mesh every time the palette or the draw order changes (82% of all rebuilds were 'pose', and each rebuild blinked).
+// Value: the bone, or -1 when the mesh really blends bones and keeps the per-pose bake. Keyed by the draw, not the pose.
+inline std::map<std::uint64_t, int>& rigid_bones() { static std::map<std::uint64_t, int> m; return m; }
+inline int single_bone(const live_decode::Output& out) {
+    if (out.vertices.empty() || out.bones.size() != 4 * out.vertices.size() || out.weights.size() != out.bones.size()) return -1;
+    int bone = -1;
+    for (std::size_t i = 0; i < out.vertices.size(); ++i) {
+        float sum = 0;
+        for (unsigned k = 0; k < 4; ++k) {
+            const float w = out.weights[4 * i + k];
+            if (w <= 0) continue;  // zero-weight slots carry unused bone indices in real captures
+            const int b = static_cast<int>(out.bones[4 * i + k]);
+            if (bone < 0) bone = b;
+            if (b != bone) return -1;
+            sum += w;
+        }
+        if (std::fabs(sum - 1.f) > 1e-3f) return -1;  // partial weights: not a plain rigid transform
+    }
+    return bone;
+}
 
 // The worker evicted these meshes: forget that they were built, so they are uploaded again when drawn.
 inline void forget(const std::vector<std::uint64_t>& keys) {
@@ -918,10 +941,18 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     // version instead, so a new pose rebuilds and replaces the mesh under the same key.
     // shortcut: if the game reorders identical characters between frames, their keys swap and both rebuild each frame.
     std::uint64_t pose = 0;
+    const std::uint64_t skin_base = geometry;
+    int rigid_bone = -1;
     if (skinned) {
-        geometry = hash_value(geometry ^ (0x5c1d000000000000ull + skinned_occurrences()[geometry]++));
-        pose = hash_mix(1469598103934665603ull, constants->data(), 48ull * bone_count);
+        const auto known = rigid_bones().find(skin_base);
+        if (known != rigid_bones().end() && known->second >= 0 && static_cast<unsigned>(known->second) < bone_count) {
+            rigid_bone = known->second;  // one mesh in its own space; the bone becomes the instance transform below
+        } else {
+            geometry = hash_value(geometry ^ (0x5c1d000000000000ull + skinned_occurrences()[geometry]++));
+            pose = hash_mix(1469598103934665603ull, constants->data(), 48ull * bone_count);
+        }
     }
+    bool rigid = rigid_bone >= 0;
 
     std::uint32_t texture = 0;
     bool texture_deferred = false;
@@ -1084,7 +1115,7 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
         return skinned ? hash_value(v ^ pose) : v;
     };
     version = version_now();
-    const auto previously = built_versions().find(geometry);
+    auto previously = built_versions().find(geometry);
     const auto resident = [](ID3D11Buffer* b) { const Shadow* sh = find_shadow(b); return sh && !sh->bytes.empty(); };
     bool sky_extent = false;  // decoded geometry's world extent says this is the background shell
     bool needs_read = !resident(ib);
@@ -1142,14 +1173,32 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
         bool ok = live_decode::build(decode_slots, vb_count, decode_elements, ib_bytes->data(),
                                                       ib_bytes->size(), index_width, first_index, index_count,
                                                       base_vertex, bone_count, skinned, decoded);
-        if (ok && skinned) ok = live_skinning::bake(decoded, constants->data(), 48ull * bone_count);
+        if (ok && skinned && !rigid) {
+            if (rigid_bones().size() > 200000) rigid_bones().clear();  // bounded like built_versions; one re-check each
+            const int bone = single_bone(decoded);
+            rigid_bones()[skin_base] = bone;
+            if (bone >= 0 && static_cast<unsigned>(bone) < bone_count) {
+                // Rigid from this very decode: build under the draw's own key, not a baked copy under an occurrence key
+                // that would be built once more on the next frame and then stay resident unused.
+                rigid = true;
+                rigid_bone = bone;
+                geometry = skin_base;
+                pose = 0;
+                version = version_now();
+                previously = built_versions().find(geometry);
+            } else {
+                ok = live_skinning::bake(decoded, constants->data(), 48ull * bone_count);
+            }
+        }
+        if (ok && rigid) { decoded.bones.clear(); decoded.weights.clear(); }  // bind pose; Remix applies the bone
         if (ok && !decoded.indices.empty()) {
             // World-space extent of the first instance, exactly like the accepted captured-scene rule: a sky
             // dome only reveals itself after the world matrix, and local space alone would misjudge scaled meshes.
             float low[3] = {1e30f, 1e30f, 1e30f}, high[3] = {-1e30f, -1e30f, -1e30f};
             float world[12];
-            const bool have_world = constants && constants->size() >= 48 && !skinned;
-            if (have_world) std::memcpy(world, constants->data(), sizeof world);
+            const std::size_t world_offset = rigid ? 48ull * static_cast<std::size_t>(rigid_bone) : 0;
+            const bool have_world = constants && constants->size() >= world_offset + 48 && (!skinned || rigid);
+            if (have_world) std::memcpy(world, constants->data() + world_offset, sizeof world);
             for (const auto& v : decoded.vertices) {
                 float point[3] = {v.position[0], v.position[1], v.position[2]};
                 if (have_world) {
@@ -1232,7 +1281,13 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     if (!texture) ++frame.untextured;  // no material: distinguishes 'texture never written' from 'material not created'
     item.first = static_cast<unsigned>(frame.transforms.size() / 12);
     item.count = instance_count;
-    if (skinned) {
+    if (rigid) {
+        // The bone is the object's world transform (3x4, translation in the fourth column, the instance layout).
+        item.count = 1;
+        float matrix[12];
+        std::memcpy(matrix, constants->data() + 48ull * static_cast<std::size_t>(rigid_bone), sizeof matrix);
+        frame.transforms.insert(frame.transforms.end(), matrix, matrix + 12);
+    } else if (skinned) {
         // Already world-space: no GPU skinning palette and no second world transform.
         item.count = 1;
         const float identity[12] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0};

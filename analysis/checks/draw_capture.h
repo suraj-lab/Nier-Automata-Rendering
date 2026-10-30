@@ -319,6 +319,30 @@ inline void STDMETHODCALLTYPE hooked_omset_render_targets_uavs(ID3D11DeviceConte
         self, count, views, depth, uav_start, uav_count, uavs, initial);
 }
 
+// The same layer also resets the slots in the middle of a frame (laptop 2026-10-30: 54 of 540 frames lost most world draws
+// with skipped passes unchanged), so a repair at render-target binding alone misses the draws that follow. The input
+// assembler is set before nearly every draw: repair there too. Only slots 12 and 20 are reset (a canary at slot 108
+// survived), so hooking 17-19 does not enter that fight.
+constexpr std::size_t kIaSetInputLayout = 17, kIaSetVertexBuffers = 18, kIaSetIndexBuffer = 19;
+inline std::atomic<void*> g_next_ia_layout{nullptr}, g_next_ia_vbs{nullptr}, g_next_ia_ib{nullptr};
+inline void STDMETHODCALLTYPE hooked_ia_set_input_layout(ID3D11DeviceContext* self, ID3D11InputLayout* layout) {
+    try { repair_lost_hooks(self); } catch (...) {}
+    reinterpret_cast<void (STDMETHODCALLTYPE*)(ID3D11DeviceContext*, ID3D11InputLayout*)>(
+        g_next_ia_layout.load(std::memory_order_acquire))(self, layout);
+}
+inline void STDMETHODCALLTYPE hooked_ia_set_vertex_buffers(ID3D11DeviceContext* self, UINT start, UINT count,
+        ID3D11Buffer* const* buffers, const UINT* strides, const UINT* offsets) {
+    try { repair_lost_hooks(self); } catch (...) {}
+    reinterpret_cast<void (STDMETHODCALLTYPE*)(ID3D11DeviceContext*, UINT, UINT, ID3D11Buffer* const*, const UINT*, const UINT*)>(
+        g_next_ia_vbs.load(std::memory_order_acquire))(self, start, count, buffers, strides, offsets);
+}
+inline void STDMETHODCALLTYPE hooked_ia_set_index_buffer(ID3D11DeviceContext* self, ID3D11Buffer* buffer,
+                                                         DXGI_FORMAT format, UINT offset) {
+    try { repair_lost_hooks(self); } catch (...) {}
+    reinterpret_cast<void (STDMETHODCALLTYPE*)(ID3D11DeviceContext*, ID3D11Buffer*, DXGI_FORMAT, UINT)>(
+        g_next_ia_ib.load(std::memory_order_acquire))(self, buffer, format, offset);
+}
+
 // Called only when a live session arms capture: with Remix and live capture off, the game's render-target binding stays
 // untouched (feature-off parity).
 inline bool install_repair(ID3D11DeviceContext* context) {
@@ -334,7 +358,13 @@ inline bool install_repair(ID3D11DeviceContext* context) {
     return ok(vtable_hook::hook(table, kOmsetRenderTargets,
                                 reinterpret_cast<void*>(&hooked_omset_render_targets), g_next_omset, protect)) &&
            ok(vtable_hook::hook(table, kOmsetRenderTargetsAndUavs,
-                                reinterpret_cast<void*>(&hooked_omset_render_targets_uavs), g_next_omset_uavs, protect));
+                                reinterpret_cast<void*>(&hooked_omset_render_targets_uavs), g_next_omset_uavs, protect)) &&
+           ok(vtable_hook::hook(table, kIaSetInputLayout,
+                                reinterpret_cast<void*>(&hooked_ia_set_input_layout), g_next_ia_layout, protect)) &&
+           ok(vtable_hook::hook(table, kIaSetVertexBuffers,
+                                reinterpret_cast<void*>(&hooked_ia_set_vertex_buffers), g_next_ia_vbs, protect)) &&
+           ok(vtable_hook::hook(table, kIaSetIndexBuffer,
+                                reinterpret_cast<void*>(&hooked_ia_set_index_buffer), g_next_ia_ib, protect));
 }
 
 inline bool install(ID3D11DeviceContext* context) {

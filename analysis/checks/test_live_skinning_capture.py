@@ -19,6 +19,7 @@ A = C.parent
 OUT = A / 'runtime/live-skinning-capture'
 import test_live_geometry as tg
 tr, tmo, ts = tg.tr, tg.tmo, tg.ts
+tr.ENV_KEYS = tuple(tr.ENV_KEYS) + ('MOCK_SKIN_SPLIT', 'MOCK_SKIN_ANIMATE')
 
 
 def inside():
@@ -36,6 +37,9 @@ def inside():
         base = {'NIER_REMIX_RUNTIME': tr.win(work / 'fake_remix.dll'),
             'NIER_REMIX_SCENE': tr.win(scene / 'scene.bin'), 'MOCK_FRAME_MS': '40', 'MOCK_CAMERA': 'live-skin-poses',
             'NIER_REMIX': '1', 'NIER_REMIX_LIVE': '1', 'NIER_REMIX_LIVE_TEX': tr.win(tex), 'FAKE_REMIX_INSTANCE_LOG': '1'}
+        rigid_base = dict(base)
+        # The bake cases below need a mesh that really blends bones; a one-bone mesh now takes the rigid path.
+        base = {**base, 'MOCK_SKIN_SPLIT': '1'}
         _, r, log, fake = tr.run(work, 'poses', base)
         assert fake and 'VIOLATION' not in fake, (fake or log)[-2000:]
         meshes = [l for l in fake.splitlines() if l.startswith('CreateMesh') and 'indices=192 ' in l]
@@ -75,8 +79,47 @@ def inside():
         assert why_lines, tr.remix_lines(log)[-6:]
         why = {k: int(v) for k, v in re.findall(r'(\w+)=(\d+)', why_lines[-1])}
         assert why['pose'] >= 10 and why['pose'] > why['buffer'], f'animation not counted as pose rebuilds: {why}'
+        # Rigid: every vertex on bone 0 (NieR draws most of its static world like this, 2026-10-30). Two characters share
+        # VB/IB and get different bone-0 translations (0/10 and 20/30). They must share one mesh built in its own space,
+        # with the bone as the instance transform -- not a rebuild per pose or per draw order.
+        rigid_counts = {}
+        for name, extra in (('rigid-poses', {}), ('rigid-animate', {'MOCK_SKIN_ANIMATE': '1'})):
+            tex_r = work / f'textures-{name}'
+            tex_r.mkdir()
+            _, r, log, fake = tr.run(work, name, {**rigid_base, 'NIER_REMIX_LIVE_TEX': tr.win(tex_r), **extra,
+                                                  'NIER_REMIX_LIVE_STATS_EVERY': '10'})
+            assert fake and 'VIOLATION' not in fake, (fake or log)[-2000:]
+            built = [l for l in fake.splitlines() if l.startswith('CreateMesh') and 'indices=192 ' in l]
+            assert built and len(built) <= 4, f'{name}: a rigid skinned mesh was rebuilt {len(built)} times'
+            rigid_mesh = [l for l in built if re.search(r'v0=0\.000,', l)]
+            assert rigid_mesh, f'{name}: no mesh in its own space (v0 at the origin): {built}'
+            per_frame = {}
+            for l in fake.splitlines():
+                if not l.startswith('DrawInstance'):
+                    continue
+                m = re.search(r'presented=(\d+) mesh=(\d+) .*row0=([-\d.]+),[-\d.]+,[-\d.]+,([-\d.]+)', l)
+                if m and int(m.group(1)) >= 10:
+                    per_frame.setdefault(int(m.group(1)), []).append((m.group(2), float(m.group(4))))
+            assert len(per_frame) >= 30, f'{name}: rigid instances not drawn: {len(per_frame)} frames'
+            firsts = []
+            for f in sorted(per_frame):
+                inst = per_frame[f]
+                xs = sorted(x for _, x in inst)
+                assert len(inst) >= 2 and len({mesh for mesh, _ in inst}) == 1, f'{name} frame {f}: {inst}'
+                assert abs((xs[-1] - xs[0]) - 20.0) < 1e-3, f'{name} frame {f}: the two characters are not 20 apart: {xs}'
+                firsts.append(xs[0])
+            if name == 'rigid-poses':
+                # The mock switches the pose once (0 -> 10); presented frames trail mock frames, so only the values count.
+                assert set(round(x, 3) for x in firsts) == {0.0, 10.0}, f'{name}: translations seen {sorted(set(firsts))}'
+            else:
+                steps = {round(b - a, 3) for a, b in zip(firsts, firsts[1:])}
+                assert steps <= {0.25, 0.5, 0.75}, f'{name}: transform does not follow the animation: steps {sorted(steps)}'
+            why = {k: int(v) for k, v in re.findall(r'(\w+)=(\d+)',
+                   [x for x in tr.remix_lines(log) if x.startswith('remix: live rebuilds ')][-1])}
+            assert why['pose'] <= 2, f'{name}: rigid skinned draws still rebuild per pose: {why}'
+            rigid_counts[name] = len(built)
         report = {'passed': True, 'work': str(work), 'poses': sorted(by_pose), 'meshes': len(meshes),
-                  'animated_builds': len(animated), 'animated_keys': len(side),
+                  'animated_builds': len(animated), 'animated_keys': len(side), 'rigid_builds': rigid_counts,
                   'limits': 'Real proxy in a software Wine mock, not the real Remix runtime or live game.'}
         (OUT / 'validation.json').write_text(json.dumps(report, indent=2) + '\n')
         print(json.dumps(report))

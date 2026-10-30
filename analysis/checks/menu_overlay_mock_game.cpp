@@ -24,6 +24,7 @@
 static std::atomic<void*> next_copy{nullptr};static unsigned camera_reads = 0, geometry_reads = 0, frame_camera_reads = 0, peak_camera_reads = 0;
 static unsigned geometry_reads_late = 0;
 static int mock_frame_index = 0;
+static unsigned midframe_resets = 0;  // MOCK_RESET_DRAW_MIDFRAME: resets that replaced a hooked slot
 static std::function<void()> downstream_draw;
 extern "C" __declspec(dllexport) void mock_downstream_camera_draw() { if (downstream_draw) downstream_draw(); }
 static bool spy_protect(void* p, std::size_t n, unsigned long mode, unsigned long* old) {
@@ -189,6 +190,23 @@ int wmain(int argc, wchar_t** argv) {
             std::fprintf(out, "FAIL overlay dummy\n"); return 3;
         }
         ov_discover(overlay_dummy);
+    }
+    // MOCK_RESET_DRAW_MIDFRAME=N: the laptop's other layer puts the pristine DrawIndexed/DrawIndexedInstanced pointers
+    // back during the frame (2026-10-30: 54 of 540 frames lost most world draws while skipped passes stayed flat). The
+    // proxy hooks the shared context vtable when it creates a device, so the pristine pointers are read here, from a
+    // throwaway system device made before that, and written back mid-frame every N frames.
+    const int reset_midframe = std::getenv("MOCK_RESET_DRAW_MIDFRAME") ? std::atoi(std::getenv("MOCK_RESET_DRAW_MIDFRAME")) : 0;
+    static void* pristine_draw[2] = {};
+    if (reset_midframe > 0) {
+        HMODULE system_d3d11 = LoadLibraryW(L"C:\\windows\\system32\\d3d11.dll");
+        auto system_device = system_d3d11 ? reinterpret_cast<decltype(&D3D11CreateDevice)>(reinterpret_cast<void*>(
+            GetProcAddress(system_d3d11, "D3D11CreateDevice"))) : nullptr;
+        ID3D11Device* sd = nullptr; ID3D11DeviceContext* sc = nullptr;
+        if (!system_device || FAILED(system_device(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, 0, nullptr, 0, D3D11_SDK_VERSION,
+                                                   &sd, nullptr, &sc)) || !sc) { std::fprintf(out, "FAIL pristine device\n"); return 3; }
+        pristine_draw[0] = (*reinterpret_cast<void***>(sc))[12];
+        pristine_draw[1] = (*reinterpret_cast<void***>(sc))[20];
+        sc->Release(); sd->Release();
     }
     HMODULE stub = GetModuleHandleW(L"d3d11_dlaa.dll");
     auto create = reinterpret_cast<decltype(&D3D11CreateDevice)>(reinterpret_cast<void*>(GetProcAddress(proxy, "D3D11CreateDevice")));
@@ -707,6 +725,9 @@ int wmain(int argc, wchar_t** argv) {
                 p[1] = (i == 0) ? 0.f : (i % 5) * 0.2f;
                 p[2] = 0.5f;
                 sv[i * 28 + 20] = 0; sv[i * 28 + 21] = 0; sv[i * 28 + 24] = 255;  // all weight on bone 0
+                // MOCK_SKIN_SPLIT: vertices blend bones 0 and 1 (half each) -- a genuinely skinned mesh, which must keep the
+                // per-pose bake rather than the rigid one-mesh path.
+                if (std::getenv("MOCK_SKIN_SPLIT") && i > 0) { sv[i * 28 + 21] = 1; sv[i * 28 + 24] = 128; sv[i * 28 + 25] = 127; }
             }
             unsigned sind[192];
             unsigned si = 0;
@@ -1103,6 +1124,17 @@ int wmain(int argc, wchar_t** argv) {
                     context->DrawIndexed(192, 0, 0);
                 }
                 if (lights_now) context->PSSetShaderResources(20, 1, &lights_now);  // slot 20: the game's light array
+                if (reset_midframe > 0 && frame % reset_midframe == 0) {
+                    // After the render targets are bound, before the scene draws: a repair at OMSetRenderTargets alone
+                    // misses every draw that follows.
+                    void** table = *reinterpret_cast<void***>(context);
+                    DWORD old_protect = 0;
+                    VirtualProtect(&table[12], 9 * sizeof(void*), PAGE_READWRITE, &old_protect);
+                    if (table[12] != pristine_draw[0]) ++midframe_resets;  // proof the reset changed something
+                    table[12] = pristine_draw[0];
+                    table[20] = pristine_draw[1];
+                    VirtualProtect(&table[12], 9 * sizeof(void*), old_protect, &old_protect);
+                }
                 for (unsigned repeat = 0; repeat < (empty_frame || frame < sky_only_until ? 0u : repeats); ++repeat)
                 for (int pass = (frame >= 40 || live_late || live_hud) ? 2 : 1; pass >= 1; --pass) {
                     if (live_evict && pass == 2 && frame > 45 && frame < 65) continue;  // B unused in between
@@ -1281,6 +1313,7 @@ int wmain(int argc, wchar_t** argv) {
     }
     if (overlay_rehook) std::fprintf(out, "overlay_calls=%u overlay_loops=%u overlay_discoveries=%u second_calls=%u second_created=%u foreign_hooked=%u foreign_created=%u\n",
                                     ov_calls, ov_loops, ov_discoveries, second_calls, second_created, foreign_hooked, foreign_created);
+    std::fprintf(out, "midframe_resets=%u\n", midframe_resets);
     std::fprintf(out, "presented=%u stub_presents=%u foreground=%d cs_lost=%u\n", presented, count(),
                  GetForegroundWindow() == hwnd, cs_lost);
     if (camera_mode) std::fprintf(out, "geometry_reads_late=%u\n", geometry_reads_late);
