@@ -8,6 +8,8 @@
                                     start NieRAutomata.exe in the user's session with the NIER_* environment, stop ONLY
                                     that process after N seconds (default 90), copy back NIER_SCALE.log and a receipt
                                     --live enables the draw stream instead of the static scene; load a save manually
+                                    --runtime <dll> overrides NIER_REMIX_RUNTIME (default: the Toolkit x64 .trex\\d3d9.dll;
+                                    pass the official d3d9_a64ec.dll for the native ARM64EC renderer)
                                     --draw-probe sets NIER_DRAW_PROBE=1 (CPU-only hook-health diagnostic, Remix must be off)
                                     --rehook adds NIER_DRAW_PROBE_REHOOK=1: re-hook draw slots that hold the pristine original again
   laptop_port.py restore            put the original files back exactly (hash-checked) and remove what install added
@@ -19,8 +21,10 @@ import base64
 import datetime
 import hashlib
 import json
+import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 A = Path(__file__).resolve().parents[1]
@@ -39,13 +43,24 @@ OPTS = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10']
 
 
 def ps(script, timeout=600):
-    # cmd.exe on the SSH server limits command lines to 8191 characters. Keep the command fixed and carry the
-    # (possibly long, Unicode) script on stdin instead. Base64 also avoids the remote console's code-page conversion.
-    bootstrap = "$s=[Text.Encoding]::Unicode.GetString([Convert]::FromBase64String([Console]::In.ReadToEnd())); & ([scriptblock]::Create($s))"
-    enc = base64.b64encode(bootstrap.encode('utf-16le')).decode()
-    payload = base64.b64encode(script.encode('utf-16le')).decode()
-    p = subprocess.run(['ssh', *OPTS, 'spaghetti', 'powershell -NoProfile -NonInteractive -EncodedCommand ' + enc],
-                       input=payload, capture_output=True, text=True, errors='replace', timeout=timeout)
+    # The script travels as a UTF-16 file and runs with -File: the stdin/EncodedCommand bootstrap hung three times with
+    # no side effects at all (no launch script, no log, no process), and the 8191-character cmd.exe limit only applies
+    # to a command line, which a file path is not. The file is removed in a finally block.
+    path = WORK + '\\nier-ps-' + base64.b32encode(hashlib.sha256(script.encode('utf-16le')).digest()).decode()[:16] + '.ps1'
+    remote = path.replace('\\', '/')
+    with tempfile.NamedTemporaryFile('wb', suffix='.ps1', delete=False) as handle:
+        handle.write(b'\xff\xfe' + script.encode('utf-16le'))  # BOM so PowerShell reads pasted Unicode correctly
+        local = handle.name
+    try:
+        p = subprocess.run(['scp', *OPTS, local, 'spaghetti:' + remote], capture_output=True, text=True, timeout=120)
+        if p.returncode:
+            raise RuntimeError(f'could not stage the script: {p.stderr[-500:]}')
+        p = subprocess.run(['ssh', *OPTS, 'spaghetti',
+                            f'powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File {path!r}'.replace("'", '"')],
+                           capture_output=True, text=True, errors='replace', timeout=timeout)
+    finally:
+        os.unlink(local)
+    subprocess.run(['ssh', *OPTS, 'spaghetti', f'del "{path}"'], capture_output=True, text=True, timeout=120)
     out = '\n'.join(l for l in p.stdout.splitlines() if not l.startswith(('#< CLIXML', '<Objs')))
     if p.returncode:
         import re
@@ -95,7 +110,8 @@ if ((Get-FileHash -LiteralPath (Join-Path $g 'd3d11.dll') -Algorithm SHA256).Has
 'installed {dll[:16]}' '''))
 
 
-def run(label, remix, seconds, no_ec_hooks=False, steam=False, live=False, draw_probe=False, rehook=False):
+def run(label, remix, seconds, no_ec_hooks=False, steam=False, live=False, draw_probe=False, rehook=False,
+        runtime=None):
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')
     remix = remix or live
     assert not (draw_probe and remix), 'NIER_DRAW_PROBE=1 is a Remix-off diagnostic: drop --remix/--live'
@@ -106,7 +122,7 @@ def run(label, remix, seconds, no_ec_hooks=False, steam=False, live=False, draw_
         assert draw_probe, '--rehook only applies to a --draw-probe run'
         env['NIER_DRAW_PROBE_REHOOK'] = '1'
     if remix:
-        env.update(NIER_REMIX_RUNTIME=RUNTIME, NIER_REMIX_SCENE=WORK + r'\scene\scene.bin')
+        env.update(NIER_REMIX_RUNTIME=runtime or RUNTIME, NIER_REMIX_SCENE=WORK + r'\scene\scene.bin')
     if live:
         env.update(NIER_REMIX_LIVE='1', NIER_REMIX_LIVE_TEX=WORK + r'\live-textures', NIER_REMIX_LIVE_STATS_EVERY='60')
     # --steam: settings go into NIER_ENV.ini and Steam starts the game, so per-game Steam settings (overlay) apply.
@@ -140,8 +156,9 @@ $ids=@($seen | Sort-Object -Unique)
 if ($alive) {{ $alive | Stop-Process -Force; Start-Sleep 3 }}
 if (Test-Path -LiteralPath "$ec.off") {{ Rename-Item -LiteralPath "$ec.off" -NewName 'ec_hooks.dll' }}
 $text=if (Test-Path -LiteralPath $log) {{ $b=[IO.File]::ReadAllBytes($log); [Text.Encoding]::UTF8.GetString($b, $before, $b.Length-$before) }} else {{ '' }}
-$wer=@(try {{ Get-WinEvent -FilterHashtable @{{LogName='Application'; ProviderName='Application Error'; StartTime=$start}} -ErrorAction Stop | Where-Object {{ $_.Message -like '*NieRAutomata*' }} | Select-Object -First 2 | ForEach-Object {{ $_.Message.Substring(0,[Math]::Min(600,$_.Message.Length)) }} }} catch {{ }})
-[ordered]@{{label='{label}'; remix=${str(remix).lower()}; draw_probe=${str(draw_probe).lower()}; rehook=${str(rehook).lower()}; pids=$ids; task_result=$taskResult; alive_at_end=[bool]$alive; log=$text; crash=@($wer)}} | ConvertTo-Json -Depth 3 -Compress''', timeout=seconds + 240))
+$dumps=@(Get-ChildItem -LiteralPath (Join-Path $env:LOCALAPPDATA 'CrashDumps') -Filter '*.dmp' -ErrorAction SilentlyContinue | Where-Object {{ $_.LastWriteTime -gt $start }} | ForEach-Object {{ $_.Name + ' ' + $_.Length }})
+$wer=@($dumps)  # bounded: the previous Get-WinEvent query scanned the whole Application log and cost minutes per run
+[ordered]@{{label='{label}'; remix=${str(remix).lower()}; draw_probe=${str(draw_probe).lower()}; rehook=${str(rehook).lower()}; runtime='{runtime or ""}'; pids=$ids; task_result=$taskResult; alive_at_end=[bool]$alive; log=$text; crash=@($wer)}} | ConvertTo-Json -Depth 3 -Compress''', timeout=seconds + 240))
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / f'{label}-{stamp}.json').write_text(json.dumps(receipt, indent=2) + '\n')
     lines = [l for l in (receipt.get('log') or '').splitlines() if l.strip()]
@@ -175,6 +192,7 @@ if __name__ == '__main__':
     elif cmd[0] == 'run' and len(cmd) >= 2:
         seconds = int(cmd[cmd.index('--seconds') + 1]) if '--seconds' in cmd else 90
         run(cmd[1], '--remix' in cmd, seconds, '--no-ec-hooks' in cmd, '--steam' in cmd, '--live' in cmd,
-            '--draw-probe' in cmd, '--rehook' in cmd)
+            '--draw-probe' in cmd, '--rehook' in cmd,
+            cmd[cmd.index('--runtime') + 1] if '--runtime' in cmd else None)
     else:
         sys.exit(__doc__)

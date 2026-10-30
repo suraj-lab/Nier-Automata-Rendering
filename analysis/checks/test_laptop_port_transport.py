@@ -15,18 +15,30 @@ import laptop_port as lp
 
 def main():
     script = "Write-Output '日本語 😃'\n" + '# comment\n' * 4000
-    observed = {}
+    calls = []
+    staged = {}
 
     def fake_run(args, **kw):
-        observed.update(args=args, **kw)
+        calls.append((list(args), kw))
+        if args[0] == 'scp':
+            staged['bytes'] = Path(args[-2]).read_bytes()
         return subprocess.CompletedProcess(args, 0, '\ufeffok\r\n', '')
 
     with patch.object(lp.subprocess, 'run', fake_run):
         assert lp.ps(script, timeout=15) == 'ok'
-    assert len(observed['args'][-1]) < 1000, 'payload expanded the SSH/cmd command line'
-    assert base64.b64decode(observed['input']).decode('utf-16le') == script
-    assert 'ReadToEnd' in base64.b64decode(observed['args'][-1].split()[-1]).decode('utf-16le')
-    assert observed['timeout'] == 15
+    # The script must travel as a staged UTF-16 file, not on the command line and not through stdin: the stdin
+    # bootstrap hung three times with no side effects, and a file path has no 8191-character cmd.exe limit.
+    kinds = [c[0][0] for c in calls]
+    assert kinds == ['scp', 'ssh', 'ssh'], kinds
+    assert staged['bytes'][:2] == b'\xff\xfe', 'staged script is not a UTF-16 file with BOM'
+    assert staged['bytes'][2:].decode('utf-16le') == script, 'script did not round-trip byte for byte'
+    ssh_call = calls[1][0]
+    assert '-File' in ssh_call[-1] and 'EncodedCommand' not in ssh_call[-1], ssh_call[-1]
+    assert len(ssh_call[-1]) < 1000, 'the command line carries more than the path'
+    assert calls[1][1].get('timeout') == 15
+    assert 'input' not in calls[1][1], 'the script still goes through stdin'
+    assert calls[2][0][-1].startswith('del '), 'the staged script is not removed'
+    assert not Path(str(calls[1][0][-1]).split(' -File ')[-1].strip('"')).exists(), 'local temp file left behind'
     receipt = dict(pids=[42], task_result=0, alive_at_end=True, log='', crash=[])
     lp.OUT.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=lp.OUT) as folder, patch.object(lp, 'OUT', Path(folder)):
@@ -45,6 +57,14 @@ def main():
             assert 'NIER_REMIX_LIVE_TEX=' + lp.WORK + r'\live-textures' in decoded
             assert 'NIER_REMIX_LIVE_STATS_EVERY=60' in decoded
             assert lp.RUNTIME in decoded
+            # --runtime must travel instead of the default: ARM64EC runs are a separate, named configuration.
+            scripts.clear()
+            with patch.object(lp, 'ps', lambda script, **kw: (scripts.append(script) or json.dumps(receipt))):
+                lp.run('ec-live', True, 5, live=True, runtime=r'C:\ARM64EC\d3d9_a64ec.dll')
+            encoded = re.search(r"WriteAllBytes\(\$cmd,\s*\[Convert\]::FromBase64String\('([^']+)'\)", scripts[0]).group(1)
+            decoded = base64.b64decode(encoded).decode('utf-8')
+            assert 'NIER_REMIX_RUNTIME=C:\\ARM64EC\\d3d9_a64ec.dll' in decoded, decoded
+            assert lp.RUNTIME not in decoded
         # --draw-probe: CPU-only hook-health diagnostic, so Remix must be off and the probe flag must travel.
         scripts = []
         def fake_ps_probe(script, **kw):
@@ -75,7 +95,7 @@ def main():
             pass
         else:
             raise AssertionError('--draw-probe with --remix was accepted')
-    print('test_laptop_port_transport: passed (Unicode stdin, direct/Steam live launch, draw-probe settings)')
+    print('test_laptop_port_transport: passed (staged-file transport, direct/Steam live launch, draw-probe and runtime overrides)')
 
 
 if __name__ == '__main__':

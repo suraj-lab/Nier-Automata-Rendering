@@ -279,3 +279,17 @@ same sources in two temp trees and compares them). Two consequences for anything
 deterministic route; `--no-insert-timestamp` is a linker option and objcopy has no equivalent. No sidecar is shipped:
 nothing reads the DWARF (`read_minidump.py` resolves module+RVA) and it was 70% of the old file, i.e. 10.9 MB per
 transfer to this machine. Verify a suspect hash with `analysis/tools/pe_sections.py` before concluding the source moved.
+
+### Transport fixed 2026-10-30 20:10: scripts travel as a staged file, not on stdin
+
+The launcher carried each PowerShell script on stdin behind an `-EncodedCommand` bootstrap. That hung three separate
+times with **no side effects at all** — no launch script written, no log, no process, no `.off` rename — and the local
+ssh client then died at its timeout, which reads like a failed run but is not one. `ps()` now writes the script to a
+UTF-16 file under `NieR-Laptop-Port`, runs it with `powershell -File`, and deletes it. A file path has no 8191-character
+cmd.exe limit, so the original reason for the stdin route does not apply. `test_laptop_port_transport.py` was rewritten
+to assert the staged file round-trips byte for byte (`scp` → `ssh -File` → `del`), that `-File` is used with no
+`EncodedCommand` and no `input=`, and that the local temp file is gone afterwards.
+
+The per-run receipt also stopped scanning the Windows Application log (`Get-WinEvent` took minutes per run, which is
+what pushed three finished runs past the client timeout after the game had already been stopped): it now reports crash
+dumps written under `%LOCALAPPDATA%\CrashDumps` since the run started, which is bounded and cheap.
