@@ -24,7 +24,7 @@ import test_remix_live as tr
 import test_menu_overlay as tmo
 import test_nscn_scene as ts
 
-tr.ENV_KEYS = tuple(tr.ENV_KEYS) + ('NIER_REMIX_LIVE', 'NIER_REMIX_LIVE_TEX', 'NIER_REMIX_LIVE_STATS_EVERY',
+tr.ENV_KEYS = tuple(tr.ENV_KEYS) + ('NIER_REMIX_LIVE_CAMERA_LOG', 'NIER_REMIX_LIVE', 'NIER_REMIX_LIVE_TEX', 'NIER_REMIX_LIVE_STATS_EVERY',
                                      'NIER_REMIX_LIVE_MAX_WRITE_KB', 'NIER_REMIX_LIVE_SHADOW_KB', 'NIER_REMIX_LIVE_BUDGET_KB')
 KEYS = ('reads', 'first', 'trimmed', 'unmirrored', 'const', 'immutable', 'default', 'dynamic', 'read_kb', 'read_ms',
         'texture_ms', 'skinned', 'created')
@@ -105,6 +105,7 @@ def inside():
         r, log = run('default', {})
         v = reads(log)
         assert v['trimmed'] == 0 and v['unmirrored'] == 0 and v['first'] >= 1, f'default run: {v}'
+        assert not [x for x in tr.remix_lines(log) if 'live camera frame=' in x], 'camera log is on by default'
         why = rebuilds(log)
         # 'live' draws mesh A, adds mesh B at frame 35 and rewrites A's dynamic buffer at frame 48: two first sights and
         # exactly one buffer rebuild; nothing is skinned, evicted or waiting for a texture. A first sight of a buffer
@@ -112,6 +113,15 @@ def inside():
         assert why['first'] + why['unknown'] >= 2 and why['buffer'] == 1, f'default run rebuild reasons: {why}'
         assert why['pose'] == 0 and why['evicted'] == 0 and why['texture'] == 0, f'default run rebuild reasons: {why}'
         results['default'] = f'{v}; rebuilds {why}'
+
+        # 3b. NIER_REMIX_LIVE_CAMERA_LOG=1: one line per live frame, captured camera next to the game's own camera. The mock
+        #     has nothing mapped at the game's camera address, so the guarded read must report instead of faulting.
+        r, log = run('camera-log', {'NIER_REMIX_LIVE_CAMERA_LOG': '1'})
+        cams = [x for x in tr.remix_lines(log) if 'live camera frame=' in x]
+        assert len(cams) >= 20, f'expected one camera line per live frame, got {len(cams)}'
+        assert all('game=unreadable' in x and re.search(r'captured=-?[\d.]+,-?[\d.]+,-?[\d.]+ ', x) for x in cams), cams[:3]
+        assert r['presented'] == '80', r
+        results['camera-log'] = f'{len(cams)} lines; {cams[-1]}'
 
         # 4. An immutable mesh created with initial data at frame 60, after Remix started: it must be built (z = 7.5)
         #    from the bytes kept at creation, with no staging read of any vertex or index buffer from frame 60 on.

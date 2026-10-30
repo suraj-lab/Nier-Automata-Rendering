@@ -36,6 +36,24 @@ std::uint64_t live_sequence = 0;        // worker only
 std::wstring live_texture_dir;
 std::size_t live_mesh_budget = std::size_t(512) << 20;
 unsigned long long stats_every = 300;  // NIER_REMIX_LIVE_STATS_EVERY
+// NIER_REMIX_LIVE_CAMERA_LOG=1: one line per live frame with the captured camera next to the game's own camera position.
+// The laptop picture switched, every 6-9 frames, to a different view with only a few objects (recording 2026-10-30);
+// if the captured camera jumps on exactly those frames, a pass other than the main view supplied it.
+bool camera_log = false;
+
+// The game's camera position, at the address Special K's NieR plugin reads (src/plugins/nier.cpp, far_cam.pCamera).
+// The exe has a fixed image base; the read is guarded so a wrong address reports instead of faulting.
+bool game_camera(float out[3]) {
+    const auto* address = reinterpret_cast<const void*>(std::uintptr_t(0x141605400));
+    MEMORY_BASIC_INFORMATION mbi{};
+    if (!VirtualQuery(address, &mbi, sizeof mbi) || mbi.State != MEM_COMMIT || (mbi.Protect & (PAGE_GUARD | PAGE_NOACCESS)) ||
+        !(mbi.Protect & (PAGE_READONLY | PAGE_READWRITE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_WRITECOPY)))
+        return false;
+    const auto end = static_cast<const char*>(mbi.BaseAddress) + mbi.RegionSize;
+    if (static_cast<const char*>(address) + 3 * sizeof(float) > end) return false;
+    std::memcpy(out, address, 3 * sizeof(float));
+    return true;
+}
 
 struct Frame { std::vector<unsigned char> pixels; UINT width = 0, height = 0; DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN; unsigned long long seq = 0; };
 // Guarded by `published`: the newest finished frame, and what the game currently presents.
@@ -148,6 +166,7 @@ State configure() {
             if (v > 0 && v < 1e6f) live_scene::light_scale = v;
         }
         // NIER_REMIX_LIVE_STATS_EVERY: Remix frames between stats lines (default 300; tests use a small value).
+        camera_log = env(L"NIER_REMIX_LIVE_CAMERA_LOG") == L"1";
         if (const std::wstring n = env(L"NIER_REMIX_LIVE_STATS_EVERY"); !n.empty())
             if (const unsigned long long v = _wcstoui64(n.c_str(), nullptr, 10); v >= 2) stats_every = std::min<unsigned long long>(v, 100000);  // % 1 never == 1
         if (const std::wstring n = env(L"NIER_REMIX_LIVE_TEX_PER_FRAME"); !n.empty())
@@ -370,6 +389,15 @@ struct Worker {
             }
             if (frame.valid() && frame.sequence != live_sequence) {
                 live_sequence = frame.sequence;
+                if (camera_log) {
+                    float game[3] = {};
+                    const bool have_game = game_camera(game);
+                    char game_text[64] = "unreadable";
+                    if (have_game) std::snprintf(game_text, sizeof game_text, "%.3f,%.3f,%.3f", game[0], game[1], game[2]);
+                    logger.load()("remix: live camera frame=%llu captured=%.3f,%.3f,%.3f game=%s draws=%u skipped_pass=%u",
+                                  static_cast<unsigned long long>(frame.sequence), scene.camera[0], scene.camera[1],
+                                  scene.camera[2], game_text, frame.draws, frame.skipped_pass);
+                }
                 stage("live update");
                 const unsigned long long u0 = live_capture::now_us();
                 if (!live_scene::update(api, std::move(uploads), textures, frame, live, live_options)) { fail("live scene update"); return false; }
