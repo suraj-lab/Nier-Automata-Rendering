@@ -123,3 +123,29 @@ So the staged plan gains an ordering: get correctness with the **in-process x64 
 current architecture), then switch the same proxy to the **bridge** for the native ARM64 renderer. The bridge client is
 the work: `NVIDIAGameWorks/bridge-remix` PR #12 ("BridgeApi") and xoxor4d's fork are the reference implementations, and
 the bridge is already proven on this hardware by Portal RTX itself.
+
+## First attempt, 2026-10-30 (unattended, logs only; `analysis/deploy/laptop_port.py install|run|restore`)
+
+Build `b8ff96b8…` (the gated, not-yet-installed desktop build). Chain on the laptop: our `d3d11.dll` → the laptop's
+NIER_DLAA proxy (DLSS build, `6ba266d6…`) renamed `d3d11_dlaa.dll` → system `d3d11.dll`. Launched directly with
+`steam_appid.txt` so the `NIER_*` environment reaches the game. Receipts: `analysis/runtime/laptop-port/*.json`.
+The game folder was restored exactly afterwards (hash-checked; everything the runs created removed).
+
+- **Stage 0 passes.** The DLL imports only standard Windows libraries; Remix and d3dcompiler are loaded at runtime.
+- **Stage 1 first crashed** (access violation inside our DLL at the first Present, during ImGui setup). Cause: the
+  laptop DLAA loads `ec_hooks.dll`, a MinHook-API hook library for Windows on ARM that finds "the d3d11 module" and
+  writes trampolines into its spare space ("slack"). Behind our proxy, the module named `d3d11.dll` is ours, so it
+  wrote into our code. With `ec_hooks.dll` set aside for the run (`--no-ec-hooks`), **Stage 1 passes**: 90 s, no crash,
+  menu ready at 1600x900; the user saw the game run. Behind our proxy the DLAA's hooks never initialize anyway
+  (`MH_ERROR_NOT_INITIALIZED` on every hook), so nothing is lost by it. The mock game (`menu_overlay_mock_game.cpp`
+  + stub chain DLL) also runs cleanly on the laptop: our hooks and ImGui work under x64 emulation.
+- **Stage 2 crashed** 0.3 s after Remix created its 2880x1800 swapchain, before the first frame: Remix's crash
+  handler caught a **stack overflow (0xC00000FD) in NVIDIA's D3D11 driver** (`nvwgf2umaxec.dll`, ARM64EC). The
+  overflowing stack alternates driver → system `d3d11.dll` → Steam overlay (`gameoverlayrenderer64.dll`) → `dxgi.dll`;
+  our proxy is not in the visible frames. Dump: `runtime/laptop-port/dumps/stage2.dmp` (`checks/read_minidump.py`).
+  Not yet explained; next experiments: Steam overlay off for NieR, and a smaller Remix size than the monitor's.
+
+Production fix for `ec_hooks` (not done): either ship without the laptop DLAA (Remix brings its own DLSS), or chain
+through a copy that resolves the *system* d3d11. Two other notes for the bridge stage, from studying
+Kamzik123/ac2-rtx: the Remix API through the bridge needs `exposeRemixApi = True` in `.trex/bridge.conf`, and their
+game lights never worked that way.
