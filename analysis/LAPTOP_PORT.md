@@ -243,3 +243,21 @@ Final verification: **56/56 `analysis/checks/test_*.py` gates pass**, including 
 for camera/scene/scale tests. Runner recorded hashes of all checked source files before the run and confirmed they
 were unchanged at completion (`runtime/present-overlay-rehook/full-suite.json`). Native EC evidence uses the same
 final candidate `cee4d891…`; no global/runtime/Steam settings were changed by this final test round.
+
+### Stage 3 attempt — 2026-10-30 12:38–12:43 (not accepted)
+
+`--live` now enables `NIER_REMIX_LIVE=1`, an absolute scratch texture directory, and 60-frame live statistics for
+both direct and Steam launches. The transport gate reproduces missing live-launch support before the change and
+passes afterwards. Renderer/DLL unchanged (`cee4d891…`).
+
+A five-minute ARM64EC run started with `live=1`, stayed alive, but logged no accepted live frame, no first live-camera
+sample, and no composition. It explicitly kept the original game image while waiting. Shader/buffer tracking was
+active (shadow storage reached its 256 MB cap), but that is not evidence of accepted world geometry. No periodic
+render stats exist, so neither live fps nor the GPU cost split can be inferred. The analyzer labels this `captured
+scene (no live frame)`; do not mistake that label for the startup configuration, which explicitly says `live=1`.
+
+The user reports the image looked original and GPU load was very high. This matches the original-image fallback,
+not visual acceptance of path tracing. Native resolution plus active capture may add load; no attribution is proven.
+Need to establish whether the user was in the camp/world or menus before changing capture code or repeating the run.
+Original proxy and `ec_hooks.dll` restored, process stopped. Evidence remains in
+`runtime/laptop-port/stage3-ec-live-camp*`. No screen capture or automated menu/save input was performed.

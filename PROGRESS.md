@@ -39,8 +39,17 @@ proxy `6ba266d6…` after each bounded run. Latest candidate: `cee4d891154b39ba8
   DXVK device. No automatic removal of readback by swapping the runtime. Next fork work, if useful: an isolated,
   pinned skinning/morph probe only, leaving both installed stacks alone.
 
-**Next:** laptop stage 3 (live draw stream) needs actual world gameplay, not the static camp scene over the title
-screen. Prefer the now-proven ARM64EC runtime; stock top-2 GPU skinning needs a moving-pose gate before adoption.
+**Stage 3 attempt (2026-10-30 12:38–12:43):** final candidate `cee4d891…`, ARM64EC, `live=1`, five minutes.
+Process alive at timeout, but no accepted world draws, no first live-camera sample, no live periodic stats or first
+composition. **Not a gameplay pass.** It is not established whether the camp save was loaded. The analyzer's
+`captured scene (no live frame)` label is inconclusive here: the startup log explicitly says `live=1`. Original
+laptop proxy and ec_hooks restored. Receipt/log/analysis: `runtime/laptop-port/stage3-ec-live-camp*`.
+Launcher now supports `--live` (direct and Steam transport gated, red before implementation/green after); runtime
+source and DLL did not change. The previous full suite was 56/56; the modified launcher gate was rerun separately.
+
+**Next:** confirm whether world gameplay was reached during that stage-3 attempt. If not, repeat when the user can
+load camp. If it was, inspect capture eligibility/camera input using actual draw evidence rather than claiming the
+launch proves animation works. Prefer the now-proven ARM64EC runtime; stock top-2 GPU skinning needs a moving-pose gate before adoption.
 Keep the laptop original chain working; `ec_hooks.dll` still must be set aside for our proxy during test runs.
 
 **Earlier checkpoint (2026-10-30 morning, offline day: no live game run yet).** Four performance changes are gated offline and **not

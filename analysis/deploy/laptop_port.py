@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Laptop port, stages 1-2 (analysis/LAPTOP_PORT.md): install our proxy into NieR on `spaghetti`, launch, restore.
+"""Laptop port, stages 1-3 (analysis/LAPTOP_PORT.md): install our proxy into NieR on `spaghetti`, launch, restore.
 
   laptop_port.py install            back up the game's d3d11.dll (the NIER_DLAA proxy) and chain it as d3d11_dlaa.dll
                                     behind our hash-checked d3d11.dll; add NIER_RENDER.ini, fonts, steam_appid.txt
                                     (so a direct launch keeps the environment), and the static camp scene
-  laptop_port.py run <label> [--remix] [--seconds N] [--no-ec-hooks] [--steam]
+  laptop_port.py run <label> [--remix] [--seconds N] [--no-ec-hooks] [--steam] [--live]
                                     start NieRAutomata.exe in the user's session with the NIER_* environment, stop ONLY
                                     that process after N seconds (default 90), copy back NIER_SCALE.log and a receipt
+                                    --live enables the draw stream instead of the static scene; load a save manually
   laptop_port.py restore            put the original files back exactly (hash-checked) and remove what install added
 
 Logs only: no desktop screenshots. Every file this writes into the game folder is listed in ADDED and removed by
@@ -92,11 +93,14 @@ if ((Get-FileHash -LiteralPath (Join-Path $g 'd3d11.dll') -Algorithm SHA256).Has
 'installed {dll[:16]}' '''))
 
 
-def run(label, remix, seconds, no_ec_hooks=False, steam=False):
+def run(label, remix, seconds, no_ec_hooks=False, steam=False, live=False):
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+    remix = remix or live
     env = {'NIER_REMIX': '1' if remix else '0'}
     if remix:
         env.update(NIER_REMIX_RUNTIME=RUNTIME, NIER_REMIX_SCENE=WORK + r'\scene\scene.bin')
+    if live:
+        env.update(NIER_REMIX_LIVE='1', NIER_REMIX_LIVE_TEX=WORK + r'\live-textures', NIER_REMIX_LIVE_STATS_EVERY='60')
     # --steam: settings go into NIER_ENV.ini and Steam starts the game, so per-game Steam settings (overlay) apply.
     env_ini = base64.b64encode(''.join(f'{k}={v}\r\n' for k, v in env.items()).encode('utf-8')).decode()
     launch = ('@echo off\r\n"C:\\Program Files (x86)\\Steam\\steam.exe" -applaunch 524220\r\n' if steam else
@@ -162,6 +166,6 @@ if __name__ == '__main__':
         restore()
     elif cmd[0] == 'run' and len(cmd) >= 2:
         seconds = int(cmd[cmd.index('--seconds') + 1]) if '--seconds' in cmd else 90
-        run(cmd[1], '--remix' in cmd, seconds, '--no-ec-hooks' in cmd, '--steam' in cmd)
+        run(cmd[1], '--remix' in cmd, seconds, '--no-ec-hooks' in cmd, '--steam' in cmd, '--live' in cmd)
     else:
         sys.exit(__doc__)
