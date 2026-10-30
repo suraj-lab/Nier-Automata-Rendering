@@ -1,6 +1,37 @@
 # NieR:Automata Rendering — Progress & Resume
 
-## PAUSED — operator leaving for work (2026-10-30)
+## PAUSED — operator logging off (2026-10-30 evening)
+
+State at this pause: nothing installed on either machine, no game running, laptop restored and hash-verified, work
+uncommitted on `main` above `a7a3c0b`. The noon PAUSED note below still applies in substance: do not launch a game or
+render unattended (and a save cannot be loaded without the operator).
+
+**SOLVED (2026-10-30 19:41): the draw stream is reachable on the laptop.** Repairing the two draw slots from calls
+that happen before drawing starts (`OMSetRenderTargets` slot 33 and `Map` slot 14, pure forwarding hooks) keeps our
+hooks in place through the frame: 120 s in camp, `hook_mask=3` in every window, **4,810,167 indexed / 167,262
+instanced** draws through our hook, and the probe's first real CPU sample. The blocker was hook lifetime, not
+capture eligibility. Next: move the repair points from the diagnostic into the shipping capture install (repair only
+when the slot holds our stored original), gate it, then a live Remix run. Evidence:
+`analysis/runtime/laptop-port/draw-probe-repair2/`; full sequence in `analysis/DRAW_HOOK_LOSS.md`.
+
+**Read first: `analysis/DRAW_HOOK_LOSS.md` — the draw hooks vanish on the laptop, and it is now measured.** Six CPU-only
+runs (no Remix, no GPU) on 2026-10-30 evening settled it: hooks install once on the right object (`install_ok=1`,
+`ctx_installed == armed_context`, `table_installed == armed_table`), are present at 1600x900 (`hook_mask=3`), and are
+**gone at 2880x1800** — with the slot holding exactly the pristine function we chained to (`slot12 == orig12`,
+`restored12=1`, `foreign12=0`). It is **not** a one-off: with maintenance on every Present, 4,909 of 4,911 found the
+slots restored again (one per frame at ~50 fps), and our hooks being present at Present time still yields
+`indexed=0 instanced=0`, so the restore lands between our last re-hook and the frame's draws. Two overlays are in the
+process (`gameoverlayrenderer64.dll`, `nvspcap64.dll`); the per-frame "write the saved original back" pattern matches
+the overlay anti-pattern that `test_present_overlay_rehook.py` already guards. Next: overlay A/B (quit NVIDIA App; then
+disable the Steam overlay for NieR — takes a person at the machine), then the canary slot (build ready, one run), then
+code-level detours only if an overlay is proven to own the slots. `steam_appid.txt` is required for the game to run —
+removing it idles the game at 1600x900 and proves nothing.
+
+**Probe tooling (now gated, 6 Wine cases):** `NIER_DRAW_PROBE=1` (hook health, install counters, slot/original values,
+restored/foreign classification, module inventory) and `NIER_DRAW_PROBE_REHOOK=1` (re-hook slots that hold the pristine
+original, on every Present; never touches a foreign slot). Launcher: `laptop_port.py run <label> --draw-probe [--rehook]`.
+
+## PAUSED — operator leaving for work (2026-10-30 noon)
 
 Stop here; do not launch another game/render unattended. Laptop originals remain restored; no native run was made
 following the failed five-minute stage-3 test. Last successful native DLL remains `cee4d891…` (stage 2 only).
@@ -24,6 +55,44 @@ sequentially, then coordinate a short CPU-only camp probe with the user. Investi
 context, bypassed indexed hooks/other draw APIs, context identity, missing layouts, and CB0/CB11 contracts. The probe
 only samples indexed callbacks; an absent sample cannot by itself distinguish indirect/deferred rendering from
 missing hooks. No GPU benchmark or live RTX acceptance claim is justified yet.
+
+**Draw probe answered the Stage 3 question (2026-10-30 17:00, laptop, CPU-only).** `NIER_DRAW_PROBE=1`, Remix off,`--no-ec-hooks`, user in the world ~2 min: at 1600x900 (title) the immediate context's vtable still held our
+`DrawIndexed`/`DrawIndexedInstanced` hooks (`hook_mask=3`); at 2880x1800 (in the world) it held **neither
+(`hook_mask=0`, 25 samples) and the hooks were never called at all (`indexed=0 instanced=0`)**, while the *device* still
+held our `CreateInputLayout` hook (`layout_hook=1`). So Stage 3's "no world draws" is a lost **context vtable**, not a
+capture-eligibility or scene-classification decision — and the device was not replaced. Whether the context object
+changed or the shared vtable was restored is undecided; the next run logs device/context creation and the live values of
+slots 12/20 rather than guessing. Evidence: `analysis/runtime/laptop-port/draw-probe-camp/{RESULT.md,NIER_SCALE.log}`.
+Laptop restored (`d3d11.dll` `6ba266d6…`, `ec_hooks.dll` `c0abc71a…`, no project files). The run's receipt was lost to
+an SSH client abort; the launcher stopped the game itself.
+
+**START HERE (2026-10-30 evening): Phase 0 reconciled; gate suite 57/57; nothing installed.**
+Report: `analysis/evidence/remix-current/2026-10-30/phase0/REPORT.md`. HEAD `a7a3c0b` (1 unpushed commit), tree was
+clean before this session's doc banners. Two facts that matter next:
+
+- **Whole-file DLL hashes are build-directory-bound.** ld picks the image base from the output path and 70% of the
+  15.5 MB DLL is DWARF (`10,939,580` bytes) whose addresses follow that base. `.text` is identical between the tested
+  `cee4d891…` and a fresh build of `4f0a5f3`/`d22f3ea`, so **the accepted candidate is reproduced at source level**;
+  in-place rebuilds do reproduce byte-for-byte (`38cc1e71…` twice on the current tree). Use
+  `analysis/tools/pe_sections.py` before claiming a hash moved. Whole-file equality across directories needs
+  `-Wl,--image-base` (and optionally `-Wl,--strip-debug`, which would drop 10.9 MB per laptop transfer).
+- **Laptop and desktop deployments are exactly as recorded, nothing installed:** laptop original proxy `6ba266d6…` +
+  `ec_hooks.dll` back, no `ADDED` files; staged EC runtime `fff99d8f…` matches the package manifest; laptop is on
+  battery (no timing claims admissible). Desktop still has `065432e4…` at
+  `/mnt/second/SteamLibrary/steamapps/common/NieRAutomata`. Gate suite: 57/57 in 1,344 s with source hashes unchanged
+  (`analysis/runtime/phase0-reconcile-20261030/full-suite.json`).
+
+Open decision: approve a ~90 s CPU-only draw-probe run on the laptop (`NIER_DRAW_PROBE=1`, Remix off, user loads a
+save) as the cheapest discriminator for the Stage 3 live-capture failure. Desktop runs remain unavailable by operator
+decision; Agility SDK work is parked deliberately, not forgotten.
+
+**Build hashes are now portable (2026-10-30 evening).** `build_menu_dll.py` pins `-Wl,--image-base,0x180000000` and
+strips via the linker (`-Wl,--strip-debug`): the DLL is 4,242,383 bytes (was 15,537,852), rebuilds to the same SHA-256
+in any directory, and `.text` is unchanged by the strip. Gate `test_build_reproducible.py` proves it by building the
+same sources in two temp trees. **`objcopy`/`strip` rewrite the PE `TimeDateStamp`** with the current time, so the
+"strip + `.debug` sidecar" route cannot be deterministic; that is why there is no sidecar (nothing reads it —
+`read_minidump.py` resolves module+RVA). Draw-probe diagnostic build: `43bf8685…4ba18`; the accepted live candidate is
+still `cee4d891…` built from `4f0a5f3`.
 
 **START HERE (2026-10-30 noon): laptop port stage 2 now works, including native ARM64EC Remix.** No desktop game
 run or installation. Desktop installed DLL remains `065432e4…`; laptop game folder restored to its original DLAA

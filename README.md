@@ -8,6 +8,10 @@ lights, and NieR's own HUD on top. Albedo-only materials and 1–4 fps for now. 
 
 ## Scope and status
 
+> **2026-10-30 — stale table:** this table predates the live desktop image (2026-10-29) and the Windows port
+> (2026-10-30). `PROGRESS.md`'s top checkpoint is the authority; a row that disagrees with it is stale. Desktop game
+> runs are paused by the operator, so the only runnable test platform is now the laptop (`analysis/LAPTOP_PORT.md`).
+
 Status refreshed 2026-10-28. Intent, scope and the desktop/laptop split: [VISION.md](VISION.md).
 [PROGRESS.md](PROGRESS.md) is the authoritative resume record (installed hashes, rollback chain, verified facts,
 next steps); its top "Checkpoint" section is the place to start.

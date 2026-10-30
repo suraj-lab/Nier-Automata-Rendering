@@ -3,6 +3,10 @@
 Decided 2026-10-29. This is the order of work; `PLAYABILITY_PLAN.md` holds the *what* for each item and
 `LAPTOP_PORT.md` holds the port detail.
 
+> **2026-10-30 — partly superseded:** the port is no longer future work (both the x64 and the ARM64EC runtime compose
+> a static scene on the laptop), and the operator has paused desktop game runs, so the order below cannot be followed
+> as written. Work laptop-first; `PROGRESS.md`'s top checkpoint and `analysis/LAPTOP_PORT.md` are the current state.
+
 ## Standing rule: laptop first (user, 2026-10-29)
 
 Every change that affects the rendered picture is proven on the laptop (RTX Spark, `remix-probe/run_remote.py`, same F9

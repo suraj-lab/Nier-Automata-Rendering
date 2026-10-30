@@ -1,5 +1,9 @@
 # Live Remix *in NieR* — implementation plan (L1)
 
+> **2026-10-30 — historical:** the host described here was built and live-validated on 2026-10-29 (live draw stream,
+> camera, CPU skinning, HUD, sun/sky/lights). Read `PROGRESS.md`'s top checkpoint for current behaviour; the phases
+> below are the record of how it was built, not remaining work.
+
 ## Status 2026-10-27 late: the in-process bridge is PROVEN
 
 `analysis/remix-probe/d3d11_bridge_probe.cpp` (+ `run_bridge.sh`) now demonstrates the complete chain that live

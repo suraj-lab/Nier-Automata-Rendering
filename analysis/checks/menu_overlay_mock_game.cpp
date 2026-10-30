@@ -21,8 +21,7 @@
 #include <map>
 
 // The live-camera gate verifies this slot with offsetof(ID3D11DeviceContextVtbl, CopyResource).
-static std::atomic<void*> next_copy{nullptr};
-static unsigned camera_reads = 0, geometry_reads = 0, frame_camera_reads = 0, peak_camera_reads = 0;
+static std::atomic<void*> next_copy{nullptr};static unsigned camera_reads = 0, geometry_reads = 0, frame_camera_reads = 0, peak_camera_reads = 0;
 static unsigned geometry_reads_late = 0;
 static int mock_frame_index = 0;
 static std::function<void()> downstream_draw;
@@ -42,6 +41,27 @@ static void STDMETHODCALLTYPE spy_copy(ID3D11DeviceContext* self, ID3D11Resource
     }
     using Fn = void (STDMETHODCALLTYPE*)(ID3D11DeviceContext*, ID3D11Resource*, ID3D11Resource*);
     reinterpret_cast<Fn>(next_copy.load())(self, dst, src);
+}
+
+// ---- a stand-in for another layer taking over the draw slots (MOCK_STEAL_DRAW=<frame>) ----
+// On the laptop our DrawIndexed/DrawIndexedInstanced hooks disappeared from the same context object and the same
+// vtable when the game switched to 2880x1800, so the probe must report an observed loss with the slot values, not a
+// healthy table. This mode replaces both slots with a foreign function that still chains, like an overlay would.
+static std::atomic<void*> steal_next_indexed{nullptr}, steal_next_instanced{nullptr};
+static void STDMETHODCALLTYPE steal_draw_indexed(ID3D11DeviceContext* self, UINT count, UINT start, INT base) {
+    reinterpret_cast<void (STDMETHODCALLTYPE*)(ID3D11DeviceContext*, UINT, UINT, INT)>(steal_next_indexed.load())(
+        self, count, start, base);
+}
+static void STDMETHODCALLTYPE steal_draw_indexed_instanced(ID3D11DeviceContext* self, UINT count, UINT instances,
+                                                          UINT start, INT base, UINT first) {
+    reinterpret_cast<void (STDMETHODCALLTYPE*)(ID3D11DeviceContext*, UINT, UINT, UINT, INT, UINT)>(
+        steal_next_instanced.load())(self, count, instances, start, base, first);
+}
+static bool steal_draw_hooks(ID3D11DeviceContext* context) {
+    void** table = *reinterpret_cast<void***>(context);
+    const auto a = vtable_hook::hook(table, 12, reinterpret_cast<void*>(&steal_draw_indexed), steal_next_indexed, spy_protect);
+    const auto b = vtable_hook::hook(table, 20, reinterpret_cast<void*>(&steal_draw_indexed_instanced), steal_next_instanced, spy_protect);
+    return a == vtable_hook::Result::Hooked && b == vtable_hook::Result::Hooked;
 }
 
 // ---- a stand-in for an overlay that finds Present through the SHARED DXGI vtable (MOCK_OVERLAY_REHOOK=N) ----
@@ -203,6 +223,7 @@ int wmain(int argc, wchar_t** argv) {
     sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
     const DWORD frame_ms = std::getenv("MOCK_FRAME_MS") ? static_cast<DWORD>(std::atoi(std::getenv("MOCK_FRAME_MS"))) : 16;
     const int resize_at = std::getenv("MOCK_RESIZE_AT") ? std::atoi(std::getenv("MOCK_RESIZE_AT")) : 0;
+    const int steal_draw_at = std::getenv("MOCK_STEAL_DRAW") ? std::atoi(std::getenv("MOCK_STEAL_DRAW")) : 0;
     const char* camera_mode = std::getenv("MOCK_CAMERA");
     if (camera_mode) {
         const auto hooked = vtable_hook::hook(*reinterpret_cast<void***>(context), 47,
@@ -811,6 +832,10 @@ int wmain(int argc, wchar_t** argv) {
     bool failure_observed = false, previous_present_failed = false;
     double live_frame_ms = 0.0;
     for (int frame = 1; frame <= 80; ++frame) {
+        if (steal_draw_at && frame == steal_draw_at && !steal_draw_hooks(context)) {
+            std::fprintf(out, "FAIL steal draw hooks\n");
+            return 3;
+        }
         if (overlay_dummy && frame == overlay_rehook) {
             if (std::getenv("MOCK_FOREIGN_SWAPCHAIN")) {
                 // An internal driver/Remix DXGI swapchain uses a different device. Our global factory hooks see it,
@@ -1214,6 +1239,21 @@ int wmain(int argc, wchar_t** argv) {
         GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                            static_cast<LPCWSTR>((*reinterpret_cast<void***>(context))[14]), &owner);
         std::fprintf(out, "ctx_map_in_proxy=%d\n", owner == proxy);
+    }
+    {
+        // IAGetPrimitiveTopology (slot 108) is the probe's canary: it must be ours only while the probe runs, because
+        // the shipping path must not gain an extra hooked slot (feature-off/live parity).
+        HMODULE owner = nullptr;
+        GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           static_cast<LPCWSTR>((*reinterpret_cast<void***>(context))[108]), &owner);
+        std::fprintf(out, "ctx_canary_in_proxy=%d\n", owner == proxy);
+    }
+    {
+        // OMSetRenderTargets (slot 33) carries the draw-slot repair: it must be hooked only for a live session.
+        HMODULE owner = nullptr;
+        GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           static_cast<LPCWSTR>((*reinterpret_cast<void***>(context))[33]), &owner);
+        std::fprintf(out, "ctx_rts_in_proxy=%d\n", owner == proxy);
     }
     if (overlay_rehook) std::fprintf(out, "overlay_calls=%u overlay_loops=%u overlay_discoveries=%u second_calls=%u second_created=%u foreign_hooked=%u foreign_created=%u\n",
                                     ov_calls, ov_loops, ov_discoveries, second_calls, second_created, foreign_hooked, foreign_created);

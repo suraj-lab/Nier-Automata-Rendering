@@ -276,8 +276,71 @@ inline bool protect(void* address, std::size_t size, unsigned long flags, unsign
     return ok;
 }
 
+// Repair: another layer resets the two draw slots once per frame (analysis/DRAW_HOOK_LOSS.md), so a hook installed once
+// is gone before the frame's draws. Binding render targets always happens before drawing, so these forwarders put our
+// hooks back first. A slot holding anything other than our stored original is left alone: chaining to a third party's
+// function is how overlay loops start.
+constexpr std::size_t kOmsetRenderTargets = 33, kOmsetRenderTargetsAndUavs = 34;
+using OmsetFn = void (STDMETHODCALLTYPE*)(ID3D11DeviceContext*, UINT, ID3D11RenderTargetView* const*,
+                                         ID3D11DepthStencilView*);
+using OmsetUavsFn = void (STDMETHODCALLTYPE*)(ID3D11DeviceContext*, UINT, ID3D11RenderTargetView* const*,
+                                              ID3D11DepthStencilView*, UINT, UINT, ID3D11UnorderedAccessView* const*,
+                                              const UINT*);
+inline std::atomic<void*> g_next_omset{nullptr}, g_next_omset_uavs{nullptr};
+
+inline void repair_lost_hooks(ID3D11DeviceContext* context) {
+    if (!context) return;
+    void* indexed_original = g_next_draw_indexed.load(std::memory_order_acquire);
+    void* instanced_original = g_next_draw_indexed_instanced.load(std::memory_order_acquire);
+    if (!indexed_original || !instanced_original) return;
+    void** table = *reinterpret_cast<void***>(context);
+    if (table[kDrawIndexed] == reinterpret_cast<void*>(&hooked_draw_indexed) &&
+        table[kDrawIndexedInstanced] == reinterpret_cast<void*>(&hooked_draw_indexed_instanced)) return;
+    std::atomic<void*> ignored{nullptr};  // never overwrite the stored originals
+    if (table[kDrawIndexed] == indexed_original)
+        vtable_hook::hook(table, kDrawIndexed, reinterpret_cast<void*>(&hooked_draw_indexed), ignored, protect);
+    if (table[kDrawIndexedInstanced] == instanced_original)
+        vtable_hook::hook(table, kDrawIndexedInstanced, reinterpret_cast<void*>(&hooked_draw_indexed_instanced),
+                          ignored, protect);
+}
+
+inline void STDMETHODCALLTYPE hooked_omset_render_targets(ID3D11DeviceContext* self, UINT count,
+                                                          ID3D11RenderTargetView* const* views,
+                                                          ID3D11DepthStencilView* depth) {
+    try { repair_lost_hooks(self); } catch (...) {}
+    reinterpret_cast<OmsetFn>(g_next_omset.load(std::memory_order_acquire))(self, count, views, depth);
+}
+
+inline void STDMETHODCALLTYPE hooked_omset_render_targets_uavs(ID3D11DeviceContext* self, UINT count,
+        ID3D11RenderTargetView* const* views, ID3D11DepthStencilView* depth, UINT uav_start, UINT uav_count,
+        ID3D11UnorderedAccessView* const* uavs, const UINT* initial) {
+    try { repair_lost_hooks(self); } catch (...) {}
+    reinterpret_cast<OmsetUavsFn>(g_next_omset_uavs.load(std::memory_order_acquire))(
+        self, count, views, depth, uav_start, uav_count, uavs, initial);
+}
+
+// Called only when a live session arms capture: with Remix and live capture off, the game's render-target binding stays
+// untouched (feature-off parity).
+inline bool install_repair(ID3D11DeviceContext* context) {
+    if (!context) return false;
+    static bool done = false;
+    if (done) return true;
+    done = true;
+    void** table = *reinterpret_cast<void***>(context);
+    const auto ok = [](vtable_hook::Result r) {
+        return r == vtable_hook::Result::Hooked || r == vtable_hook::Result::AlreadyHooked ||
+               r == vtable_hook::Result::RestoreFailed;
+    };
+    return ok(vtable_hook::hook(table, kOmsetRenderTargets,
+                                reinterpret_cast<void*>(&hooked_omset_render_targets), g_next_omset, protect)) &&
+           ok(vtable_hook::hook(table, kOmsetRenderTargetsAndUavs,
+                                reinterpret_cast<void*>(&hooked_omset_render_targets_uavs), g_next_omset_uavs, protect));
+}
+
 inline bool install(ID3D11DeviceContext* context) {
     static bool done = false;
+    ++draw_probe::install_attempts;
+    if (done) ++draw_probe::install_skipped;  // a later context/device is left unhooked: the probe has to show that
     if (!context || done) return done;
     done = true;
     void** table = *reinterpret_cast<void***>(context);
@@ -286,6 +349,28 @@ inline bool install(ID3D11DeviceContext* context) {
     const auto b = vtable_hook::hook(table, kDrawIndexedInstanced, reinterpret_cast<void*>(&hooked_draw_indexed_instanced),
                                      g_next_draw_indexed_instanced, protect);
     const auto ok = [](vtable_hook::Result r) { return r == vtable_hook::Result::Hooked || r == vtable_hook::Result::AlreadyHooked || r == vtable_hook::Result::RestoreFailed; };
-    return ok(a) && ok(b);
+    const bool hooked = ok(a) && ok(b);
+    if (hooked) {
+        // Probe only: the canary adds a hooked slot, and the normal path must not gain one (feature-off/live parity).
+        if (draw_probe::enabled()) {
+            std::atomic<void*> ignored{nullptr};
+            vtable_hook::hook(table, draw_probe::kCanarySlot, reinterpret_cast<void*>(&draw_probe::canary_hook),
+                              draw_probe::canary_next, protect);
+            if (draw_probe::rehook_enabled()) {
+                draw_probe::stash_hooks(reinterpret_cast<void*>(&hooked_draw_indexed),
+                                        reinterpret_cast<void*>(&hooked_draw_indexed_instanced),
+                                        g_next_draw_indexed.load(), g_next_draw_indexed_instanced.load());
+                vtable_hook::hook(table, draw_probe::kRtsSlot,
+                                  reinterpret_cast<void*>(&draw_probe::repair_omset_render_targets),
+                                  draw_probe::repair_next_rts, protect);
+                vtable_hook::hook(table, draw_probe::kMapSlot,
+                                  reinterpret_cast<void*>(&draw_probe::repair_map), draw_probe::repair_next_map, protect);
+            }
+        }
+        ++draw_probe::install_ok;
+        draw_probe::installed_context.store(context, std::memory_order_release);
+        draw_probe::installed_table.store(table, std::memory_order_release);
+    }
+    return hooked;
 }
 }  // namespace draw_capture

@@ -4,10 +4,12 @@
   laptop_port.py install            back up the game's d3d11.dll (the NIER_DLAA proxy) and chain it as d3d11_dlaa.dll
                                     behind our hash-checked d3d11.dll; add NIER_RENDER.ini, fonts, steam_appid.txt
                                     (so a direct launch keeps the environment), and the static camp scene
-  laptop_port.py run <label> [--remix] [--seconds N] [--no-ec-hooks] [--steam] [--live]
+  laptop_port.py run <label> [--remix] [--seconds N] [--no-ec-hooks] [--steam] [--live] [--draw-probe] [--rehook]
                                     start NieRAutomata.exe in the user's session with the NIER_* environment, stop ONLY
                                     that process after N seconds (default 90), copy back NIER_SCALE.log and a receipt
                                     --live enables the draw stream instead of the static scene; load a save manually
+                                    --draw-probe sets NIER_DRAW_PROBE=1 (CPU-only hook-health diagnostic, Remix must be off)
+                                    --rehook adds NIER_DRAW_PROBE_REHOOK=1: re-hook draw slots that hold the pristine original again
   laptop_port.py restore            put the original files back exactly (hash-checked) and remove what install added
 
 Logs only: no desktop screenshots. Every file this writes into the game folder is listed in ADDED and removed by
@@ -93,10 +95,16 @@ if ((Get-FileHash -LiteralPath (Join-Path $g 'd3d11.dll') -Algorithm SHA256).Has
 'installed {dll[:16]}' '''))
 
 
-def run(label, remix, seconds, no_ec_hooks=False, steam=False, live=False):
+def run(label, remix, seconds, no_ec_hooks=False, steam=False, live=False, draw_probe=False, rehook=False):
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')
     remix = remix or live
+    assert not (draw_probe and remix), 'NIER_DRAW_PROBE=1 is a Remix-off diagnostic: drop --remix/--live'
     env = {'NIER_REMIX': '1' if remix else '0'}
+    if draw_probe:
+        env['NIER_DRAW_PROBE'] = '1'
+    if rehook:
+        assert draw_probe, '--rehook only applies to a --draw-probe run'
+        env['NIER_DRAW_PROBE_REHOOK'] = '1'
     if remix:
         env.update(NIER_REMIX_RUNTIME=RUNTIME, NIER_REMIX_SCENE=WORK + r'\scene\scene.bin')
     if live:
@@ -133,7 +141,7 @@ if ($alive) {{ $alive | Stop-Process -Force; Start-Sleep 3 }}
 if (Test-Path -LiteralPath "$ec.off") {{ Rename-Item -LiteralPath "$ec.off" -NewName 'ec_hooks.dll' }}
 $text=if (Test-Path -LiteralPath $log) {{ $b=[IO.File]::ReadAllBytes($log); [Text.Encoding]::UTF8.GetString($b, $before, $b.Length-$before) }} else {{ '' }}
 $wer=@(try {{ Get-WinEvent -FilterHashtable @{{LogName='Application'; ProviderName='Application Error'; StartTime=$start}} -ErrorAction Stop | Where-Object {{ $_.Message -like '*NieRAutomata*' }} | Select-Object -First 2 | ForEach-Object {{ $_.Message.Substring(0,[Math]::Min(600,$_.Message.Length)) }} }} catch {{ }})
-[ordered]@{{label='{label}'; remix=${str(remix).lower()}; pids=$ids; task_result=$taskResult; alive_at_end=[bool]$alive; log=$text; crash=@($wer)}} | ConvertTo-Json -Depth 3 -Compress''', timeout=seconds + 240))
+[ordered]@{{label='{label}'; remix=${str(remix).lower()}; draw_probe=${str(draw_probe).lower()}; rehook=${str(rehook).lower()}; pids=$ids; task_result=$taskResult; alive_at_end=[bool]$alive; log=$text; crash=@($wer)}} | ConvertTo-Json -Depth 3 -Compress''', timeout=seconds + 240))
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / f'{label}-{stamp}.json').write_text(json.dumps(receipt, indent=2) + '\n')
     lines = [l for l in (receipt.get('log') or '').splitlines() if l.strip()]
@@ -166,6 +174,7 @@ if __name__ == '__main__':
         restore()
     elif cmd[0] == 'run' and len(cmd) >= 2:
         seconds = int(cmd[cmd.index('--seconds') + 1]) if '--seconds' in cmd else 90
-        run(cmd[1], '--remix' in cmd, seconds, '--no-ec-hooks' in cmd, '--steam' in cmd, '--live' in cmd)
+        run(cmd[1], '--remix' in cmd, seconds, '--no-ec-hooks' in cmd, '--steam' in cmd, '--live' in cmd,
+            '--draw-probe' in cmd, '--rehook' in cmd)
     else:
         sys.exit(__doc__)

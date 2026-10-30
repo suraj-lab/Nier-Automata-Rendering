@@ -121,6 +121,7 @@ def inside():
         _, r, log, fake = tr.run(work, 'flicker', {**base, 'MOCK_CAMERA': 'live-passes', 'MOCK_EMPTY_EVERY': '10'})
         assert fake and 'VIOLATION' not in fake, fake
         assert r.get('ctx_map_in_proxy') == '1', f'live run without the capture hooks: {r.get("ctx_map_in_proxy")}'
+        assert r.get('ctx_rts_in_proxy') == '1', f'live run without the draw-slot repair: {r.get("ctx_rts_in_proxy")}'
         flicker = instances_per_frame(fake)
         late = [n for f, n in flicker.items() if f >= 45]
         ceiling = max(n for f, n in single.items() if f >= 45)

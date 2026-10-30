@@ -507,7 +507,9 @@ HRESULT STDMETHODCALLTYPE present(IDXGISwapChain* self, UINT sync, UINT flags) {
     // Remix replaces the game's image first, so the menu still draws on top. Independent of the menu's phase.
     if (game_frame) {
         try { draw_probe::report(self, host.log, reinterpret_cast<void*>(&draw_capture::hooked_draw_indexed),
-                                 reinterpret_cast<void*>(&draw_capture::hooked_draw_indexed_instanced)); } catch (...) {}
+                                 reinterpret_cast<void*>(&draw_capture::hooked_draw_indexed_instanced),
+                                 draw_capture::g_next_draw_indexed.load(std::memory_order_acquire),
+                                 draw_capture::g_next_draw_indexed_instanced.load(std::memory_order_acquire)); } catch (...) {}
         try { live_capture::end_frame(); camera_capture::end_frame(); remix_live::on_present(self, host.log); } catch (...) {}
     }
     if (game_frame && phase != Phase::Disabled) {

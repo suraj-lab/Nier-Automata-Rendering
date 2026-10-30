@@ -45,7 +45,37 @@ def main():
             assert 'NIER_REMIX_LIVE_TEX=' + lp.WORK + r'\live-textures' in decoded
             assert 'NIER_REMIX_LIVE_STATS_EVERY=60' in decoded
             assert lp.RUNTIME in decoded
-    print('test_laptop_port_transport: passed (Unicode stdin and direct/Steam live launch settings)')
+        # --draw-probe: CPU-only hook-health diagnostic, so Remix must be off and the probe flag must travel.
+        scripts = []
+        def fake_ps_probe(script, **kw):
+            scripts.append(script)
+            return json.dumps(receipt | {'draw_probe': True})
+        with patch.object(lp, 'ps', fake_ps_probe):
+            lp.run('draw-probe', False, 5, no_ec_hooks=True, draw_probe=True)
+        encoded = re.search(r"WriteAllBytes\(\$cmd,\s*\[Convert\]::FromBase64String\('([^']+)'\)", scripts[0]).group(1)
+        decoded = base64.b64decode(encoded).decode('utf-8')
+        assert 'NIER_DRAW_PROBE=1' in decoded, decoded
+        assert 'NIER_REMIX=0' in decoded and 'NIER_REMIX_RUNTIME' not in decoded
+        assert 'NIER_DRAW_PROBE_REHOOK' not in decoded  # re-hooking is a separate experiment, never implicit
+        scripts.clear()
+        with patch.object(lp, 'ps', fake_ps_probe):
+            lp.run('draw-probe-rehook', False, 5, draw_probe=True, rehook=True)
+        encoded = re.search(r"WriteAllBytes\(\$cmd,\s*\[Convert\]::FromBase64String\('([^']+)'\)", scripts[0]).group(1)
+        decoded = base64.b64decode(encoded).decode('utf-8')
+        assert 'NIER_DRAW_PROBE_REHOOK=1' in decoded, decoded
+        try:
+            lp.run('rehook-only', False, 5, rehook=True)
+        except AssertionError:
+            pass
+        else:
+            raise AssertionError('--rehook without --draw-probe was accepted')
+        try:
+            lp.run('draw-probe-mixed', True, 5, draw_probe=True)
+        except AssertionError:
+            pass
+        else:
+            raise AssertionError('--draw-probe with --remix was accepted')
+    print('test_laptop_port_transport: passed (Unicode stdin, direct/Steam live launch, draw-probe settings)')
 
 
 if __name__ == '__main__':

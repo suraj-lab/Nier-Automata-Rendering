@@ -92,6 +92,8 @@ def inside():
         assert fake is None and not remix_lines(log_unset), (fake, remix_lines(log_unset))
         # Off means no live-capture hooks at all (review 2026-10-29: they were installed on every launch).
         assert r_unset.get('ctx_map_in_proxy') == '0', f'Remix off, yet Map is hooked: {r_unset.get("ctx_map_in_proxy")}'
+        # The draw-slot repair rides on OMSetRenderTargets and must not exist with Remix off (feature-off parity).
+        assert r_unset.get('ctx_rts_in_proxy') == '0', f'Remix off, yet render-target binding is hooked: {r_unset}'
         d_zero, _, log_zero, fake = run(work, 'off-zero', {'NIER_REMIX': '0', 'NIER_REMIX_RUNTIME': on['NIER_REMIX_RUNTIME']})
         assert fake is None and not remix_lines(log_zero), (fake, remix_lines(log_zero))
         for cap in ('capture-closed.raw', 'capture-open.raw', 'capture-after.raw'):

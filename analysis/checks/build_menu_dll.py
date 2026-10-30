@@ -31,6 +31,12 @@ def main():
     dll = OUT / 'd3d11.dll'
     cmd = ['x86_64-w64-mingw32-g++', '-std=c++17', '-O2', '-Wall', '-Wextra', '-Werror', '-shared',
            '-static', '-static-libgcc', '-static-libstdc++', '-Wl,--no-insert-timestamp',
+           # Reproducible by construction: ld derives the image base from the output path by default, and every
+           # absolute pointer follows it, so the same sources hashed differently per build directory. objcopy
+           # (the alternative way to strip) rewrites the PE TimeDateStamp with the current time, which would undo
+           # that; stripping via the linker keeps the timestamp zero. No DWARF sidecar: nothing reads it
+           # (read_minidump.py resolves module+RVA), and it was 10.9 MB of the 15.5 MB file.
+           '-Wl,--image-base,0x180000000', '-Wl,--strip-debug',
            # ImGui asserts must never abort the game; no XInput DLL is loaded into the game for gamepads.
            '-DIM_ASSERT(_EXPR)=((void)0)', '-DIMGUI_IMPL_WIN32_DISABLE_GAMEPAD',
            '-I' + str(imgui), '-I' + str(preview_build.OUT), '-I' + str(PREVIEW), '-I' + str(C),
@@ -50,7 +56,8 @@ def main():
     imports = sorted(set(re.findall(r'DLL Name: (\S+)', raw)))
     forbidden = [i for i in imports if i.lower().startswith(('d3d11', 'dxgi', 'd3dcompiler', 'xinput', 'd3d9'))]
     result = {'passed': exports.returncode == 0 and not forbidden, 'dll': str(dll.relative_to(A.parent)),
-              'sha256': hashlib.sha256(dll.read_bytes()).hexdigest(), 'imports': imports, 'forbidden_imports': forbidden,
+              'sha256': hashlib.sha256(dll.read_bytes()).hexdigest(),
+              'imports': imports, 'forbidden_imports': forbidden,
               'export_check': exports.stdout.strip().splitlines(), 'installed': False}
     (OUT / 'validation.json').write_text(json.dumps(result, indent=2) + '\n')
     print(json.dumps({k: result[k] for k in ('passed', 'sha256', 'imports', 'forbidden_imports')}, indent=1))

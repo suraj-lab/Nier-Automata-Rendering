@@ -6,6 +6,10 @@ This file is the shared intent. [PROGRESS.md](PROGRESS.md) holds the evidence an
 [analysis/LIVE_TRANSFER.md](analysis/LIVE_TRANSFER.md) and [analysis/LIVE_IN_GAME_PLAN.md](analysis/LIVE_IN_GAME_PLAN.md)
 hold the engineering.
 
+> **2026-10-30 — note:** the intent below stands, but its feasibility and risk language was written on 2026-10-27,
+> before the live desktop image (2026-10-29) and the Windows/ARM64EC port (2026-10-30). Treat dated claims in this
+> file as history; `PROGRESS.md`'s top checkpoint is the authority.
+
 ## What we are building
 
 Keep NieR:Automata exactly as it is — saves, gameplay, UI, content — and give it a **live modern rendering path**

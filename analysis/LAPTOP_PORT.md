@@ -263,3 +263,19 @@ this device. This is a real live-capture failure, not a menu-only test. Trace co
 before another heavy run; do not attribute the slowdown to path tracing without a submitted frame/cost measurements.
 Original proxy and `ec_hooks.dll` restored, process stopped. Evidence remains in
 `runtime/laptop-port/stage3-ec-live-camp*`. No screen capture or automated menu/save input was performed.
+
+### Artifact identity after 2026-10-30 evening (read before the next install)
+
+`build_menu_dll.py` now pins the PE image base and strips through the linker, so the DLL is 4,242,383 bytes and
+rebuilds to the **same whole-file SHA-256 in any directory** (`analysis/checks/test_build_reproducible.py` builds the
+same sources in two temp trees and compares them). Two consequences for anything written above:
+
+- hashes recorded before this change belong to the old, unstripped 15,537,852-byte artifacts; comparing one against a
+  fresh build proves nothing. The accepted live candidate is still `cee4d891…` from source `4f0a5f3`;
+- the diagnostic draw-probe build is `43bf8685…4ba18`. `.text` is byte-identical to an unstripped build of the same
+  tree, so the strip cannot change behaviour.
+
+`objcopy`/`strip` rewrite the PE `TimeDateStamp` with the current time, so "strip and keep a `.debug` sidecar" is not a
+deterministic route; `--no-insert-timestamp` is a linker option and objcopy has no equivalent. No sidecar is shipped:
+nothing reads the DWARF (`read_minidump.py` resolves module+RVA) and it was 70% of the old file, i.e. 10.9 MB per
+transfer to this machine. Verify a suspect hash with `analysis/tools/pe_sections.py` before concluding the source moved.

@@ -16,6 +16,7 @@
 #include "camera_capture.h"
 #include "draw_probe.h"
 #include "live_capture.h"
+#include "draw_capture.h"
 #include "live_scene.h"
 #include "hud_replay.h"
 #include "hud_shader.h"
@@ -797,6 +798,8 @@ void begin_game_frame(IDXGISwapChain* swapchain) {
     if (live_enabled) {
         // Hooks only for a live session: with Remix or live capture off, the game's Map/Unmap/Copy calls stay untouched.
         live_capture::install(context.get());
+        // Another layer resets the draw slots every frame; repair them when render targets are bound, before drawing.
+        draw_capture::install_repair(context.get());
         live_capture::begin_frame(context.get(), desc.Width, desc.Height);
     }
 }
