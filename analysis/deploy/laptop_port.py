@@ -12,7 +12,8 @@
                                     pass the official d3d9_a64ec.dll for the native ARM64EC renderer)
                                     --capture writes the first composited frame with a HUD to WORK\\composite.raw (live only)
                                     --options-doc asks the runtime to write RtxOptions.md (every option, default, range)
-                                    --rtx-conf FILE copies FILE to the game folder as rtx.conf for this run (restore removes it)
+                                    --rtx-conf FILE stages FILE in WORK and points DXVK_RTX_CONFIG_FILE at it (a relative
+                                    rtx.conf in the game folder is not found: the runtime parses it against another cwd)
                                     --draw-probe sets NIER_DRAW_PROBE=1 (CPU-only hook-health diagnostic, Remix must be off)
                                     --rehook adds NIER_DRAW_PROBE_REHOOK=1: re-hook draw slots that hold the pristine original again
   laptop_port.py restore            put the original files back exactly (hash-checked) and remove what install added
@@ -41,7 +42,7 @@ BACKUP = WORK + r'\backup'
 RUNTIME = r'C:\Program Files\NVIDIA Corporation\RTX Remix\deps\remix_runtime\runtime\.trex\d3d9.dll'
 ORIGINAL_D3D11 = '6ba266d64a8f6776'                           # NIER_DLAA proxy found in the game folder 2026-10-30
 ADDED = ['d3d11_dlaa.dll', 'NIER_RENDER.ini', 'steam_appid.txt', 'nier_render_fonts', 'NIER_SCALE.log', 'NIER_ENV.ini',
-         'NIER_CAPTURE', r'data\rtx-remix', r'data\metrics.txt', 'RtxOptions.md', 'rtx.conf']  # --options-doc, --rtx-conf  # last three: written by our runs (shader capture, Remix)
+         'NIER_CAPTURE', r'data\rtx-remix', r'data\metrics.txt', 'RtxOptions.md', 'rtx.conf']  # --options-doc; rtx.conf: earlier --rtx-conf runs  # last three: written by our runs (shader capture, Remix)
 OPTS = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10']
 
 
@@ -128,7 +129,9 @@ def run(label, remix, seconds, no_ec_hooks=False, steam=False, live=False, draw_
         env.update(NIER_REMIX_RUNTIME=runtime or RUNTIME, NIER_REMIX_SCENE=WORK + r'\scene\scene.bin')
     if rtx_conf:
         assert remix, '--rtx-conf needs the runtime: add --remix or --live'
-        scp(Path(rtx_conf), GAME + r'\rtx.conf')
+        staged = WORK + rf'\rtx-{label}.conf'
+        scp(Path(rtx_conf), staged)
+        env['DXVK_RTX_CONFIG_FILE'] = staged
     if options_doc:
         assert remix, '--options-doc needs the runtime: add --remix or --live'
         env['DXVK_DOCUMENTATION_WRITE_RTX_OPTIONS_MD'] = '1'

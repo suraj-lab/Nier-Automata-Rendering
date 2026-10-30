@@ -81,10 +81,15 @@ def main():
             # --rtx-conf stages the file as rtx.conf in the game folder, and restore must know to remove it.
             assert 'rtx.conf' in lp.ADDED
             copied = []
-            with patch.object(lp, 'ps', lambda script, **kw: json.dumps(receipt)), \
+            conf_scripts = []
+            with patch.object(lp, 'ps', lambda script, **kw: (conf_scripts.append(script) or json.dumps(receipt))), \
                  patch.object(lp, 'scp', lambda local, remote, recursive=False: copied.append((str(local), remote))):
                 lp.run('conf', True, 5, live=True, rtx_conf='/tmp/x.conf')
-            assert copied == [('/tmp/x.conf', lp.GAME + r'\rtx.conf')], copied
+            # Staged outside the game folder and named by absolute path: a relative rtx.conf in the game folder was
+            # present yet "No config file found at: rtx.conf" (2026-10-30 run live-conf-a).
+            assert copied == [('/tmp/x.conf', lp.WORK + r'\rtx-conf.conf')], copied
+            encoded = re.search(r"WriteAllBytes\(\$cmd,\s*\[Convert\]::FromBase64String\('([^']+)'\)", conf_scripts[0]).group(1)
+            assert 'DXVK_RTX_CONFIG_FILE=' + lp.WORK + r'\rtx-conf.conf' in base64.b64decode(encoded).decode('utf-8')
             try:
                 lp.run('conf-no-remix', False, 5, rtx_conf='/tmp/x.conf')
             except AssertionError:
