@@ -425,13 +425,16 @@ struct Worker {
                 t_submit += live_capture::now_us() - s0;
                 if (seq % stats_every == 1) {
                     // Game-thread readbacks, cumulative since start: diff two lines for a rate.
-                    logger.load()("remix: live rebuilds first=%llu unknown=%llu buffer=%llu pose=%llu texture=%llu evicted=%llu",
+                    logger.load()("remix: live rebuilds first=%llu unknown=%llu buffer=%llu pose=%llu texture=%llu evicted=%llu "
+                                  "buffer_skinned=%llu buffer_dynamic=%llu game_frames=%llu game_max_ms=%llu",
                                   live_capture::rebuild_reasons[live_capture::kReasonFirst].load(),
                                   live_capture::rebuild_reasons[live_capture::kReasonUnknown].load(),
                                   live_capture::rebuild_reasons[live_capture::kReasonBuffer].load(),
                                   live_capture::rebuild_reasons[live_capture::kReasonPose].load(),
                                   live_capture::rebuild_reasons[live_capture::kReasonTexture].load(),
-                                  live_capture::rebuild_reasons[live_capture::kReasonEvicted].load());
+                                  live_capture::rebuild_reasons[live_capture::kReasonEvicted].load(),
+                                  live_capture::buffer_skinned.load(), live_capture::buffer_dynamic.load(),
+                                  live_capture::game_frames.exchange(0), live_capture::game_max_us.exchange(0) / 1000);
                     logger.load()("remix: live reads=%llu first=%llu trimmed=%llu unmirrored=%llu const=%llu immutable=%llu "
                                   "default=%llu dynamic=%llu read_kb=%llu read_ms=%llu texture_ms=%llu skinned=%u created=%llu",
                                   live_capture::read_reasons[0].load() + live_capture::read_reasons[1].load() + live_capture::read_reasons[2].load(),

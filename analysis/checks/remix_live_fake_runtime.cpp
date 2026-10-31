@@ -12,6 +12,7 @@
 #include <cstring>
 #include <atomic>
 #include <cstdint>
+#include <map>
 #include <set>
 #include <remix_c.h>
 
@@ -41,6 +42,7 @@ unsigned long long handle = 0x5000;
 // CreateMesh under a hash that is still live keeps the OLD geometry, and re-creating a hash after DestroyMesh crashed
 // the runtime (access violation). Both are contract violations here, so the mock gates see what the runtime does.
 std::set<unsigned long long> live_meshes, destroyed_meshes;
+std::map<unsigned long long, std::pair<unsigned, unsigned long long>> skinned_this_frame;  // mesh -> (frame+1, bone hash)
 
 remixapi_ErrorCode REMIXAPI_CALL create_d3d9(remixapi_Bool, IDirect3D9Ex** out9) {
     note("CreateD3D9 registered=%d started=%d", registered != nullptr, started);
@@ -165,6 +167,21 @@ remixapi_ErrorCode REMIXAPI_CALL draw_instance(const remixapi_InstanceInfo* i) {
     if (stage < 1 || stage > 2) note("VIOLATION DrawInstance at stage %d", stage);
     ++frame_instances;
     if (i && !(i->categoryFlags & REMIXAPI_INSTANCE_CATEGORY_BIT_SKY)) ++frame_traced;
+    // The real runtime skins into the mesh's BLAS entry (remix-1.6.1 rtx_scene_manager.cpp:400-428, modifiedGeometryData
+    // and lastBoneHash live on the BlasEntry), not per instance: one mesh drawn twice in a frame with two different bone
+    // sets shows one pose for both. Live 2026-10-31: identical enemies sharing a Phase 4 mesh froze/jumped.
+    if (i && i->pNext && static_cast<const remixapi_InstanceInfoBoneTransformsEXT*>(i->pNext)->sType ==
+                             REMIXAPI_STRUCT_TYPE_INSTANCE_INFO_BONE_TRANSFORMS_EXT) {
+        const auto* b = static_cast<const remixapi_InstanceInfoBoneTransformsEXT*>(i->pNext);
+        unsigned long long h = 1469598103934665603ull;
+        const unsigned char* bytes = reinterpret_cast<const unsigned char*>(b->boneTransforms_values);
+        for (std::size_t k = 0; bytes && k < sizeof(remixapi_Transform) * b->boneTransforms_count; ++k) h = (h ^ bytes[k]) * 1099511628211ull;
+        const unsigned long long mesh = static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(i->mesh));
+        auto& seen = skinned_this_frame[mesh];
+        if (seen.first == frames + 1 && seen.second != h)
+            note("VIOLATION DrawInstance mesh=%llu skinned twice in one frame with different bones: the runtime skins per mesh", mesh);
+        seen = {frames + 1, h};
+    }
     if (std::getenv("FAKE_REMIX_INSTANCE_LOG") && i) {  // remixapi_Transform is float matrix[3][4]; there is no row 3
         const auto& m = i->transform.matrix;
         const auto* bones = static_cast<const remixapi_InstanceInfoBoneTransformsEXT*>(i->pNext);

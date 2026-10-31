@@ -250,6 +250,9 @@ inline std::map<std::uint64_t, unsigned>& skinned_occurrences() { static std::ma
 enum RebuildReason : unsigned { kReasonFirst, kReasonUnknown, kReasonBuffer, kReasonPose, kReasonTexture, kReasonEvicted,
                                 kReasonCount };
 inline std::atomic<unsigned long long> rebuild_reasons[kReasonCount]{};
+// Diagnostics (2026-10-31: the camera froze in steps while game-thread reads took ~40% of wall time): which draws the
+// `buffer` rebuilds come from, and the game's own worst frame interval since the last stats line (reset by the reader).
+inline std::atomic<unsigned long long> buffer_skinned{0}, buffer_dynamic{0}, game_frames{0}, game_max_us{0};
 inline std::map<std::uint64_t, unsigned>& erased_reason() { static std::map<std::uint64_t, unsigned> m; return m; }
 // Buffer part of the version, without the skinning pose, so a pose-only change is told apart from a buffer write.
 inline std::map<std::uint64_t, std::uint64_t>& built_buffer_versions() { static std::map<std::uint64_t, std::uint64_t> m; return m; }
@@ -743,6 +746,13 @@ inline void begin_frame(ID3D11DeviceContext* context, unsigned width = 0, unsign
         building().scene_h = scene_height;
         if (width && height) { final_width = width; final_height = height; }
         ++frame_number;
+        {
+            static unsigned long long last_us = 0;
+            const unsigned long long now = now_us();
+            if (last_us && now - last_us > game_max_us.load(std::memory_order_relaxed)) game_max_us.store(now - last_us, std::memory_order_relaxed);
+            last_us = now;
+            game_frames.fetch_add(1, std::memory_order_relaxed);
+        }
         textures_this_frame = 0;
         lights_read = false;
         read_bytes_this_frame = 0;
@@ -983,8 +993,9 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     // budget and evicted the static world (live 2026-10-29: 59917 built, 56915 evicted). The pose goes into the
     // version instead, so a new pose rebuilds and replaces the mesh under the same key.
     // shortcut: if the game reorders identical characters between frames, their keys swap and both rebuild each frame.
-    // With gpu_skinning a blended draw keeps the draw's own key: the mesh is in bind space and the palette rides on the
-    // instance, so neither the pose nor the draw's occurrence may enter the key or the mesh would be rebuilt per frame.
+    // With gpu_skinning the pose stays out of the key (the palette rides on the instance), but the occurrence stays in:
+    // the runtime skins into the mesh's BLAS entry, not per instance (remix-1.6.1 rtx_scene_manager.cpp:400-428), so
+    // two characters sharing one mesh show one pose. Occurrences of one draw have identical bytes, so a reorder is free.
     std::uint64_t pose = 0;
     const std::uint64_t skin_base = geometry;
     int rigid_bone = -1;
@@ -992,9 +1003,9 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
         const auto known = rigid_bones().find(skin_base);
         if (known != rigid_bones().end() && known->second >= 0 && static_cast<unsigned>(known->second) < bone_count) {
             rigid_bone = known->second;  // one mesh in its own space; the bone becomes the instance transform below
-        } else if (!gpu_skinning) {
+        } else {
             geometry = hash_value(geometry ^ (0x5c1d000000000000ull + skinned_occurrences()[geometry]++));
-            pose = hash_mix(1469598103934665603ull, constants->data(), 48ull * bone_count);
+            if (!gpu_skinning) pose = hash_mix(1469598103934665603ull, constants->data(), 48ull * bone_count);
         }
     }
     bool rigid = rigid_bone >= 0;
@@ -1194,6 +1205,15 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
                                                                                                            : kReasonBuffer;
         }
         ++rebuild_reasons[reason];
+        if (reason == kReasonBuffer) {
+            if (skinned) buffer_skinned.fetch_add(1, std::memory_order_relaxed);
+            bool dynamic = false;
+            for (unsigned i = 0; i < vb_count && !dynamic; ++i) {
+                D3D11_BUFFER_DESC d{};
+                if (vbs[i]) { vbs[i]->GetDesc(&d); dynamic = d.Usage == D3D11_USAGE_DYNAMIC; }
+            }
+            if (dynamic) buffer_dynamic.fetch_add(1, std::memory_order_relaxed);
+        }
         if (built_buffer_versions().size() > 200000) built_buffer_versions().clear();  // bounded like built_versions
         built_buffer_versions()[geometry] = buffer_version;
         if (erased_reason().size() > 200000) erased_reason().clear();

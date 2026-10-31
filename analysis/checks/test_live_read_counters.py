@@ -40,6 +40,10 @@ def rebuilds(log):
     assert lines, 'no "live rebuilds" stats line: ' + str(tr.remix_lines(log)[-6:])
     last = dict(re.findall(r'(\w+)=(\d+)', lines[-1]))
     assert set(REASONS) <= set(last), lines[-1]
+    # Stall diagnostics (2026-10-31): per-window game frame count and worst interval, and the buffer-rebuild split.
+    assert {'buffer_skinned', 'buffer_dynamic', 'game_frames', 'game_max_ms'} <= set(last), lines[-1]
+    assert any(int(dict(re.findall(r'(\w+)=(\d+)', x))['game_frames']) > 0 for x in lines), lines[-3:]
+    assert int(last['buffer_skinned']) <= int(last['buffer']) and int(last['buffer_dynamic']) <= int(last['buffer']), lines[-1]
     return {k: int(last[k]) for k in REASONS}
 
 

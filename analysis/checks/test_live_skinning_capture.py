@@ -130,7 +130,10 @@ def inside():
                                                   'NIER_REMIX_LIVE_TEX': tr.win(tex_g), **extra})
             assert fake and 'VIOLATION' not in fake, (fake or log)[-2000:]
             built = [l for l in fake.splitlines() if l.startswith('CreateMesh') and 'indices=192 ' in l]
-            assert len(built) == 1, f'{name}: a pose must not rebuild the mesh, saw {len(built)} builds'
+            # One mesh per actor for the whole run: the runtime skins per mesh, so the two actors the mock draws each
+            # frame need two meshes (the fake flags a shared one), and a pose must never rebuild either of them.
+            assert len(built) == 2, f'{name}: expected one mesh per actor and no pose rebuilds, saw {len(built)} builds'
+            assert len({re.search(r'hash=(\d+)', l).group(1) for l in built}) == 2, f'{name}: actors share a mesh: {built}'
             mesh = built[0]
             assert 'skinned=1 ' in mesh and 'bonesPerVertex=4 ' in mesh, mesh
             verts = int(re.search(r'verts=(\d+)', mesh).group(1))
@@ -166,7 +169,7 @@ def inside():
                 steps = {round(b - a, 3) for a, b in zip(xs, xs[1:])}
                 assert steps <= {0.25, 0.5, 0.75}, f'{name}: bone 0 does not follow the animation: {sorted(steps)}'
             assert int(r['geometry_reads']) <= 3, f'{name}: GPU skinning must not read geometry back: {r}'
-            gpu_bone[name] = f'{len(draws)} frames, {len(bones)} palettes, {verts} vertices -> {weights} weights, one mesh'
+            gpu_bone[name] = f'{len(draws)} frames, {len(bones)} palettes, {verts} vertices -> {weights} weights, one mesh per actor'
         report = {'passed': True, 'work': str(work), 'poses': sorted(by_pose), 'meshes': len(meshes),
                   'animated_builds': len(animated), 'animated_keys': len(side), 'rigid_builds': rigid_counts, 'gpu_bone': gpu_bone,
                   'limits': 'Real proxy in a software Wine mock, not the real Remix runtime or live game.'}
