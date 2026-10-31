@@ -31,6 +31,19 @@ BC5 bytes as their own DDS and a `CreateMaterial` naming it, albedo never swappe
 own fixtures (BC5 row pitch 32; slot 4 only bound on the menu path) were found by the worker and fixed in the
 mock; the assertions were not weakened.
 
+**START HERE (2026-10-31 10:00): Phase 4 is built and gated; next is one laptop A/B.**
+
+`3151ea6`, build **`caa4ab5d`**, suite 61/61 (`analysis/runtime/final-20261031c/`). Blended skinned draws keep
+one bind-space mesh (three-slot layout, 3V+4 weights, as proven on 1.6.1) and get the CB11 palette per frame
+as instance bone transforms. Behind `NIER_REMIX_LIVE_GPU_SKIN=1`, off by default.
+
+A/B, same save, same spot, `live-nrm2` command plus one flag:
+`laptop_port.py run live-gpu-skin --seconds 150 --live --no-ec-hooks --rtx-conf analysis/deploy/rtx/laptop-b-dlss-perf.conf --env NIER_REMIX_SIZE=2880x1800 --env NIER_REMIX_LIVE_TEX_PER_FRAME=16 --env NIER_REMIX_LIVE_NORMAL=1 --env NIER_REMIX_LIVE_GPU_SKIN=1 --runtime "…\upstream-1.6.1-x64\d3d9_a64ec.dll"`
+Pass if: `pose` rebuilds stay near the rigid-only count instead of climbing into the thousands (was 9600→12948);
+`other` ms/frame drops; characters/animated props are in the right place and do not vanish when they move
+far from their bind pose (the known open trap: bind-pose bounds, `shortcut:` in `three_slot_layout`).
+Also judge normal-map orientation in the same run. Restore after (`laptop_port.py restore`).
+
 **START HERE (2026-10-31 00:40). Read this first, then `analysis/PHASE4_PLAN.md`.**
 
 Overnight result, all committed and gate-verified:
