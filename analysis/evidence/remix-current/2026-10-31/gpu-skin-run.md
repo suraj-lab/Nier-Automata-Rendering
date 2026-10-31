@@ -49,3 +49,13 @@ time. `buffer` rebuilds are all dynamic buffers (buffer_dynamic == buffer), ~15%
 `created` (immutables captured at creation) stays low, so these buffers reach the game through a path our
 CreateBuffer hook does not see; not investigated yet.
 Fix: `98c022d` (build `c34dd8fb`), `NIER_REMIX_LIVE_ASYNC_READS=1`: no read blocks the game thread any more.
+
+## Run 4: `live-async1` (build `c34dd8fb`, `NIER_REMIX_LIVE_ASYNC_READS=1`)
+
+User: "Its still bad". Log: `blocking=0`, game-thread read time 29% -> 1%, game fps mean 22.5 -> 40.2, but worst
+frames still 100-236 ms per window (one 1339, one 756), **including windows with zero reads and builds**
+(14:56:41, 14:57:00, 14:57:05: 97-129 ms), while other quiet windows were 26-28 ms. So part of the hitching is not
+our capture at all. Bug: reads of buffers rewritten every frame never landed (535 landed vs 32299 waits;
+`lights=0`, `buffer=0`): each write made the in-flight copy stale and it was re-issued forever.
+Fix + breakdown: `1760ff6` (build `58db6c29`): stale copies land as one-draw snapshots; the rebuilds line now
+splits the worst game frame into our draw hooks, our pre-Present work and the real Present call.
