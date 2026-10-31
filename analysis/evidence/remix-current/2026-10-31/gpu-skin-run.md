@@ -38,3 +38,14 @@ normal-map orientation not judged.
    rebuilds (~190/s). These stall the game itself, which fits the camera freezing in steps. Not fixed: `b2bab23d`
    adds `buffer_skinned`, `buffer_dynamic`, `game_frames`, `game_max_ms` to the rebuild line so the next run shows
    which draws cause it and how long the game's worst frames are.
+
+## Run 3: `live-gpu-skin3` (build `b2bab23d`, per-occurrence skinned meshes + stall diagnostics)
+
+User: "models looked better ish, the camera issue is egregious and should take priority".
+Log: game thread runs at only ~20-27 fps with worst frames of 130-460 ms every window (one of 1391 ms). In steady
+state ~240 reads per 4 s window, nearly all **first-sight reads of IMMUTABLE buffers**, ~5 ms each and almost no
+bytes (14:11:55: 237 reads, 0 MB, 1169 ms): the cost is the GPU sync per Map, not bandwidth. ~28% of game-thread
+time. `buffer` rebuilds are all dynamic buffers (buffer_dynamic == buffer), ~15% skinned; not the main read source.
+`created` (immutables captured at creation) stays low, so these buffers reach the game through a path our
+CreateBuffer hook does not see; not investigated yet.
+Fix: `98c022d` (build `c34dd8fb`), `NIER_REMIX_LIVE_ASYNC_READS=1`: no read blocks the game thread any more.
