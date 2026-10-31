@@ -119,8 +119,8 @@ inline bool build_mesh(const remixapi_Interface& api, State& s, const live_captu
     surface.indices_count = upload.indices.size();
     surface.material = material_for(api, s, upload.texture, upload.alpha_op, upload.alpha_ref, upload.normal);
     remixapi_MeshInfoSkinning skinning{};
-    // Skinned (Phase 4): the upload already carries one index word and three weight floats per slot, the layout the
-    // runtime reads (UPSTREAM_SKINNING_STRIDE.md), so the counts go through as they are.
+    // Skinned (Phase 4): the upload already carries four unpacked indices and three weight floats per slot (plus a
+    // 4-float tail), the extents the runtime reads (UPSTREAM_SKINNING_STRIDE.md), so the counts go through as they are.
     if (upload.skinned && !upload.bones.empty() && !upload.weights.empty()) {
         skinning.bonesPerVertex = 4;
         skinning.blendWeights_values = upload.weights.data();

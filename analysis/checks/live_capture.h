@@ -279,15 +279,16 @@ inline int single_bone(const live_decode::Output& out) {
 
 // Phase 4: the bind-space mesh in the only weight layout the runtime reads exactly. skinning.h reads vertex i's weights
 // at [i, i+1, i+2] with a hardcoded 4-byte stride, whatever bonesPerVertex says, so real vertex i sits at slot 3i and
-// owns three consecutive weight floats; the fourth index and weight are derived from the packed word and the sum
-// (analysis/UPSTREAM_SKINNING_STRIDE.md).
+// owns three consecutive weight floats; the fourth weight is derived from the sum (analysis/UPSTREAM_SKINNING_STRIDE.md).
+// Indices go in UNPACKED, four uint32 per slot: CreateMesh reads vertices_count * bonesPerVertex of them and packs
+// to bytes itself (remix-1.6.1 rtx_remix_api.cpp:961-976). Pre-packed words made it over-read: live crash 2026-10-31.
 // shortcut: the mesh keeps its bind-pose bounds, so a character drawn far from its bind pose can be culled; the anchor
 // instance transform that fixes it (PHASE4_PLAN.md) is not implemented yet.
 inline bool three_slot_layout(live_decode::Output& out) {
     const std::size_t count = out.vertices.size();
     if (!count || out.bones.size() != 4 * count || out.weights.size() != 4 * count) return false;
     std::vector<live_decode::Vertex> vertices(3 * count);
-    std::vector<std::uint32_t> bones(3 * count, 0);
+    std::vector<std::uint32_t> bones(12 * count, 0);  // 3 slots x 4 indices; padding slots point at bone 0
     // Every slot is skinned, padding included, and the last one reads weights [3V-1, 3V+1]: 3V+4 is the size the
     // laptop probe proved on 1.6.1 (SKINNING_4BONE_RESULT.md), a bare 3V would read past the end.
     std::vector<float> weights(3 * count + 4, 0);
@@ -300,12 +301,10 @@ inline bool three_slot_layout(live_decode::Output& out) {
         v.color = src.color;
         vertices[3 * i + 1].normal[2] = vertices[3 * i + 2].normal[2] = 1.f;  // never drawn; the shader still reads a normal
         for (unsigned k = 0; k < 3; ++k) weights[3 * i + k] = out.weights[4 * i + k];  // the runtime derives the fourth
-        std::uint32_t packed = 0;
         for (unsigned k = 0; k < 4; ++k) {
-            if (out.bones[4 * i + k] > 255) return false;  // one byte per index in the packed word
-            packed |= out.bones[4 * i + k] << (8 * k);
+            if (out.bones[4 * i + k] > 255) return false;  // the runtime packs each index into one byte
+            bones[12 * i + k] = out.bones[4 * i + k];
         }
-        bones[3 * i] = packed;
     }
     for (std::uint32_t& index : out.indices) index *= 3;
     out.vertices.swap(vertices);

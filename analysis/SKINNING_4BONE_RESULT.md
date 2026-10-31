@@ -1,3 +1,10 @@
+> **Correction 2026-10-31: the bone-index half of this result is void.** The probe passed one pre-packed index word
+> per slot, but `CreateMesh` reads `vertices_count * bonesPerVertex` unpacked indices and packs them itself
+> (`remix-1.6.1` `rtx_remix_api.cpp:961-976`). The runtime therefore read 4x past the probe's array and skinned with
+> garbage indices; the IoU 1.000 below says this mesh's result did not depend on which bones were picked, not that
+> the layout is right. The weight-stride half (three slots per real vertex) still stands: it comes from the pinned
+> shader, gated offline. Re-run with unpacked indices before trusting it. See `PHASE4_CRASH.md`.
+
 # Exact 4-bone GPU skinning works on the shipped runtime (verified on the laptop, 2026-10-30 23:57)
 
 Probe `remix-mesh.exe` `f5d2c6d0ecb2975c8030f90553c9e8f26854165b8f4326e9d4c4f0bcf57c0979`, built by

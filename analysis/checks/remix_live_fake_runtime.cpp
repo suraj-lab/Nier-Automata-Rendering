@@ -98,6 +98,23 @@ remixapi_ErrorCode REMIXAPI_CALL create_mesh(const remixapi_MeshInfo* i, remixap
             skinned = true;
             bones_per_vertex = sf.skinning_value.bonesPerVertex;
             weights = sf.skinning_value.blendWeights_count;
+            // The real runtime's read extents (remix-1.6.1 rtx_remix_api.cpp:961-976 and skinning.h): CreateMesh reads
+            // vertices_count * bonesPerVertex UNPACKED uint32 indices and packs them to bytes itself, and the shader
+            // reads weights [v, v + bonesPerVertex - 2] for vertex v. Short arrays are host over-reads: live crash 2026-10-31.
+            const unsigned long long need_idx = 1ull * sf.vertices_count * sf.skinning_value.bonesPerVertex;
+            const unsigned long long need_w = sf.vertices_count + (sf.skinning_value.bonesPerVertex > 1 ? sf.skinning_value.bonesPerVertex - 2 : 0);
+            if (sf.skinning_value.blendIndices_count < need_idx)
+                note("VIOLATION CreateMesh blendIndices_count=%u < vertices*bonesPerVertex=%llu: the runtime over-reads",
+                     sf.skinning_value.blendIndices_count, need_idx);
+            if (sf.skinning_value.blendWeights_count < need_w)
+                note("VIOLATION CreateMesh blendWeights_count=%u < %llu: the skinning shader over-reads",
+                     sf.skinning_value.blendWeights_count, need_w);
+            for (unsigned long long k = 0; k < need_idx && k < sf.skinning_value.blendIndices_count; ++k)
+                if (sf.skinning_value.blendIndices_values[k] > 255) {
+                    note("VIOLATION CreateMesh blend index %u at %llu does not fit the runtime's 8-bit packing",
+                         sf.skinning_value.blendIndices_values[k], k);
+                    break;
+                }
         }
     }
     float v0[3] = {0, 0, 0};

@@ -29,7 +29,7 @@ the single-bone draws):
      references; positions and normals as captured, weights cleared (`skinning_hasvalue` carries the data);
    * `bonesPerVertex = 4`, `blendWeights_count = 3V`, weights `w0,w1,w2` at `3i, 3i+1, 3i+2` (the shader
      derives the fourth);
-   * one packed `uint32` per slot (four uint8 indices), `blendIndices_count = 3V`;
+   * four unpacked `uint32` indices per slot, `blendIndices_count = 12V` (the runtime packs them; corrected 2026-10-31);
    * index buffer remapped `j -> 3j`, index count unchanged.
 3. Per frame, send the palette with `remixapi_InstanceInfoBoneTransformsEXT`
    (`boneTransforms_values` = the 48-byte-stride matrices converted to `remixapi_Transform`), one

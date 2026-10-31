@@ -47,7 +47,9 @@ ADDED = ['d3d11_dlaa.dll', 'NIER_RENDER.ini', 'steam_appid.txt', 'nier_render_fo
 # Created by the user during a run: restore MOVES these into WORK\kept\<stamp>\ instead of deleting them. (2026-10-30:
 # an F9 capture, 168 MB, was deleted by the old restore two minutes after it was taken.) The Remix consent answer is
 # kept the same way and put back by install, so the runtime does not ask again on every launch.
-KEEP = ['NIER_CAPTURE', r'data\rtx-remix\logs\.sentry-native\user-consent']
+# The whole .sentry-native folder: the runtime's crash handler writes its minidump there and ends the process before
+# WER sees it (2026-10-31: a live crash left no Application event, and restore deleted the only dump).
+KEEP = ['NIER_CAPTURE', r'data\rtx-remix\logs\.sentry-native']
 OPTS = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10']
 
 

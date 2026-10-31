@@ -37,8 +37,11 @@ exact when it owns three consecutive slots:
   `3i+1, 3i+2` are never referenced);
 * weights at `3i, 3i+1, 3i+2` are `w0, w1, w2` of vertex `i`, and `blendWeights_count = 3V + 4`: the padding
   slots are skinned too, and the last one reads up to index `3V+1`, so a bare `3V` reads past the end;
-* one packed `uint32` per slot (four uint8 bone indices) — the index stride of 4 bytes is already right,
-  `wordsPerTuple = ceil(4/4) = 1`;
+* four **unpacked** `uint32` indices per slot, `blendIndices_count = 4 * 3V`: `CreateMesh` reads
+  `vertices_count * bonesPerVertex` indices and packs them into bytes itself (`remix-1.6.1`
+  `rtx_remix_api.cpp:961-976`), so the GPU side ends up with one packed word per slot (`wordsPerTuple = 1`).
+  **Correction 2026-10-31:** this line said "one packed `uint32` per slot". That made the runtime read 4x past our
+  array; it crashed the first live Phase 4 run (`analysis/PHASE4_CRASH.md`);
 * remap the index buffer: drawn index `j` becomes `3 * j`.
 
 NieR's weights are byte-quantised and sum to exactly 255/255 per vertex (142 of 142 skinned main-view
