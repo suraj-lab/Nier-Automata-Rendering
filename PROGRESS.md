@@ -6,6 +6,13 @@ State at this pause: nothing installed on either machine, no game running, lapto
 uncommitted on `main` above `a7a3c0b`. The noon PAUSED note below still applies in substance: do not launch a game or
 render unattended (and a save cannot be loaded without the operator).
 
+**Texture slots measured (2026-10-31 00:20, F9 frame_453279156, 286 main-view draws of 760).** Every
+main-view draw has PS textures bound; 283 of 286 have something at slot 0, 285 at slot 2, 286 at slot 14,
+plus 11/12/3/4/7. 21 distinct pixel shaders. So the live path's "first usable PS texture is the albedo" rule
+always finds a texture; the grey/wrong-colour surfaces are therefore a **wrong-slot** problem, not a
+missing-texture one. Next measurement: dump the captured `live_*.dds` for one shader family (the top shader,
+109 draws) and see which slot actually looks like albedo, instead of guessing from the histogram.
+
 **LATEST (2026-10-30 23:45): the vanishing world is FIXED; remaining popping is genuine skinned animation.**
 `6cfba08` (build `dbbdd551…`). User: "looks a lot more stable now". Recording `runtime/laptop-port/live-rigid/recording/`:
 20 consecutive Remix frames all show the full camp (the 21:54 recording had 4 of 20 frames with the world gone).
