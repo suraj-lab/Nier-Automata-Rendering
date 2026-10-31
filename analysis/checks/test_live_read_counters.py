@@ -25,9 +25,11 @@ import test_menu_overlay as tmo
 import test_nscn_scene as ts
 
 tr.ENV_KEYS = tuple(tr.ENV_KEYS) + ('NIER_REMIX_LIVE_CAMERA_LOG', 'NIER_REMIX_LIVE', 'NIER_REMIX_LIVE_TEX', 'NIER_REMIX_LIVE_STATS_EVERY',
-                                     'NIER_REMIX_LIVE_MAX_WRITE_KB', 'NIER_REMIX_LIVE_SHADOW_KB', 'NIER_REMIX_LIVE_BUDGET_KB')
+                                     'NIER_REMIX_LIVE_MAX_WRITE_KB', 'NIER_REMIX_LIVE_SHADOW_KB', 'NIER_REMIX_LIVE_BUDGET_KB',
+                                     'NIER_REMIX_LIVE_ASYNC_READS', 'NIER_REMIX_LIVE_READ_LATENCY',
+                                     'MOCK_LATE_IMMUTABLE')  # tr.run clears only these: a case's switch must not leak
 KEYS = ('reads', 'first', 'trimmed', 'unmirrored', 'const', 'immutable', 'default', 'dynamic', 'read_kb', 'read_ms',
-        'texture_ms', 'skinned', 'created')
+        'texture_ms', 'skinned', 'created', 'blocking', 'pending', 'waits')
 
 
 REASONS = ('first', 'unknown', 'buffer', 'pose', 'texture', 'evicted')
@@ -93,6 +95,9 @@ def inside():
         assert fps, 'no fps line with NIER_REMIX_LIVE_STATS_EVERY=10'
         for field in ('update', 'submit', 'present', 'copy', 'readback', 'convert', 'publish', 'other'):
             assert re.search(rf'\b{field} -?[\d.]+', fps[-1]), f'fps line lacks "{field}": {fps[-1]}'
+        # Control for case 5: in the default (synchronous) mode every read stalls the game thread.
+        assert v['blocking'] == v['reads'] and v['pending'] == 0 and v['waits'] == 0, f'sync reads not counted as blocking: {v}'
+        sync_meshes = sorted({re.search(r'v0=(\S+)', x).group(1) for x in r['fake'].splitlines() if x.startswith('CreateMesh')})
         results['unmirrored'] = f'{v}; fps line: {fps[-1]}'
 
         # 2. Shadow budget of 1 KB plus a mesh budget for two meshes: B's static bytes are dropped, B is evicted while
@@ -136,6 +141,20 @@ def inside():
         assert v['created'] >= 2, f'the late immutable vertex/index buffers were not captured at creation: {v}'
         assert r['geometry_reads_late'] == '0', f'the late immutable mesh was read back from the GPU: {r} {v}'
         results['created'] = f'{v}; geometry_reads_late={r["geometry_reads_late"]}'
+
+        # 5. NIER_REMIX_LIVE_ASYNC_READS=1 (live 2026-10-31: ~60 synchronous reads a second, ~5 ms each whatever their
+        #    size, froze the camera in steps). Same scenario as case 1, every read held "still drawing" for 3 polls: the
+        #    game thread must never block, the latency path must really be taken, and the same meshes must still be built.
+        r, log = run('async', {'NIER_REMIX_LIVE_MAX_WRITE_KB': '0', 'NIER_REMIX_LIVE_ASYNC_READS': '1',
+                               'NIER_REMIX_LIVE_READ_LATENCY': '3'})
+        v = reads(log)
+        assert v['reads'] >= 1 and v['blocking'] == 0, f'async mode still blocked the game thread: {v}'
+        assert v['pending'] >= 3 * v['reads'] and v['waits'] >= 1, f'the latency path was not exercised: {v}'
+        assert v['unmirrored'] >= 1, f'the rewritten buffer was not re-read asynchronously: {v}'
+        async_meshes = sorted({re.search(r'v0=(\S+)', x).group(1) for x in r['fake'].splitlines() if x.startswith('CreateMesh')})
+        assert async_meshes == sync_meshes, f'async reads lost or changed geometry: {async_meshes} vs {sync_meshes}'
+        assert r['presented'] == '80', r
+        results['async'] = f'{v}; meshes {async_meshes}'
     except Exception as exc:
         (OUT / 'validation.json').write_text(json.dumps({'passed': False, 'error': str(exc)[-3000:], 'results': results,
                                                          'work': str(work)}, indent=2) + '\n')

@@ -137,6 +137,9 @@ State configure() {
             live_capture::scene_target_enabled = _wcstoui64(all.c_str(), nullptr, 10) == 0;
         if (const std::wstring kb = env(L"NIER_REMIX_LIVE_READ_BUDGET_KB"); !kb.empty())
             live_capture::read_budget_per_frame = std::min<std::size_t>(std::size_t(_wcstoui64(kb.c_str(), nullptr, 10)), 1u << 24) << 10;
+        live_capture::async_reads = env(L"NIER_REMIX_LIVE_ASYNC_READS") == L"1";
+        if (const std::wstring polls = env(L"NIER_REMIX_LIVE_READ_LATENCY"); !polls.empty())  // test switch
+            live_capture::read_latency = static_cast<unsigned>(std::min<unsigned long long>(_wcstoui64(polls.c_str(), nullptr, 10), 1000));
         if (const std::wstring fails = env(L"NIER_REMIX_LIVE_FAIL_VB_READS"); !fails.empty())
             live_capture::fail_vb_reads = static_cast<unsigned>(_wcstoui64(fails.c_str(), nullptr, 10));
         if (const std::wstring frames = env(L"NIER_REMIX_LIVE_EXPIRE_FRAMES"); !frames.empty())
@@ -436,14 +439,16 @@ struct Worker {
                                   live_capture::buffer_skinned.load(), live_capture::buffer_dynamic.load(),
                                   live_capture::game_frames.exchange(0), live_capture::game_max_us.exchange(0) / 1000);
                     logger.load()("remix: live reads=%llu first=%llu trimmed=%llu unmirrored=%llu const=%llu immutable=%llu "
-                                  "default=%llu dynamic=%llu read_kb=%llu read_ms=%llu texture_ms=%llu skinned=%u created=%llu",
+                                  "default=%llu dynamic=%llu read_kb=%llu read_ms=%llu texture_ms=%llu skinned=%u created=%llu "
+                                  "blocking=%llu pending=%llu waits=%llu",
                                   live_capture::read_reasons[0].load() + live_capture::read_reasons[1].load() + live_capture::read_reasons[2].load(),
                                   live_capture::read_reasons[0].load(), live_capture::read_reasons[1].load(), live_capture::read_reasons[2].load(),
                                   live_capture::read_kinds[0].load(), live_capture::read_kinds[1].load(),
                                   live_capture::read_kinds[2].load(), live_capture::read_kinds[3].load(),
                                   live_capture::read_bytes_total.load() >> 10, live_capture::read_us_total.load() / 1000,
                                   live_capture::texture_us_total.load() / 1000, frame.skinned,
-                                  live_capture::created_captures.load());
+                                  live_capture::created_captures.load(), live_capture::blocking_reads.load(),
+                                  live_capture::pending_polls.load(), live_capture::read_waits.load());
                     logger.load()("remix: live draws=%u instances=%u meshes=%u built=%u evicted=%u identical=%u "
                                   "blended=%u untextured=%u textures=%u hud=%u small_viewport=%u scene=%ux%u skipped_pass=%u "
                                   "fallbacks=%u mesh_bytes=%llu dropped=%u lights=%u light_creates=%u sky=%u prepass=%u alpha_tested=%u light_state=0x%x",

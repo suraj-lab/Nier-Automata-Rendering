@@ -87,6 +87,18 @@ struct Shadow {
     bool trimmable = false;            // static vertex/index data; constant buffers are small and always kept
 };
 inline std::map<ID3D11Buffer*, Shadow>& shadows() { static std::map<ID3D11Buffer*, Shadow> s; return s; }
+struct PendingRead {
+    ID3D11Buffer* staging = nullptr;  // holds the copy; the source buffer is kept referenced until it lands
+    std::uint64_t identity = 0;       // the source's identity when copied: a write since then makes the copy stale
+    std::uint64_t issued = 0;         // frame_number, for expiry of a read whose draw never comes back
+    unsigned polls = 0;
+};
+inline std::map<ID3D11Buffer*, PendingRead>& pending_reads() { static std::map<ID3D11Buffer*, PendingRead> p; return p; }
+inline void drop_pending(std::map<ID3D11Buffer*, PendingRead>::iterator it) {
+    it->second.staging->Release();
+    it->first->Release();
+    pending_reads().erase(it);
+}
 inline std::size_t shadow_budget = std::size_t(256) << 20;
 // While bytes of several buffers are being resolved, nothing may be dropped: the returned pointers would dangle.
 inline unsigned pins = 0;
@@ -112,6 +124,14 @@ inline unsigned long long now_us() {
     return static_cast<unsigned long long>(c.QuadPart / f.QuadPart * 1000000 + c.QuadPart % f.QuadPart * 1000000 / f.QuadPart);
 }
 inline unsigned fail_vb_reads = 0;                         // test switch only
+// NIER_REMIX_LIVE_ASYNC_READS=1: a staging read never blocks the game thread. Live 2026-10-31: ~60 first-sight reads
+// a second at ~5 ms each, whatever their size (the Map waits for the GPU, which is also path tracing), froze the camera
+// in steps. The copy is issued on the draw that needs it and polled with DO_NOT_WAIT on later draws; until it lands the
+// draw is not rebuilt (an existing mesh stays, a new one appears a frame or two late). Off until the live A/B.
+inline bool async_reads = false;
+inline unsigned read_latency = 0;  // test switch: report "still drawing" this many polls before really trying
+inline std::atomic<unsigned long long> blocking_reads{0}, pending_polls{0}, read_waits{0};
+inline bool read_pending = false;  // set by buffer_bytes when it returned nothing because a read is in flight
 // Above this, a write is not mirrored: reading a large write-combined mapping back costs more than the whole draw
 // stream (measured on the real game), so the bytes are dropped. A draw that needs them reads them through a staging
 // copy: budgeted for first sight, immediate when the content changed (a changed mesh must never keep its old shape,
@@ -406,6 +426,11 @@ inline void expire_entries() {
         if (it->second.used_frame + expire_frames < frame_number) { erase_shadow(it); released.fetch_add(1); }
         it = next;
     }
+    for (auto it = pending_reads().begin(); it != pending_reads().end();) {
+        auto next = std::next(it);
+        if (it->second.issued + expire_frames < frame_number) drop_pending(it);  // its draw never came back
+        it = next;
+    }
     // Textures are deliberately never expired: a re-export would get a new id, a second file and a second material,
     // and fill the disk budget. shortcut: their references are held for the session; bounded by the 2 GB budget.
 }
@@ -419,6 +444,7 @@ inline void set_permitted(bool ok) {
         building() = Frame{};
         mapped().clear();
         while (!shadows().empty()) erase_shadow(shadows().begin());  // the game's buffers are no longer pinned
+        while (!pending_reads().empty()) drop_pending(pending_reads().begin());
         for (auto& entry : texture_ids()) entry.first->Release();
         texture_ids().clear();
         built_versions().clear();
@@ -499,7 +525,47 @@ inline const std::vector<unsigned char>* buffer_bytes(ID3D11Device* device, ID3D
         const unsigned kind = (desc.BindFlags & D3D11_BIND_CONSTANT_BUFFER) ? 0u : desc.Usage == D3D11_USAGE_IMMUTABLE ? 1u
                             : desc.Usage == D3D11_USAGE_DYNAMIC ? 3u : 2u;
         const unsigned long long started = now_us();
-        const bool read = read_into(device, context, buffer, desc, bytes);
+        bool read = false;
+        if (async_reads) {
+            auto it = pending_reads().find(buffer);
+            if (it != pending_reads().end() && it->second.identity != identity(buffer)) {
+                drop_pending(it);  // the game wrote it after the copy was taken: copy again
+                it = pending_reads().end();
+            }
+            if (it == pending_reads().end()) {
+                D3D11_BUFFER_DESC staging_desc = desc;
+                staging_desc.Usage = D3D11_USAGE_STAGING;
+                staging_desc.BindFlags = 0;
+                staging_desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+                staging_desc.MiscFlags = 0;
+                staging_desc.StructureByteStride = 0;
+                ID3D11Buffer* staging = nullptr;
+                if (FAILED(device->CreateBuffer(&staging_desc, nullptr, &staging)) || !staging) return nullptr;
+                context->CopyResource(staging, buffer);
+                buffer->AddRef();
+                it = pending_reads().emplace(buffer, PendingRead{staging, identity(buffer), frame_number, 0}).first;
+            }
+            D3D11_MAPPED_SUBRESOURCE map{};
+            const HRESULT hr = it->second.polls++ < read_latency
+                                   ? DXGI_ERROR_WAS_STILL_DRAWING
+                                   : context->Map(it->second.staging, 0, D3D11_MAP_READ, D3D11_MAP_FLAG_DO_NOT_WAIT, &map);
+            if (hr == DXGI_ERROR_WAS_STILL_DRAWING) {
+                pending_polls.fetch_add(1, std::memory_order_relaxed);
+                read_us_total.fetch_add(now_us() - started, std::memory_order_relaxed);
+                read_pending = true;
+                return nullptr;
+            }
+            if (FAILED(hr)) { drop_pending(it); return nullptr; }
+            try {
+                bytes.assign(static_cast<const unsigned char*>(map.pData), static_cast<const unsigned char*>(map.pData) + desc.ByteWidth);
+                read = true;
+            } catch (...) {}
+            context->Unmap(it->second.staging, 0);
+            drop_pending(it);
+        } else {
+            read = read_into(device, context, buffer, desc, bytes);
+            if (read) blocking_reads.fetch_add(1, std::memory_order_relaxed);
+        }
         read_us_total.fetch_add(now_us() - started, std::memory_order_relaxed);
         if (!read) return nullptr;
         read_reasons[reason].fetch_add(1, std::memory_order_relaxed);
@@ -1189,9 +1255,28 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     // A deferred texture must not hold the geometry back: it is uploaded without a material for now, and the
     // texture's arrival invalidates it (waiting_materials) so the next draw rebuilds the mesh with the material.
     const bool deferred = !changed && needs_read && read_bytes_this_frame >= read_budget_per_frame;
-    const bool rebuild = !deferred && (unknown || previously == built_versions().end() || previously->second != version);
+    bool rebuild = !deferred && (unknown || previously == built_versions().end() || previously->second != version);
     std::uint64_t buffer_version = identity(ib);
     for (unsigned i = 0; i < vb_count; ++i) buffer_version = hash_value(buffer_version ^ identity(vbs[i]));
+    const std::vector<unsigned char>* ib_bytes = nullptr;
+    const std::vector<unsigned char>* vb_bytes[4] = {};
+    bool readable = false;
+    if (rebuild) {
+        read_pending = false;
+        ib_bytes = buffer_bytes(device, context, ib);
+        readable = ib_bytes != nullptr;
+        // Async: issue every read of this draw at once, so they land together instead of one per frame.
+        for (unsigned i = 0; i < vb_count && (readable || read_pending); ++i) {
+            vb_bytes[i] = buffer_bytes(device, context, vbs[i]);
+            readable = readable && vb_bytes[i] != nullptr;
+        }
+        version = version_now();  // a first read creates the identities
+        if (!readable && read_pending) {
+            // Bytes in flight: not a rebuild yet. Nothing is counted or marked built, so the next draw retries.
+            rebuild = false;
+            read_waits.fetch_add(1, std::memory_order_relaxed);
+        }
+    }
     if (rebuild) {
         unsigned reason = kReasonFirst;
         if (unknown) {
@@ -1217,18 +1302,6 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
         if (built_buffer_versions().size() > 200000) built_buffer_versions().clear();  // bounded like built_versions
         built_buffer_versions()[geometry] = buffer_version;
         if (erased_reason().size() > 200000) erased_reason().clear();
-    }
-    const std::vector<unsigned char>* ib_bytes = nullptr;
-    const std::vector<unsigned char>* vb_bytes[4] = {};
-    bool readable = false;
-    if (rebuild) {
-        ib_bytes = buffer_bytes(device, context, ib);
-        readable = ib_bytes != nullptr;
-        for (unsigned i = 0; i < vb_count && readable; ++i) {
-            vb_bytes[i] = buffer_bytes(device, context, vbs[i]);
-            readable = vb_bytes[i] != nullptr;
-        }
-        version = version_now();  // a first read creates the identities
     }
 
     if (rebuild && readable) {
