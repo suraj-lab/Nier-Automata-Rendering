@@ -1,9 +1,10 @@
 #pragma once
 // Capture the pixel shader's bound material textures for a draw: static 2D textures only (render targets,
-// depth and UAV-bound resources change during the frame and are not materials), mip 0 of slice 0, read
-// back once per frame and written as DDS with a DX10 header so BC-compressed data stays compressed.
+// depth and UAV-bound resources change during the frame and are not materials), every mip level of slice 0,
+// read back once per frame and written as DDS with a DX10 header so BC-compressed data stays compressed.
 // No hooks: only PSGetShaderResources / CopySubresourceRegion / Map on the already-hooked context.
 #include <d3d11.h>
+#include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -41,11 +42,20 @@ inline FormatInfo format_info(DXGI_FORMAT f) {
     }
 }
 
+// Tightly packed geometry of one level: block formats store whole 4x4 blocks even at a 1x1 level.
+struct Level { UINT row_bytes = 0, rows = 0; };
+inline Level level_geometry(const FormatInfo& fi, UINT width, UINT height) {
+    return {(width + fi.block - 1) / fi.block * fi.bytes, (height + fi.block - 1) / fi.block};
+}
+inline Level mip_geometry(const FormatInfo& fi, UINT width, UINT height, UINT mip) {
+    return level_geometry(fi, std::max(1u, width >> mip), std::max(1u, height >> mip));
+}
+
 struct Texture {
     std::uint32_t id = 0;
     DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
     UINT width = 0, height = 0;
-    UINT row_bytes = 0, rows = 0;  // tightly packed mip 0: rows of block rows (BC) or pixel rows
+    UINT mip_levels = 1;           // levels in `bytes`, mip 0 first, each packed tightly
     std::vector<unsigned char> bytes;
 };
 struct Ref { UINT slot = 0; std::uint32_t id = 0; };
@@ -62,7 +72,7 @@ struct Cache {
     ~Cache() { clear(); }
 };
 
-inline bool read_mip0(ID3D11Device* device, ID3D11DeviceContext* context, ID3D11Texture2D* tex,
+inline bool read_mips(ID3D11Device* device, ID3D11DeviceContext* context, ID3D11Texture2D* tex,
                       const D3D11_TEXTURE2D_DESC& desc, Texture& out) {
     const FormatInfo fi = format_info(desc.Format);
     if (!fi.bytes || !desc.Width || !desc.Height) return false;
@@ -71,17 +81,28 @@ inline bool read_mip0(ID3D11Device* device, ID3D11DeviceContext* context, ID3D11
     sd.Usage = D3D11_USAGE_STAGING; sd.BindFlags = 0; sd.CPUAccessFlags = D3D11_CPU_ACCESS_READ; sd.MiscFlags = 0;
     ID3D11Texture2D* staging = nullptr;
     if (FAILED(device->CreateTexture2D(&sd, nullptr, &staging)) || !staging) return false;
-    context->CopySubresourceRegion(staging, 0, 0, 0, 0, tex, D3D11CalcSubresource(0, 0, desc.MipLevels), nullptr);
-    D3D11_MAPPED_SUBRESOURCE map{};
-    if (FAILED(context->Map(staging, 0, D3D11_MAP_READ, 0, &map))) { staging->Release(); return false; }
     out.format = desc.Format; out.width = desc.Width; out.height = desc.Height;
-    out.row_bytes = (desc.Width + fi.block - 1) / fi.block * fi.bytes;
-    out.rows = (desc.Height + fi.block - 1) / fi.block;
-    out.bytes.resize(std::size_t(out.row_bytes) * out.rows);
-    for (UINT r = 0; r < out.rows; ++r)  // the mapped RowPitch may be padded; pack tightly
-        std::memcpy(out.bytes.data() + std::size_t(r) * out.row_bytes,
-                    static_cast<const unsigned char*>(map.pData) + std::size_t(r) * map.RowPitch, out.row_bytes);
-    context->Unmap(staging, 0);
+    out.mip_levels = desc.MipLevels ? desc.MipLevels : 1;
+    std::size_t total = 0;
+    for (UINT m = 0; m < out.mip_levels; ++m) {
+        const Level l = mip_geometry(fi, desc.Width, desc.Height, m);
+        total += std::size_t(l.row_bytes) * l.rows;
+    }
+    out.bytes.resize(total);
+    // One level of staging, reused: copy mip m whole (the region it occupies in the larger staging does not matter,
+    // we only read the level's own rows and pitch). The game's chain is copied, never filtered: BC data cannot be resized.
+    std::size_t at = 0;
+    for (UINT m = 0; m < out.mip_levels; ++m) {
+        context->CopySubresourceRegion(staging, 0, 0, 0, 0, tex, D3D11CalcSubresource(m, 0, out.mip_levels), nullptr);
+        D3D11_MAPPED_SUBRESOURCE map{};
+        if (FAILED(context->Map(staging, 0, D3D11_MAP_READ, 0, &map))) { staging->Release(); return false; }
+        const Level l = mip_geometry(fi, desc.Width, desc.Height, m);
+        for (UINT r = 0; r < l.rows; ++r)  // the mapped RowPitch may be padded; pack tightly
+            std::memcpy(out.bytes.data() + at + std::size_t(r) * l.row_bytes,
+                        static_cast<const unsigned char*>(map.pData) + std::size_t(r) * map.RowPitch, l.row_bytes);
+        context->Unmap(staging, 0);
+        at += std::size_t(l.row_bytes) * l.rows;
+    }
     staging->Release();
     return true;
 }
@@ -113,7 +134,7 @@ inline void capture(ID3D11Device* device, ID3D11DeviceContext* context, Cache& c
             const UINT dynamic_binds = D3D11_BIND_RENDER_TARGET | D3D11_BIND_DEPTH_STENCIL | D3D11_BIND_UNORDERED_ACCESS;
             Texture t;
             if (!(desc.BindFlags & dynamic_binds) && desc.Usage != D3D11_USAGE_DYNAMIC && desc.SampleDesc.Count == 1 &&
-                cache.bytes < byte_budget && read_mip0(device, context, tex, desc, t)) {
+                cache.bytes < byte_budget && read_mips(device, context, tex, desc, t)) {
                 id = t.id = static_cast<std::uint32_t>(cache.textures.size() + 1);
                 cache.bytes += t.bytes.size();
                 cache.textures.push_back(std::move(t));
@@ -125,24 +146,29 @@ inline void capture(ID3D11Device* device, ID3D11DeviceContext* context, Cache& c
     }
 }
 
-// DDS with a DX10 header (BC data kept as-is). Returns false on any write error.
+// DDS with a DX10 header (BC data kept as-is), carrying the game's whole mip chain. Returns false on any write error.
 inline bool write_dds(const wchar_t* path, const Texture& t) {
     FILE* f = _wfopen(path, L"wb");
     if (!f) return false;
+    const FormatInfo fi = format_info(t.format);
+    const std::uint32_t levels = t.mip_levels ? t.mip_levels : 1;
+    const Level mip0 = level_geometry(fi, t.width, t.height);
     std::uint32_t h[32] = {};
     h[0] = 0x20534444;            // "DDS "
     h[1] = 124;                   // header size
-    h[2] = 0x1 | 0x2 | 0x4 | 0x1000 | 0x80000;  // CAPS | HEIGHT | WIDTH | PIXELFORMAT | LINEARSIZE
+    // Declaring the chain is what stops Remix calling the replacement suboptimal and gives it a pyramid to filter with.
+    h[2] = 0x1 | 0x2 | 0x4 | 0x1000 | 0x80000 | (levels > 1 ? 0x20000 : 0);  // + MIPMAPCOUNT when there is a chain
     h[3] = t.height; h[4] = t.width;
-    h[5] = static_cast<std::uint32_t>(t.bytes.size());  // linear size of mip 0
-    h[7] = 1;                     // mip count
+    h[5] = static_cast<std::uint32_t>(mip0.row_bytes * mip0.rows);  // linear size of mip 0
+    h[7] = levels;                // mip count
     h[19] = 32;                   // pixel format size
     h[20] = 0x4;                  // DDPF_FOURCC
     h[21] = 0x30315844;           // "DX10"
-    h[27] = 0x1000;               // DDSCAPS_TEXTURE
+    h[27] = 0x1000 | (levels > 1 ? 0x400000 : 0);  // DDSCAPS_TEXTURE | DDSCAPS_MIPMAP
+    h[28] = levels > 1 ? 0x400000 : 0;             // DDSCAPS2_MIPMAP
     const std::uint32_t dx10[5] = {static_cast<std::uint32_t>(t.format), 3 /*TEXTURE2D*/, 0, 1, 0};
     const bool ok = std::fwrite(h, 4, 32, f) == 32 && std::fwrite(dx10, 4, 5, f) == 5 &&
-                    std::fwrite(t.bytes.data(), 1, t.bytes.size(), f) == t.bytes.size();
+                    std::fwrite(t.bytes.data(), 1, t.bytes.size(), f) == t.bytes.size();  // mip 0..n in order
     return (std::fclose(f) == 0) && ok;
 }
 

@@ -646,8 +646,8 @@ inline void STDMETHODCALLTYPE hooked_copy_region(ID3D11DeviceContext* self, ID3D
 }
 
 // ---- textures ----------------------------------------------------------------------------------
-// Mip 0 of a PS material texture, written once per resource as a DDS the Remix runtime can load. Each one is a GPU
-// readback and a file write on the game's thread, so they are rate-limited per frame and capped on disk.
+// A PS material texture with its whole mip chain, written once per resource as a DDS the Remix runtime can load.
+// Each one is a GPU readback and a file write on the game's thread, so they are rate-limited per frame and capped on disk.
 enum class TextureResult { Captured, Unusable, Deferred };
 
 inline TextureResult write_texture(ID3D11Device* device, ID3D11DeviceContext* context, ID3D11Resource* resource,
@@ -665,7 +665,7 @@ inline TextureResult write_texture(ID3D11Device* device, ID3D11DeviceContext* co
     if (!(desc.BindFlags & dynamic_binds) && desc.Usage != D3D11_USAGE_DYNAMIC && desc.SampleDesc.Count == 1) {
         ++textures_this_frame;
         const unsigned long long started = now_us();
-        const bool read = texture_capture::read_mip0(device, context, texture, desc, pixels);
+        const bool read = texture_capture::read_mips(device, context, texture, desc, pixels);
         texture_us_total.fetch_add(now_us() - started, std::memory_order_relaxed);
         if (read) {
             const std::uint32_t assigned = next_texture_id;
