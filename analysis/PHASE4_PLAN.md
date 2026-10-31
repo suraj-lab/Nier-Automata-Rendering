@@ -41,7 +41,8 @@ the single-bone draws):
 * **Bind-pose bounds.** Remix culls and bounds instances from the mesh, and a bind-space mesh with a
   character's limbs elsewhere will be culled at some camera angles. The reference implementation
   (l4d2-rtx, `analysis/PRIOR_ART.md`; its `src/comp/game/api_skinned.cpp` is quoted in
-  `NEW_VEGAS_RTX_NOTES.md`) keeps the mesh in bind space and sets the instance transform to
+  `NEW_VEGAS_RTX_NOTES.md`; the repo could not be re-fetched on 2026-10-30, so treat that quote as
+  second-hand) keeps the mesh in bind space and sets the instance transform to
   `T(bone0 anchor)`; the instance bounds then follow the actor. Do the same: instance transform =
   translation of bone 0 (rounded to 1/16 unit, as they do, to keep motion history stable).
 * **Per-frame BLAS refit cost.** Every animated instance now refits instead of being rebuilt; the runtime
