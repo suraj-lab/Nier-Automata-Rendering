@@ -24,6 +24,12 @@ inline unsigned attempts = 0;
 inline bool pending_valid = false;
 inline std::array<float, 14> pending{};
 inline Snapshot published;
+// The CPU copy of a constant buffer, when another layer already mirrors the game's writes (live capture does: every
+// constant-buffer write is kept). Live 2026-10-31: the camera came from up to 4 blocking staging reads per frame,
+// and a frame whose reads did not decode published no camera, so Remix kept rendering the old view ("camera stuck").
+inline bool (*cpu_bytes)(ID3D11Buffer*, unsigned char* out, std::size_t size) = nullptr;
+inline std::atomic<unsigned long long> cpu_reads{0}, samples{0}, gap_max{0};
+inline unsigned long long gap = 0;  // game frames since the last published camera (game thread only)
 
 // Enable once before starting the worker; failure revokes future observations without waiting on the GPU.
 inline void set_enabled(bool enabled) {
@@ -47,7 +53,13 @@ inline void end_frame() {
     if (!frame_open.exchange(false, std::memory_order_acq_rel)) return;
     active_context.store(nullptr, std::memory_order_release);
     std::lock_guard<std::mutex> lock(frame_mutex);
-    if (!pending_valid || !permitted.load(std::memory_order_acquire)) { pending_valid = false; return; }
+    if (!pending_valid || !permitted.load(std::memory_order_acquire)) {
+        pending_valid = false;
+        if (++gap > gap_max.load(std::memory_order_relaxed)) gap_max.store(gap, std::memory_order_relaxed);
+        return;
+    }
+    gap = 0;
+    samples.fetch_add(1, std::memory_order_relaxed);
     std::lock_guard<std::mutex> snapshot_lock(snapshot_mutex);
     published.camera = pending;
     ++published.sequence;
@@ -73,6 +85,14 @@ inline bool read_cb0(ID3D11DeviceContext* context, std::array<float, 14>& result
     }
     if (!permitted.load(std::memory_order_acquire)) { source->Release(); return false; }
     ++attempts;
+    if (cpu_bytes) {
+        std::array<unsigned char, 128> bytes{};
+        if (cpu_bytes(source, bytes.data(), bytes.size())) {
+            source->Release();
+            cpu_reads.fetch_add(1, std::memory_order_relaxed);
+            return camera_decode::decode(bytes.data(), bytes.size(), result);
+        }
+    }
     ID3D11Device* device = nullptr;
     context->GetDevice(&device);
     if (!device) { source->Release(); return false; }

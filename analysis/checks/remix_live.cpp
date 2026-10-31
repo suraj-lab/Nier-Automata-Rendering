@@ -137,6 +137,8 @@ State configure() {
             live_capture::scene_target_enabled = _wcstoui64(all.c_str(), nullptr, 10) == 0;
         if (const std::wstring kb = env(L"NIER_REMIX_LIVE_READ_BUDGET_KB"); !kb.empty())
             live_capture::read_budget_per_frame = std::min<std::size_t>(std::size_t(_wcstoui64(kb.c_str(), nullptr, 10)), 1u << 24) << 10;
+        if (const std::wstring us = env(L"NIER_REMIX_LIVE_BUILD_BUDGET_US"); !us.empty())
+            live_capture::build_budget_us = std::min<unsigned long long>(_wcstoui64(us.c_str(), nullptr, 10), 1000000);
         live_capture::async_reads = env(L"NIER_REMIX_LIVE_ASYNC_READS") == L"1";
         if (const std::wstring polls = env(L"NIER_REMIX_LIVE_READ_LATENCY"); !polls.empty())  // test switch
             live_capture::read_latency = static_cast<unsigned>(std::min<unsigned long long>(_wcstoui64(polls.c_str(), nullptr, 10), 1000));
@@ -430,7 +432,8 @@ struct Worker {
                     // Game-thread readbacks, cumulative since start: diff two lines for a rate.
                     logger.load()("remix: live rebuilds first=%llu unknown=%llu buffer=%llu pose=%llu texture=%llu evicted=%llu "
                                   "buffer_skinned=%llu buffer_dynamic=%llu game_frames=%llu game_max_ms=%llu "
-                                  "worst_capture_ms=%llu worst_hook_ms=%llu worst_present_ms=%llu",
+                                  "worst_capture_ms=%llu worst_hook_ms=%llu worst_present_ms=%llu build_deferred=%llu "
+                                  "camera_samples=%llu camera_gap_max=%llu camera_cpu=%llu",
                                   live_capture::rebuild_reasons[live_capture::kReasonFirst].load(),
                                   live_capture::rebuild_reasons[live_capture::kReasonUnknown].load(),
                                   live_capture::rebuild_reasons[live_capture::kReasonBuffer].load(),
@@ -440,7 +443,9 @@ struct Worker {
                                   live_capture::buffer_skinned.load(), live_capture::buffer_dynamic.load(),
                                   live_capture::game_frames.exchange(0), live_capture::game_max_us.exchange(0) / 1000,
                                   live_capture::worst_capture_us.exchange(0) / 1000, live_capture::worst_hook_us.exchange(0) / 1000,
-                                  live_capture::worst_present_us.exchange(0) / 1000);
+                                  live_capture::worst_present_us.exchange(0) / 1000, live_capture::build_deferred.load(),
+                                  camera_capture::samples.exchange(0), camera_capture::gap_max.exchange(0),
+                                  camera_capture::cpu_reads.load());
                     logger.load()("remix: live reads=%llu first=%llu trimmed=%llu unmirrored=%llu const=%llu immutable=%llu "
                                   "default=%llu dynamic=%llu read_kb=%llu read_ms=%llu texture_ms=%llu skinned=%u created=%llu "
                                   "blocking=%llu pending=%llu waits=%llu",
@@ -859,6 +864,14 @@ void begin_game_frame(IDXGISwapChain* swapchain) {
     if (live_enabled) {
         // Hooks only for a live session: with Remix or live capture off, the game's Map/Unmap/Copy calls stay untouched.
         live_capture::install(context.get());
+        // The camera from the CPU mirror of the game's constant-buffer writes: no GPU wait, no frame without a camera.
+        camera_capture::cpu_bytes = [](ID3D11Buffer* buffer, unsigned char* out, std::size_t size) {
+            std::lock_guard<std::recursive_mutex> lock(live_capture::mutex());
+            const live_capture::Shadow* shadow = live_capture::find_shadow(buffer);
+            if (!shadow || shadow->bytes.size() < size) return false;
+            std::memcpy(out, shadow->bytes.data(), size);
+            return true;
+        };
         // Another layer resets the draw slots every frame; repair them when render targets are bound, before drawing.
         draw_capture::install_repair(context.get());
         live_capture::begin_frame(context.get(), desc.Width, desc.Height);

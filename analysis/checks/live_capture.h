@@ -260,6 +260,11 @@ inline void choose_scene_target() {
 inline std::atomic<unsigned long long> skipped_writes{0};
 inline std::atomic<unsigned> injected_failures{0};
 inline std::size_t read_budget_per_frame = std::size_t(64) << 20;
+// NIER_REMIX_LIVE_BUILD_BUDGET_US (0 = unlimited): game-thread time per frame for building meshes seen for the first time
+// (or again after eviction). Live 2026-10-31: turning the camera toward new geometry built hundreds of meshes in one
+// frame, 114-304 ms. Past the budget a first-sight build waits for a later frame; a changed mesh is still rebuilt.
+inline unsigned long long build_budget_us = 0, build_us_this_frame = 0;
+inline std::atomic<unsigned long long> build_deferred{0};
 
 // Geometry -> the shadow identities it was built from, so a rewrite forces exactly one rebuild.
 inline std::map<std::uint64_t, std::uint64_t>& built_versions() { static std::map<std::uint64_t, std::uint64_t> m; return m; }
@@ -856,6 +861,7 @@ inline void begin_frame(ID3D11DeviceContext* context, unsigned width = 0, unsign
         textures_this_frame = 0;
         lights_read = false;
         read_bytes_this_frame = 0;
+        build_us_this_frame = 0;
         target_sizes().clear();
         skinned_occurrences().clear();
         expire_entries();
@@ -1289,7 +1295,10 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     const bool changed = previously != built_versions().end() && previously->second != version;
     // A deferred texture must not hold the geometry back: it is uploaded without a material for now, and the
     // texture's arrival invalidates it (waiting_materials) so the next draw rebuilds the mesh with the material.
-    const bool deferred = !changed && needs_read && read_bytes_this_frame >= read_budget_per_frame;
+    const bool over_build_budget = build_budget_us && !changed && build_us_this_frame >= build_budget_us &&
+                                   (previously == built_versions().end() || unknown);
+    if (over_build_budget) build_deferred.fetch_add(1, std::memory_order_relaxed);
+    const bool deferred = over_build_budget || (!changed && needs_read && read_bytes_this_frame >= read_budget_per_frame);
     bool rebuild = !deferred && (unknown || previously == built_versions().end() || previously->second != version);
     std::uint64_t buffer_version = identity(ib);
     for (unsigned i = 0; i < vb_count; ++i) buffer_version = hash_value(buffer_version ^ identity(vbs[i]));
@@ -1344,6 +1353,7 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
         if (erased_reason().size() > 200000) erased_reason().clear();
     }
 
+    const unsigned long long build_started = now_us();
     if (rebuild && readable) {
         // One decode implementation, also exercised against real captured draws by
         // analysis/checks/test_live_vertex_decode.py. Every slot below vb_count was read successfully here.
@@ -1459,6 +1469,8 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
             built_versions()[geometry] = version;  // do not retry a broken draw every frame
         }
     }
+
+    if (rebuild && readable) build_us_this_frame += now_us() - build_started;
 
     if (stale_used) {
         // Built from a snapshot older than the game's latest write: rebuild from the fresh copy on the next draw.

@@ -27,7 +27,8 @@ import test_nscn_scene as ts
 tr.ENV_KEYS = tuple(tr.ENV_KEYS) + ('NIER_REMIX_LIVE_CAMERA_LOG', 'NIER_REMIX_LIVE', 'NIER_REMIX_LIVE_TEX', 'NIER_REMIX_LIVE_STATS_EVERY',
                                      'NIER_REMIX_LIVE_MAX_WRITE_KB', 'NIER_REMIX_LIVE_SHADOW_KB', 'NIER_REMIX_LIVE_BUDGET_KB',
                                      'NIER_REMIX_LIVE_ASYNC_READS', 'NIER_REMIX_LIVE_READ_LATENCY',
-                                     'MOCK_LATE_IMMUTABLE', 'MOCK_LIVE_REWRITE_SAME', 'FAKE_REMIX_INSTANCE_LOG')  # tr.run clears only these: a case's switch must not leak
+                                     'MOCK_LATE_IMMUTABLE', 'MOCK_LIVE_REWRITE_SAME', 'FAKE_REMIX_INSTANCE_LOG',
+                                     'NIER_REMIX_LIVE_BUILD_BUDGET_US')  # tr.run clears only these: a case's switch must not leak
 KEYS = ('reads', 'first', 'trimmed', 'unmirrored', 'const', 'immutable', 'default', 'dynamic', 'read_kb', 'read_ms',
         'texture_ms', 'skinned', 'created', 'blocking', 'pending', 'waits')
 
@@ -125,6 +126,7 @@ def inside():
         # created before the capture hooks armed has no tracked version yet and is counted as 'unknown', not 'first'.
         assert why['first'] + why['unknown'] >= 2 and why['buffer'] == 1, f'default run rebuild reasons: {why}'
         assert why['pose'] == 0 and why['evicted'] == 0 and why['texture'] == 0, f'default run rebuild reasons: {why}'
+        default_meshes = sorted({re.search(r'v0=(\S+)', x).group(1) for x in r['fake'].splitlines() if x.startswith('CreateMesh')})
         results['default'] = f'{v}; rebuilds {why}'
 
         # 3b. NIER_REMIX_LIVE_CAMERA_LOG=1: one line per live frame, captured camera next to the game's own camera. The mock
@@ -134,7 +136,15 @@ def inside():
         assert len(cams) >= 20, f'expected one camera line per live frame, got {len(cams)}'
         assert all('game=unreadable' in x and re.search(r'captured=-?[\d.]+,-?[\d.]+,-?[\d.]+ ', x) for x in cams), cams[:3]
         assert r['presented'] == '80', r
-        results['camera-log'] = f'{len(cams)} lines; {cams[-1]}'
+        # The camera comes from the CPU mirror of the game's constant-buffer writes: no blocking staging read per frame
+        # (live 2026-10-31: up to 4 per frame), and a camera published on (nearly) every game frame.
+        lines = [x for x in tr.remix_lines(log) if x.startswith('remix: live rebuilds ')]
+        last = {k: int(v) for k, v in re.findall(r'(\w+)=(\d+)', lines[-1])}
+        assert int(r['camera_reads']) <= 2, f'the camera is still read back through staging copies: {r}'
+        assert last['camera_cpu'] >= 60, f'the camera was not taken from the CPU mirror: {lines[-1]}'
+        assert all(int(dict(re.findall(r'(\w+)=(\d+)', x))['camera_gap_max']) <= 2 for x in lines[1:]), \
+            f'game frames without a camera: {[x[-80:] for x in lines]}'
+        results['camera-log'] = f'{len(cams)} lines; camera_reads={r["camera_reads"]}; {cams[-1]}'
 
         # 4. An immutable mesh created with initial data at frame 60, after Remix started: it must be built (z = 7.5)
         #    from the bytes kept at creation, with no staging read of any vertex or index buffer from frame 60 on.
@@ -174,6 +184,17 @@ def inside():
                     for m in [re.match(r'DrawInstance presented=(\d+)', x)] if m}
         assert len(a_frames) >= 60, f'instances missing on {80 - len(a_frames)} of 80 frames: {sorted(a_frames)[:10]}'
         results['async-rewrite'] = f'{v}; drawn on {len(a_frames)} frames'
+
+        # 7. NIER_REMIX_LIVE_BUILD_BUDGET_US (live 2026-10-31 async2: worst game frames of 114-304 ms were our own draw hooks
+        #    building hundreds of new meshes in one frame when the camera turned). A 1 us budget allows one new build per
+        #    frame: the rest must wait for later frames, and every mesh of the default run must still be built.
+        r, log = run('build-budget', {'NIER_REMIX_LIVE_BUILD_BUDGET_US': '1'})
+        lines = [x for x in tr.remix_lines(log) if x.startswith('remix: live rebuilds ')]
+        deferred = int(dict(re.findall(r'(\w+)=(\d+)', lines[-1]))['build_deferred'])
+        assert deferred >= 1, f'the build budget never deferred a build: {lines[-1]}'
+        budget_meshes = sorted({re.search(r'v0=(\S+)', x).group(1) for x in r['fake'].splitlines() if x.startswith('CreateMesh')})
+        assert budget_meshes == default_meshes, f'the budget lost geometry: {budget_meshes} vs {default_meshes}'
+        results['build-budget'] = f'build_deferred={deferred}; meshes {budget_meshes}'
     except Exception as exc:
         (OUT / 'validation.json').write_text(json.dumps({'passed': False, 'error': str(exc)[-3000:], 'results': results,
                                                          'work': str(work)}, indent=2) + '\n')
