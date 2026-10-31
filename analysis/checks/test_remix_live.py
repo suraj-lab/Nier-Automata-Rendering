@@ -28,7 +28,7 @@ import test_nscn_scene as ts  # noqa: E402  (NSCN writer)
 
 BACKGROUND, SURFACE, REMIX = tmo.BACKGROUND, tmo.SURFACE, (200, 40, 120)
 PROBE = (100, 100)  # left of the menu panel at every size used here
-ENV_KEYS = ('NIER_REMIX', 'NIER_REMIX_CHEAP_GAME', 'NIER_REMIX_RUNTIME', 'NIER_REMIX_SCENE', 'MOCK_BGRA', 'MOCK_FRAME_MS', 'MOCK_RESIZE_AT', 'MOCK_RESIZE_TO',
+ENV_KEYS = ('NIER_REMIX', 'NIER_REMIX_SIZE', 'NIER_REMIX_CHEAP_GAME', 'NIER_REMIX_RUNTIME', 'NIER_REMIX_SCENE', 'MOCK_BGRA', 'MOCK_FRAME_MS', 'MOCK_RESIZE_AT', 'MOCK_RESIZE_TO',
             'MOCK_START', 'MOCK_CAMERA', 'FAKE_REMIX_FAIL', 'FAKE_REMIX_CAMERA_LOG', 'MOCK_SCENE_FULL', 'MOCK_EMPTY_EVERY',
             'NIER_REMIX_LIVE_NO_HUD', 'NIER_REMIX_LIVE_NO_SKY', 'MOCK_SKY_ONLY_UNTIL', 'MOCK_PREPASS', 'MOCK_CUTOUT_PS')
 
@@ -152,7 +152,7 @@ def inside():
         f = fake.splitlines()
         assert 'Register 1920x1080 started=0' in f, f'Remix must start once, at the monitor size: {f[:4]}'
         lines = remix_lines(log)
-        assert any(x.startswith('remix: starting at monitor size 1920x1080 (game backbuffer 720x480 ') for x in lines), lines
+        assert any(x.startswith('remix: starting at 1920x1080 monitor (game backbuffer 720x480 ') for x in lines), lines
         closed = (d / 'capture-closed.raw').read_bytes()
         assert size(closed) == (1920, 1080) and tmo.near(rgb(closed, *PROBE), REMIX), (size(closed), rgb(closed, *PROBE))
         assert any(x.startswith('remix: resumed at 1920x1080') for x in lines) or not any('paused' in x for x in lines), lines
@@ -168,6 +168,24 @@ def inside():
         assert size(after) == (1280, 720) and tmo.near(rgb(after, *PROBE), BACKGROUND), f'paused: game frame expected {rgb(after, *PROBE)}'
         assert 'VIOLATION' not in fake, fake
         results['on-late-resize'] = 'resize after start: Remix paused with one log line, game frames shown, no reset'
+        # 4c. NIER_REMIX_SIZE starts the worker at the size the GAME presents at. Docked laptop: NieR keeps its own
+        # output device, so it presents on the 2880x1800 panel while the primary monitor is an external ultrawide, and
+        # the worker paused forever. The paused line prints the real device size, so it proves the flag reached the device.
+        d, r, log, fake = run(work, 'forced-size', {**on, 'NIER_REMIX_SIZE': '1280x720'})
+        lines = remix_lines(log)
+        assert any(x.startswith('remix: starting at 1280x720 requested') for x in lines), lines
+        assert any(x.startswith('remix: paused (game backbuffer 1920x1080, Remix 1280x720)') for x in lines), lines
+        assert 'VIOLATION' not in fake, fake
+        # The point of the flag: when the game reaches that size, the worker composites instead of staying paused.
+        d, r, log, fake = run(work, 'forced-size-resize', {**on, 'MOCK_RESIZE_AT': '65', 'NIER_REMIX_SIZE': '1280x720'})
+        lines = remix_lines(log)
+        assert any(x.startswith('remix: resumed at 1280x720') for x in lines), lines
+        results['forced-size'] = 'NIER_REMIX_SIZE sizes the worker to the game, so a game that presents off the primary monitor resumes'
+        # A value that is not WxH is ignored with one line rather than silently doing nothing.
+        d, r, log, fake = run(work, 'forced-size-bad', {**on, 'NIER_REMIX_SIZE': 'nonsense'})
+        lines = remix_lines(log)
+        assert any("NIER_REMIX_SIZE 'nonsense' is not WxH" in x for x in lines), lines
+        assert any(x.startswith('remix: starting at 1920x1080 monitor') for x in lines), lines
 
         # 5-8. Failures fall back to the game's frames, with one explicit log line, without losing a frame.
         def fallback(name, env, reason, runtime_loaded):

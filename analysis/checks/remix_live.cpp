@@ -704,8 +704,9 @@ void on_present(IDXGISwapChain* swapchain, Log log) {
     // NieR runs its intro at 720x480 and only later sizes the swapchain to the display; resetting a live Remix device
     // froze/crashed it (2026-10-28). So Remix starts once, at the size of the monitor the game window is on, and the
     // worker pauses (game frames shown) whenever the backbuffer differs. shortcut: a game resolution other than the
-    // monitor's keeps Remix paused; add an NIER_REMIX_SIZE override if that is ever wanted.
+    // monitor's keeps Remix paused unless NIER_REMIX_SIZE names the size the game actually presents at.
     static bool worker_started = false;
+    static bool size_forced = false;  // NIER_REMIX_SIZE was honoured, so the log names the source honestly
     UINT start_w = 0, start_h = 0;
     if (!worker_started) {
         DXGI_SWAP_CHAIN_DESC sd{};
@@ -718,6 +719,14 @@ void on_present(IDXGISwapChain* swapchain, Log log) {
         }
         start_w = static_cast<UINT>(mi.rcMonitor.right - mi.rcMonitor.left);
         start_h = static_cast<UINT>(mi.rcMonitor.bottom - mi.rcMonitor.top);
+        // NIER_REMIX_SIZE=WxH: the size the GAME presents at, which is not always the primary monitor's. NieR keeps
+        // its own output device (Graphic.ini), so on a docked laptop the game presents on the panel (2880x1800) while
+        // the primary monitor is an external ultrawide: the worker then pauses forever instead of compositing.
+        if (const std::wstring forced = env(L"NIER_REMIX_SIZE"); !forced.empty()) {
+            unsigned fw = 0, fh = 0;
+            if (swscanf_s(forced.c_str(), L"%ux%u", &fw, &fh) == 2 && fw && fh) { start_w = fw; start_h = fh; size_forced = true; }
+            else log("remix: NIER_REMIX_SIZE '%ls' is not WxH; using the monitor size", forced.c_str());
+        }
         worker_started = true;
     }
     const bool start = start_w != 0;
@@ -744,7 +753,8 @@ void on_present(IDXGISwapChain* swapchain, Log log) {
         if (ready.seq != shown.seq) std::swap(ready, shown);
     }
     if (start) {
-        log("remix: starting at monitor size %ux%u (game backbuffer %ux%u format=%d)", start_w, start_h, desc.Width, desc.Height,
+        log("remix: starting at %ux%u%s (game backbuffer %ux%u format=%d)", start_w, start_h,
+            size_forced ? " requested" : " monitor", desc.Width, desc.Height,
             static_cast<int>(desc.Format));
         stage("starting");
         std::thread(worker_main, start_w, start_h).detach();
