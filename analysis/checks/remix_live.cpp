@@ -36,6 +36,10 @@ std::uint64_t live_sequence = 0;        // worker only
 std::wstring live_texture_dir;
 std::size_t live_mesh_budget = std::size_t(512) << 20;
 DWORD tex_write_delay_ms = 0;  // NIER_REMIX_LIVE_TEX_WRITE_DELAY_MS, test switch only
+DWORD test_frame_ms = 0;       // NIER_REMIX_TEST_FRAME_MS, test switch only: a worker slower than the game
+// Game presents that showed an OLDER Remix frame than one already shown (live 2026-10-31: the window flipped
+// between the newest and the previous path-traced frame, so the camera snapped back and characters jittered).
+std::atomic<unsigned long long> shown_backwards{0};
 unsigned long long stats_every = 300;  // NIER_REMIX_LIVE_STATS_EVERY
 // NIER_REMIX_LIVE_CAMERA_LOG=1: one line per live frame with the captured camera next to the game's own camera position.
 // The laptop picture switched, every 6-9 frames, to a different view with only a few objects (recording 2026-10-30);
@@ -140,6 +144,8 @@ State configure() {
             live_capture::read_budget_per_frame = std::min<std::size_t>(std::size_t(_wcstoui64(kb.c_str(), nullptr, 10)), 1u << 24) << 10;
         if (const std::wstring us = env(L"NIER_REMIX_LIVE_BUILD_BUDGET_US"); !us.empty())
             live_capture::build_budget_us = std::min<unsigned long long>(_wcstoui64(us.c_str(), nullptr, 10), 1000000);
+        if (const std::wstring ms = env(L"NIER_REMIX_TEST_FRAME_MS"); !ms.empty())  // test switch
+            test_frame_ms = static_cast<DWORD>(std::min<unsigned long long>(_wcstoui64(ms.c_str(), nullptr, 10), 2000));
         if (const std::wstring ms = env(L"NIER_REMIX_LIVE_TEX_WRITE_DELAY_MS"); !ms.empty())  // test switch
             tex_write_delay_ms = static_cast<DWORD>(std::min<unsigned long long>(_wcstoui64(ms.c_str(), nullptr, 10), 5000));
         live_capture::async_reads = env(L"NIER_REMIX_LIVE_ASYNC_READS") == L"1";
@@ -446,7 +452,8 @@ struct Worker {
                     logger.load()("remix: live rebuilds first=%llu unknown=%llu buffer=%llu pose=%llu texture=%llu evicted=%llu "
                                   "buffer_skinned=%llu buffer_dynamic=%llu game_frames=%llu game_max_ms=%llu "
                                   "worst_capture_ms=%llu worst_hook_ms=%llu worst_present_ms=%llu build_deferred=%llu "
-                                  "camera_samples=%llu camera_gap_max=%llu camera_cpu=%llu",
+                                  "camera_samples=%llu camera_gap_max=%llu camera_cpu=%llu "
+                                  "slow_observe_ms=%llu slow_reads_ms=%llu slow_texture_ms=%llu slow_build_ms=%llu shown_backwards=%llu",
                                   live_capture::rebuild_reasons[live_capture::kReasonFirst].load(),
                                   live_capture::rebuild_reasons[live_capture::kReasonUnknown].load(),
                                   live_capture::rebuild_reasons[live_capture::kReasonBuffer].load(),
@@ -458,7 +465,10 @@ struct Worker {
                                   live_capture::worst_capture_us.exchange(0) / 1000, live_capture::worst_hook_us.exchange(0) / 1000,
                                   live_capture::worst_present_us.exchange(0) / 1000, live_capture::build_deferred.load(),
                                   camera_capture::samples.exchange(0), camera_capture::gap_max.exchange(0),
-                                  camera_capture::cpu_reads.load());
+                                  camera_capture::cpu_reads.load(), live_capture::slow_total_us.exchange(0) / 1000,
+                                  live_capture::slow_phase_us[live_capture::kPhaseReads].exchange(0) / 1000,
+                                  live_capture::slow_phase_us[live_capture::kPhaseTexture].exchange(0) / 1000,
+                                  live_capture::slow_phase_us[live_capture::kPhaseBuild].exchange(0) / 1000, shown_backwards.load());
                     logger.load()("remix: live reads=%llu first=%llu trimmed=%llu unmirrored=%llu const=%llu immutable=%llu "
                                   "default=%llu dynamic=%llu read_kb=%llu read_ms=%llu texture_ms=%llu skinned=%u created=%llu "
                                   "blocking=%llu pending=%llu waits=%llu",
@@ -594,7 +604,8 @@ struct Worker {
             }
             const ULONGLONG spent = GetTickCount64() - begun;
             stage("pacing");
-            if (spent < 16) Sleep(static_cast<DWORD>(16 - spent));  // never outrun the game's 60 fps cap
+            const ULONGLONG floor_ms = test_frame_ms > 16 ? test_frame_ms : 16;  // never outrun the game's 60 fps cap
+            if (spent < floor_ms) Sleep(static_cast<DWORD>(floor_ms - spent));
         }
     }
 };
@@ -782,7 +793,12 @@ void on_present(IDXGISwapChain* swapchain, Log log) {
     {
         std::lock_guard<std::mutex> lock(published);
         want_width = desc.Width; want_height = desc.Height; want_format = desc.Format;
-        if (ready.seq != shown.seq) std::swap(ready, shown);
+        // Only a NEWER frame may replace the shown one: after a swap `ready` holds the previous image, and `!=` swapped it
+        // back in on every present until the worker published again (the window flipped new/old/new).
+        if (ready.seq > shown.seq) std::swap(ready, shown);
+        static unsigned long long newest_shown = 0;
+        if (shown.seq && shown.seq < newest_shown) shown_backwards.fetch_add(1, std::memory_order_relaxed);
+        if (shown.seq > newest_shown) newest_shown = shown.seq;
     }
     if (start) {
         log("remix: starting at %ux%u%s (game backbuffer %ux%u format=%d)", start_w, start_h,

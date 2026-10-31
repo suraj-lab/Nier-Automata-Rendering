@@ -289,9 +289,29 @@ inline std::atomic<unsigned long long> buffer_skinned{0}, buffer_dynamic{0}, gam
 // reads or builds): our draw hooks, our work before the real Present, and the real Present call (GPU/queue wait).
 inline unsigned long long frame_capture_us = 0, present_hook_us = 0, present_call_us = 0;  // game thread only
 inline std::atomic<unsigned long long> worst_capture_us{0}, worst_hook_us{0}, worst_present_us{0};
+// Phase split of the slowest single observe() per stats window (live 2026-10-31: 1.1-1.3 s freezes inside our draw
+// hooks, ~30 s apart, with expiry, texture writes and evictions each ruled out). Exclusive: reads are timed in
+// buffer_bytes, textures in write_texture, build after its reads; the rest (locks, light parse, bookkeeping) is other.
+enum Phase : unsigned { kPhaseReads, kPhaseTexture, kPhaseBuild, kPhaseCount };
+inline unsigned long long phase_us[kPhaseCount] = {};  // the observe() in progress (game thread only)
+inline std::atomic<unsigned long long> slow_total_us{0}, slow_phase_us[kPhaseCount]{};
+struct PhaseTimer {
+    unsigned phase;
+    unsigned long long started = now_us();
+    explicit PhaseTimer(unsigned p) : phase(p) {}
+    ~PhaseTimer() { phase_us[phase] += now_us() - started; }
+};
 struct CaptureTimer {
     unsigned long long started = now_us();
-    ~CaptureTimer() { frame_capture_us += now_us() - started; }
+    CaptureTimer() { for (auto& us : phase_us) us = 0; }
+    ~CaptureTimer() {
+        const unsigned long long total = now_us() - started;
+        frame_capture_us += total;
+        if (total > slow_total_us.load(std::memory_order_relaxed)) {
+            slow_total_us.store(total, std::memory_order_relaxed);
+            for (unsigned i = 0; i < kPhaseCount; ++i) slow_phase_us[i].store(phase_us[i], std::memory_order_relaxed);
+        }
+    }
 };
 inline std::map<std::uint64_t, unsigned>& erased_reason() { static std::map<std::uint64_t, unsigned> m; return m; }
 // Buffer part of the version, without the skinning pose, so a pose-only change is told apart from a buffer write.
@@ -528,6 +548,7 @@ inline bool read_into(ID3D11Device* device, ID3D11DeviceContext* context, ID3D11
 // CPU copy of a whole buffer: the shadow if resident, otherwise one staging read that is kept. Caller holds mutex().
 inline const std::vector<unsigned char>* buffer_bytes(ID3D11Device* device, ID3D11DeviceContext* context, ID3D11Buffer* buffer) {
     if (!buffer) return nullptr;
+    const PhaseTimer timer(kPhaseReads);
     D3D11_BUFFER_DESC desc{};
     Shadow* shadow = find_shadow(buffer);
     if (!shadow || shadow->bytes.empty()) {
@@ -797,6 +818,7 @@ enum class TextureResult { Captured, Unusable, Deferred };
 inline TextureResult write_texture(ID3D11Device* device, ID3D11DeviceContext* context, ID3D11Resource* resource,
                                    std::uint32_t& id) {
     if (texture_dir.empty() || texture_bytes_written >= texture_disk_budget) return TextureResult::Unusable;
+    const PhaseTimer timer(kPhaseTexture);
     if (textures_this_frame >= textures_per_frame) return TextureResult::Deferred;
     ID3D11Texture2D* texture = nullptr;
     if (FAILED(resource->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&texture))) || !texture)
@@ -1468,7 +1490,10 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
         }
     }
 
-    if (rebuild && readable) build_us_this_frame += now_us() - build_started;
+    if (rebuild && readable) {
+        build_us_this_frame += now_us() - build_started;
+        phase_us[kPhaseBuild] += now_us() - build_started;
+    }
 
     if (stale_used) {
         // Built from a snapshot older than the game's latest write: rebuild from the fresh copy on the next draw.

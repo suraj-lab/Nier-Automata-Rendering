@@ -69,3 +69,18 @@ p90 36 ms. Those are exactly the two game-thread freezes inside our draw hooks (
 new DDS files were created at exactly those moments (`live_217..220` 16:18:43-44, `live_222..227` 16:19:13-19).
 The DDS write ran on the game thread and was not even in `texture_ms`. Fixed in the next commit: the pixels are
 queued and the Remix worker writes them; gate case slow-disk (400 ms per write) keeps the game at 48 ms frames.
+
+## Run 6-7: `live-disk1`, `live-noexpire` + recordings: the camera bug found
+
+- Texture writes moved off the game thread (`a9b9062`): correct, but not the freeze. Expiry off (`live-noexpire`):
+  one freeze instead of two, so expiry is not the main cause. The ~30 s 1.1-1.3 s freeze is still open;
+  build below adds a phase split of the slowest observe().
+- **The user noticed the RTX Remix welcome dialog in the recording that they never saw on screen.** The NVIDIA recorder
+  captures every swapchain in the process: our game window AND Remix's hidden presenter window. Separating the two
+  (template match on the dialog, 16% of frames) and looking at the game window only: of 636 large world changes in
+  20 s, **344 jumped back to the image two frames earlier** (A-B-A). Cause: `on_present` did
+  `if (ready.seq != shown.seq) std::swap(ready, shown)`; after a swap `ready` holds the previous image, so with a
+  path tracer slower than the game every present flipped back to it until the worker published again. That is the
+  camera snapping back and characters jittering at "40 fps". Fix: `>`. Gate case slow-remix (120 ms worker frames vs
+  40 ms game frames): red 20 backward flips, green 0.
+- The welcome dialog itself: `rtx.automation.disableBlockingDialogBoxes = True` (remix-1.6.1 rtx_options.h:1305).

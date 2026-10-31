@@ -28,7 +28,8 @@ tr.ENV_KEYS = tuple(tr.ENV_KEYS) + ('NIER_REMIX_LIVE_CAMERA_LOG', 'NIER_REMIX_LI
                                      'NIER_REMIX_LIVE_MAX_WRITE_KB', 'NIER_REMIX_LIVE_SHADOW_KB', 'NIER_REMIX_LIVE_BUDGET_KB',
                                      'NIER_REMIX_LIVE_ASYNC_READS', 'NIER_REMIX_LIVE_READ_LATENCY',
                                      'MOCK_LATE_IMMUTABLE', 'MOCK_LIVE_REWRITE_SAME', 'FAKE_REMIX_INSTANCE_LOG',
-                                     'NIER_REMIX_LIVE_BUILD_BUDGET_US', 'NIER_REMIX_LIVE_TEX_WRITE_DELAY_MS')  # tr.run clears only these: a case's switch must not leak
+                                     'NIER_REMIX_LIVE_BUILD_BUDGET_US', 'NIER_REMIX_LIVE_TEX_WRITE_DELAY_MS',
+                                     'NIER_REMIX_TEST_FRAME_MS')  # tr.run clears only these: a case's switch must not leak
 KEYS = ('reads', 'first', 'trimmed', 'unmirrored', 'const', 'immutable', 'default', 'dynamic', 'read_kb', 'read_ms',
         'texture_ms', 'skinned', 'created', 'blocking', 'pending', 'waits')
 
@@ -46,6 +47,9 @@ def rebuilds(log):
     # Stall diagnostics (2026-10-31): per-window game frame count and worst interval, and the buffer-rebuild split.
     assert {'buffer_skinned', 'buffer_dynamic', 'game_frames', 'game_max_ms', 'worst_capture_ms', 'worst_hook_ms',
             'worst_present_ms'} <= set(last), lines[-1]
+    for x in lines:  # the slowest observe()'s exclusive phases cannot exceed it (1 ms rounding each)
+        d = {k: int(v) for k, v in re.findall(r'(\w+)=(\d+)', x)}
+        assert d['slow_reads_ms'] + d['slow_texture_ms'] + d['slow_build_ms'] <= d['slow_observe_ms'] + 3, x
     for x in lines:  # the breakdown belongs to the worst frame, so its parts cannot exceed it (1 ms rounding each)
         d = {k: int(v) for k, v in re.findall(r'(\w+)=(\d+)', x)}
         assert d['worst_capture_ms'] + d['worst_hook_ms'] + d['worst_present_ms'] <= d['game_max_ms'] + 3, x
@@ -206,6 +210,16 @@ def inside():
         worst = max(int(dict(re.findall(r'(\w+)=(\d+)', x))['game_max_ms']) for x in lines)
         assert worst < 250, f'a texture write stalled the game thread: worst game frame {worst} ms'
         results['slow-disk'] = f'{dds}; worst game frame {worst} ms'
+
+        # 9. A path tracer slower than the game (live: ~15 Remix fps under 40+ game fps). The window must only ever move
+        #    forward: the user's recording showed it flipping between the newest and the previous Remix frame on nearly
+        #    every present (camera snapping back, characters jittering), because a present swapped `ready` back in after
+        #    `shown` had overtaken it. 120 ms worker frames against 40 ms game frames.
+        r, log = run('slow-remix', {'NIER_REMIX_TEST_FRAME_MS': '120'})
+        lines = [x for x in tr.remix_lines(log) if x.startswith('remix: live rebuilds ')]
+        back = int(dict(re.findall(r'(\w+)=(\d+)', lines[-1]))['shown_backwards'])
+        assert back == 0, f'the window went back to an older Remix frame {back} times'
+        results['slow-remix'] = f'shown_backwards={back} over {r["presented"]} presents'
     except Exception as exc:
         (OUT / 'validation.json').write_text(json.dumps({'passed': False, 'error': str(exc)[-3000:], 'results': results,
                                                          'work': str(work)}, indent=2) + '\n')
