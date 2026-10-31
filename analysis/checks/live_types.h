@@ -2,9 +2,12 @@
 // Plain data shared by the game-thread capture and the Remix worker. No D3D11 or Remix dependency, so the
 // worker side can be compiled and tested natively.
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 #include "light_convert.h"
+
+namespace texture_capture { struct Texture; }  // texture_capture.h; only owned here, so declared
 
 namespace live_capture {
 
@@ -38,7 +41,9 @@ struct Item {                          // one draw call this frame
     unsigned first = 0, count = 1;     // range in Frame::transforms
     unsigned first_bone = 0, bone_count = 0;  // range in Frame::bones; 0 = not skinned
 };
-struct TextureFile { std::uint32_t id = 0; std::wstring path; };
+// `pixels` set: captured but not yet on disk. The Remix worker writes it before the runtime loads `path`, so the game's
+// thread never waits on the file system (live 2026-10-31: 1.1 s game freezes exactly when new DDS files were created).
+struct TextureFile { std::uint32_t id = 0; std::wstring path; std::shared_ptr<const ::texture_capture::Texture> pixels; };
 // One game light (point, PS slot 20, or spot, slot 22): see light_convert.h for the layouts and the Remix conversion.
 using Light = light_convert::Light;
 using Sun = light_convert::Sun;

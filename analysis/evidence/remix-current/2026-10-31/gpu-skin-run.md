@@ -59,3 +59,13 @@ our capture at all. Bug: reads of buffers rewritten every frame never landed (53
 `lights=0`, `buffer=0`): each write made the in-flight copy stale and it was re-issued forever.
 Fix + breakdown: `1760ff6` (build `58db6c29`): stale copies land as one-draw snapshots; the rebuilds line now
 splits the worst game frame into our draw hooks, our pre-Present work and the real Present call.
+
+## Run 5: `live-cam1` (build `1c4b0151`) + the user's recording
+
+Camera capture is fine now: `camera_gap_max=0` in every window, ~200 samples per window from the CPU mirror. The
+user's NVIDIA recording (`analysis/runtime/laptop-port/live-cam1/recording/rec.mp4`, VFR, 45.7 s from 16:18:37)
+shows the visible image held for **1108 ms at 16:18:42.8** and **1087 ms at 16:19:15.3**; otherwise median 20 ms,
+p90 36 ms. Those are exactly the two game-thread freezes inside our draw hooks (`worst_capture_ms` 1156 / 1112), and
+new DDS files were created at exactly those moments (`live_217..220` 16:18:43-44, `live_222..227` 16:19:13-19).
+The DDS write ran on the game thread and was not even in `texture_ms`. Fixed in the next commit: the pixels are
+queued and the Remix worker writes them; gate case slow-disk (400 ms per write) keeps the game at 48 ms frames.

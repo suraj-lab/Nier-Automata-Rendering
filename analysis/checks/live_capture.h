@@ -816,13 +816,11 @@ inline TextureResult write_texture(ID3D11Device* device, ID3D11DeviceContext* co
             wchar_t name[64];
             swprintf(name, 64, L"\\live_%u.dds", assigned);
             const std::wstring path = texture_dir + name;
-            if (texture_capture::write_dds(path.c_str(), pixels)) {
-                all_textures().push_back(TextureFile{assigned, path});
-                texture_bytes_written += pixels.bytes.size();
-                id = assigned;
-                ++next_texture_id;
-                result = TextureResult::Captured;
-            }
+            texture_bytes_written += pixels.bytes.size();
+            all_textures().push_back(TextureFile{assigned, path, std::make_shared<const texture_capture::Texture>(std::move(pixels))});
+            id = assigned;
+            ++next_texture_id;
+            result = TextureResult::Captured;
         }
     }
     texture->Release();
@@ -1537,7 +1535,10 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
             cb2->Release();
         }
     }
-    for (std::size_t i = published_textures; i < all_textures().size(); ++i) pending_textures().push_back(all_textures()[i]);
+    for (std::size_t i = published_textures; i < all_textures().size(); ++i) {
+        pending_textures().push_back(all_textures()[i]);
+        all_textures()[i].pixels.reset();  // the worker's copy is the last owner: freed once it is on disk
+    }
     published_textures = all_textures().size();
     release_all(vbs, 4, ib, layout);
     device->Release();

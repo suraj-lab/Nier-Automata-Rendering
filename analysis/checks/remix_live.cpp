@@ -35,6 +35,7 @@ bool live_enabled = false;  // NIER_REMIX_LIVE=1: build the scene from the game'
 std::uint64_t live_sequence = 0;        // worker only
 std::wstring live_texture_dir;
 std::size_t live_mesh_budget = std::size_t(512) << 20;
+DWORD tex_write_delay_ms = 0;  // NIER_REMIX_LIVE_TEX_WRITE_DELAY_MS, test switch only
 unsigned long long stats_every = 300;  // NIER_REMIX_LIVE_STATS_EVERY
 // NIER_REMIX_LIVE_CAMERA_LOG=1: one line per live frame with the captured camera next to the game's own camera position.
 // The laptop picture switched, every 6-9 frames, to a different view with only a few objects (recording 2026-10-30);
@@ -139,6 +140,8 @@ State configure() {
             live_capture::read_budget_per_frame = std::min<std::size_t>(std::size_t(_wcstoui64(kb.c_str(), nullptr, 10)), 1u << 24) << 10;
         if (const std::wstring us = env(L"NIER_REMIX_LIVE_BUILD_BUDGET_US"); !us.empty())
             live_capture::build_budget_us = std::min<unsigned long long>(_wcstoui64(us.c_str(), nullptr, 10), 1000000);
+        if (const std::wstring ms = env(L"NIER_REMIX_LIVE_TEX_WRITE_DELAY_MS"); !ms.empty())  // test switch
+            tex_write_delay_ms = static_cast<DWORD>(std::min<unsigned long long>(_wcstoui64(ms.c_str(), nullptr, 10), 5000));
         live_capture::async_reads = env(L"NIER_REMIX_LIVE_ASYNC_READS") == L"1";
         if (const std::wstring polls = env(L"NIER_REMIX_LIVE_READ_LATENCY"); !polls.empty())  // test switch
             live_capture::read_latency = static_cast<unsigned>(std::min<unsigned long long>(_wcstoui64(polls.c_str(), nullptr, 10), 1000));
@@ -258,6 +261,7 @@ struct Worker {
     bool release_reported = false;
     bool injection_reported = false;
     bool big_write_reported = false;
+    bool texture_write_failed = false;
     bool pass_reported = false;
     bool latch_reported = false;
     Frame back;
@@ -366,7 +370,16 @@ struct Worker {
         if (live_enabled) {
             const live_capture::Frame& frame = live_capture::latest();
             std::vector<live_capture::Upload> uploads = live_capture::take_uploads();
-            const std::vector<live_capture::TextureFile> textures = live_capture::take_textures();
+            std::vector<live_capture::TextureFile> textures = live_capture::take_textures();
+            for (live_capture::TextureFile& file : textures) {
+                if (!file.pixels) continue;
+                if (tex_write_delay_ms) Sleep(tex_write_delay_ms);  // test switch: a slow disk must not stall the game
+                if (!texture_capture::write_dds(file.path.c_str(), *file.pixels) && !texture_write_failed) {
+                    texture_write_failed = true;
+                    logger.load()("remix: live texture write failed: %ls", file.path.c_str());
+                }
+                file.pixels.reset();
+            }
             if (!big_write_reported && live_capture::skipped_writes.load(std::memory_order_relaxed)) {
                 big_write_reported = true;
                 logger.load()("remix: live %llu large buffer writes not mirrored on the CPU (re-read when drawn)",

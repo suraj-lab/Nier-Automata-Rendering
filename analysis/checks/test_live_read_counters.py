@@ -28,7 +28,7 @@ tr.ENV_KEYS = tuple(tr.ENV_KEYS) + ('NIER_REMIX_LIVE_CAMERA_LOG', 'NIER_REMIX_LI
                                      'NIER_REMIX_LIVE_MAX_WRITE_KB', 'NIER_REMIX_LIVE_SHADOW_KB', 'NIER_REMIX_LIVE_BUDGET_KB',
                                      'NIER_REMIX_LIVE_ASYNC_READS', 'NIER_REMIX_LIVE_READ_LATENCY',
                                      'MOCK_LATE_IMMUTABLE', 'MOCK_LIVE_REWRITE_SAME', 'FAKE_REMIX_INSTANCE_LOG',
-                                     'NIER_REMIX_LIVE_BUILD_BUDGET_US')  # tr.run clears only these: a case's switch must not leak
+                                     'NIER_REMIX_LIVE_BUILD_BUDGET_US', 'NIER_REMIX_LIVE_TEX_WRITE_DELAY_MS')  # tr.run clears only these: a case's switch must not leak
 KEYS = ('reads', 'first', 'trimmed', 'unmirrored', 'const', 'immutable', 'default', 'dynamic', 'read_kb', 'read_ms',
         'texture_ms', 'skinned', 'created', 'blocking', 'pending', 'waits')
 
@@ -195,6 +195,17 @@ def inside():
         budget_meshes = sorted({re.search(r'v0=(\S+)', x).group(1) for x in r['fake'].splitlines() if x.startswith('CreateMesh')})
         assert budget_meshes == default_meshes, f'the budget lost geometry: {budget_meshes} vs {default_meshes}'
         results['build-budget'] = f'build_deferred={deferred}; meshes {budget_meshes}'
+
+        # 8. NIER_REMIX_LIVE_TEX_WRITE_DELAY_MS=400 (live 2026-10-31 cam1: the screen froze for 1.1 s exactly when new DDS
+        #    files were created, and the file write ran on the game's thread). Every texture write now takes 400 ms: the
+        #    game must keep its frame time (mock frames are 40 ms) and the textures must still reach the disk.
+        r, log = run('slow-disk', {'NIER_REMIX_LIVE_TEX_WRITE_DELAY_MS': '400'})
+        dds = sorted(p.name for p in (work / 'tex-slow-disk').glob('live_*.dds'))
+        assert dds, 'no texture reached the disk'
+        lines = [x for x in tr.remix_lines(log) if x.startswith('remix: live rebuilds ')]
+        worst = max(int(dict(re.findall(r'(\w+)=(\d+)', x))['game_max_ms']) for x in lines)
+        assert worst < 250, f'a texture write stalled the game thread: worst game frame {worst} ms'
+        results['slow-disk'] = f'{dds}; worst game frame {worst} ms'
     except Exception as exc:
         (OUT / 'validation.json').write_text(json.dumps({'passed': False, 'error': str(exc)[-3000:], 'results': results,
                                                          'work': str(work)}, indent=2) + '\n')
