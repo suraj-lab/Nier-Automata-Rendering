@@ -418,7 +418,7 @@ int wmain(int argc, wchar_t** argv) {
     const bool normal_tex = GetEnvironmentVariableW(L"MOCK_NORMAL_TEX", nullptr, 0) > 0;
     unsigned char bc5[2 * 2 * 16];
     for (unsigned i = 0; i < sizeof bc5; ++i) bc5[i] = static_cast<unsigned char>((i * 19 + 5) & 0xff);
-    ID3D11ShaderResourceView* normal_srv = normal_tex ? make_srv(8, 8, DXGI_FORMAT_BC5_UNORM, bc5, 16, 0) : nullptr;
+    ID3D11ShaderResourceView* normal_srv = normal_tex ? make_srv(8, 8, DXGI_FORMAT_BC5_UNORM, bc5, 32, 0) : nullptr;
     if (normal_tex && !normal_srv) { std::fprintf(out, "FAIL normal texture\n"); return 3; }
     ID3D11ShaderResourceView* mesh_srvs[4] = {
         make_srv(4, 4, DXGI_FORMAT_R8G8B8A8_UNORM, rgba, 16, 0),
@@ -1007,6 +1007,12 @@ int wmain(int argc, wchar_t** argv) {
                 context->VSSetConstantBuffers(0, 1, &camera_buffer);
                 context->VSSetConstantBuffers(11, 1, &live_cb11);
                 context->PSSetShaderResources(0, 1, &mesh_srvs[0]);
+                // Slot 4 is the draw's g_NormalTexture on the world path, beside its albedo. Null when the mock has
+                // none, so a normal map bound by an earlier draw cannot leak into this one.
+                {
+                    ID3D11ShaderResourceView* nrm = normal_srv;
+                    context->PSSetShaderResources(4, 1, &nrm);
+                }
                 context->IASetVertexBuffers(0, 1, &live_vb, &sstride, &soff);
                 context->IASetIndexBuffer(live_ib, DXGI_FORMAT_R32_UINT, 0);
                 context->DrawIndexed(192, 0, 0);

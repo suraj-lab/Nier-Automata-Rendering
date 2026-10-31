@@ -316,6 +316,9 @@ inline void publish_ui() {
     ui_draw_count.store(static_cast<unsigned>(ready.draws.size()), std::memory_order_release);
 }  // the slot-20 light array is frame-level data: read at most once per frame
 inline unsigned textures_per_frame = 4;  // NIER_REMIX_LIVE_TEX_PER_FRAME (0 = none this frame): each new texture is a GPU readback + a file write on this thread
+// NIER_REMIX_LIVE_NORMAL: also capture the texture at PS slot 4 as the material's normal map. The game's own shaders
+// name their inputs: slot 0 g_ColorTexture, slot 4 g_NormalTexture (153 of 605 shaders read it). Off until looked at.
+inline bool normal_textures = false;
 // Deferred textures and the geometries that were built before the texture existed: when the texture is finally
 // captured, those geometries are invalidated so the existing rebuild path makes one new mesh with the material.
 inline std::map<ID3D11Resource*, std::vector<std::uint64_t>>& waiting_materials() {
@@ -955,45 +958,54 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     bool rigid = rigid_bone >= 0;
 
     std::uint32_t texture = 0;
+    std::uint32_t normal = 0;
     bool texture_deferred = false;
     {
+        // One capture path for both material inputs: the resource cache and the write budget are shared, so a normal map
+        // that many draws bind is read back and written once.
+        const auto obtain = [&](ID3D11Resource* resource, std::uint32_t& id) {
+            const auto known = texture_ids().find(resource);
+            if (known != texture_ids().end()) {
+                known->second.used_frame = frame_number;
+                id = known->second.id;
+                return TextureResult::Captured;
+            }
+            std::uint32_t assigned = 0;
+            const TextureResult result = write_texture(device, context, resource, assigned);
+            if (result == TextureResult::Deferred) {
+                auto& waiters = waiting_materials();
+                if (waiters.size() > 65536) waiters.clear();  // bounded, like the other caches
+                auto& keys = waiters[resource];
+                if (std::find(keys.begin(), keys.end(), geometry) == keys.end()) keys.push_back(geometry);
+                return result;
+            }
+            resource->AddRef();  // the key keeps the pointer from being reused while the entry exists
+            texture_ids()[resource] = TextureEntry{assigned, frame_number};
+            id = assigned;
+            if (assigned) {  // the texture has landed: rebuild the meshes that were made without it
+                const auto waiter = waiting_materials().find(resource);
+                if (waiter != waiting_materials().end()) {
+                    for (const std::uint64_t key : waiter->second) {
+                        built_versions().erase(key);
+                        content_hashes().erase(key);
+                        erased_reason()[key] = kReasonTexture;
+                    }
+                    waiting_materials().erase(waiter);
+                }
+            }
+            return result;
+        };
         ID3D11ShaderResourceView* views[16] = {};
         context->PSGetShaderResources(0, 16, views);
         for (unsigned slot = 0; slot < 16; ++slot) {
             if (!views[slot]) continue;
             ID3D11Resource* resource = nullptr;
             views[slot]->GetResource(&resource);
-            if (resource && !texture && !texture_deferred) {  // first usable PS texture is the material albedo
-                const auto known = texture_ids().find(resource);
-                if (known != texture_ids().end()) {
-                    known->second.used_frame = frame_number;
-                    texture = known->second.id;
-                } else {
-                    std::uint32_t id = 0;
-                    const TextureResult result = write_texture(device, context, resource, id);
-                    if (result == TextureResult::Deferred) {
-                        texture_deferred = true;  // the texture lands later; this geometry is uploaded without it for now
-                        auto& waiters = waiting_materials();
-                        if (waiters.size() > 65536) waiters.clear();  // bounded, like the other caches
-                        auto& keys = waiters[resource];
-                        if (std::find(keys.begin(), keys.end(), geometry) == keys.end()) keys.push_back(geometry);
-                    } else {
-                        resource->AddRef();  // the key keeps the pointer from being reused while the entry exists
-                        texture_ids()[resource] = TextureEntry{id, frame_number};
-                        texture = id;
-                        if (id) {  // the texture has landed: rebuild the meshes that were made without it
-                            const auto waiter = waiting_materials().find(resource);
-                            if (waiter != waiting_materials().end()) {
-                                for (const std::uint64_t key : waiter->second) {
-                                    built_versions().erase(key);
-                                    content_hashes().erase(key);
-                                    erased_reason()[key] = kReasonTexture;
-                                }
-                                waiting_materials().erase(waiter);
-                            }
-                        }
-                    }
-                }
+            if (resource) {
+                if (!texture && !texture_deferred &&  // first usable PS texture is the material albedo
+                    obtain(resource, texture) == TextureResult::Deferred)
+                    texture_deferred = true;  // the texture lands later; this geometry is uploaded without it for now
+                if (normal_textures && slot == 4) obtain(resource, normal);  // g_NormalTexture in the game's shaders
             }
             if (resource) resource->Release();
         }
@@ -1235,6 +1247,7 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
             Upload upload;
             upload.geometry = geometry;
             upload.texture = texture;
+            upload.normal = normal;
             upload.skinned = false;  // skinned draws were baked into world space above
             upload.blended = blended;
             upload.sky = sky_extent;

@@ -107,13 +107,15 @@ inline std::wstring widen(const std::string& s) {
 }
 
 inline void make_material_info(remixapi_MaterialInfo& info, remixapi_MaterialInfoOpaqueEXT& ext,
-                               const wchar_t* path, std::uint64_t hash, bool cutout) {
+                               const wchar_t* path, std::uint64_t hash, bool cutout,
+                               const wchar_t* normal = nullptr) {
     info = {};
     ext = {};
     info.sType = REMIXAPI_STRUCT_TYPE_MATERIAL_INFO;
     info.pNext = &ext;
     info.hash = hash;
     info.albedoTexture = path;
+    info.normalTexture = normal;
     info.emissiveIntensity = 0;
     // Linear filtering and repeat wrapping (MDL tex::wrap_repeat = 1): zero-initialised means nearest + clamp, which
     // smeared every tiled NieR texture into streaks and made them blocky (2026-10-29 laptop A/B).

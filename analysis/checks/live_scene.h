@@ -64,23 +64,35 @@ inline void add_textures(State& s, const std::vector<live_capture::TextureFile>&
     }
 }
 
-// One material per (texture, alpha test). Opaque keeps the hash and settings the live path has always used; an
-// alpha-tested one carries the game shader's own comparison and reference (alpha_test.h).
+// One material per (texture, normal map, alpha test). Opaque keeps the hash and settings the live path has always used;
+// an alpha-tested one carries the game shader's own comparison and reference (alpha_test.h).
 inline remixapi_MaterialHandle material_for(const remixapi_Interface& api, State& s, std::uint32_t texture,
-                                            int alpha_op = 7, std::uint8_t alpha_ref = 0) {
+                                            int alpha_op = 7, std::uint8_t alpha_ref = 0,
+                                            std::uint32_t normal = 0) {
     if (!texture) return nullptr;
     const bool tested = alpha_op != 7;
-    const std::uint64_t key = texture | (tested ? (std::uint64_t(alpha_op) << 32 | std::uint64_t(alpha_ref) << 40) : 0);
+    // shortcut: the normal id rides in bits 48-63, so two ids that differ only above 65535 would share a material; a
+    // session that captures more than 65535 textures needs a struct key instead.
+    const std::uint64_t key = texture | (tested ? (std::uint64_t(alpha_op) << 32 | std::uint64_t(alpha_ref) << 40) : 0) |
+                              (std::uint64_t(normal) << 48);
     const auto known = s.materials.find(key);
     if (known != s.materials.end()) return known->second;
     if (texture > s.texture_paths.size() || s.texture_paths[texture - 1].empty()) return nullptr;
+    // Ids are global, so the normal's path comes from the same vector. No path yet: send the material without it.
+    const bool has_normal = normal && normal <= s.texture_paths.size() && !s.texture_paths[normal - 1].empty();
     remixapi_MaterialInfo info;
     remixapi_MaterialInfoOpaqueEXT ext;
     // 3000000+: the captured scene owns 1000000+ (opaque) and 2000000+ (cutout); both can exist after a fallback.
     // Alpha-tested live materials: 6000000000 + texture<<16 + op<<8 + ref, clear of every other range.
-    const std::uint64_t hash = tested ? 6000000000ull + (std::uint64_t(texture) << 16) + (std::uint64_t(alpha_op) << 8) + alpha_ref
-                                      : 3000000ull + texture;
-    nscn::detail::make_material_info(info, ext, s.texture_paths[texture - 1].c_str(), hash, tested);
+    // With a normal map: 5000000000 + texture<<32 + normal<<16 + op<<8 + ref, so two draws that share an albedo but
+    // differ in normal map (or alpha test) are distinct materials in the runtime, which knows them by hash alone.
+    const std::uint64_t hash = has_normal
+        ? 5000000000ull + (std::uint64_t(texture) << 32) + (std::uint64_t(normal) << 16) +
+              (std::uint64_t(alpha_op) << 8) + alpha_ref
+        : tested ? 6000000000ull + (std::uint64_t(texture) << 16) + (std::uint64_t(alpha_op) << 8) + alpha_ref
+                 : 3000000ull + texture;
+    nscn::detail::make_material_info(info, ext, s.texture_paths[texture - 1].c_str(), hash, tested,
+                                     has_normal ? s.texture_paths[normal - 1].c_str() : nullptr);
     if (tested) { ext.alphaTestType = alpha_op; ext.alphaReferenceValue = alpha_ref; }
     remixapi_MaterialHandle handle = nullptr;
     if (api.CreateMaterial(&info, &handle) || !handle) return nullptr;
@@ -105,7 +117,7 @@ inline bool build_mesh(const remixapi_Interface& api, State& s, const live_captu
     surface.vertices_count = vertices.size();
     surface.indices_values = upload.indices.data();
     surface.indices_count = upload.indices.size();
-    surface.material = material_for(api, s, upload.texture, upload.alpha_op, upload.alpha_ref);
+    surface.material = material_for(api, s, upload.texture, upload.alpha_op, upload.alpha_ref, upload.normal);
     remixapi_MeshInfoSkinning skinning{};
     if (upload.skinned && upload.bones.size() == 4 * upload.vertices.size() && upload.weights.size() == 4 * upload.vertices.size()) {
         skinning.bonesPerVertex = 4;

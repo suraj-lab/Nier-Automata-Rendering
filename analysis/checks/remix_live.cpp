@@ -148,6 +148,8 @@ State configure() {
         // Rollback switches for the live test (analysis/ROADMAP.md): no HUD capture/replay; drop the sky dome again.
         live_capture::hud_enabled = env(L"NIER_REMIX_LIVE_NO_HUD") != L"1";
         live_capture::sky_enabled = env(L"NIER_REMIX_LIVE_NO_SKY") != L"1";
+        // NIER_REMIX_LIVE_NORMAL=1: capture the draw's slot-4 g_NormalTexture as the material's normal map too.
+        live_capture::normal_textures = env(L"NIER_REMIX_LIVE_NORMAL") == L"1";
         // Dome fill: a header-valid HDR DDS (NIER_REMIX_SKY_DDS, default nier_sky_hdr.dds beside the scene). Without one
         // the dome adds no light. Strength 2.0 was chosen on the laptop A/B (sky-fill-0.5-vs-2.png).
         sky_path = env(L"NIER_REMIX_SKY_DDS");

@@ -23,6 +23,7 @@ struct Upload {
     std::vector<std::uint32_t> bones;  // 4 per vertex, only when skinned
     std::vector<float> weights;        // 4 per vertex, only when skinned
     std::uint32_t texture = 0;         // 0 = no material
+    std::uint32_t normal = 0;          // 0 = none; slot-4 normal map
     bool skinned = false;
     bool blended = false;              // classic alpha blend (src alpha / inv src alpha): foliage, hair, grilles
     bool sky = false;                  // background shell / sky dome: submitted with the SKY category, not as world
