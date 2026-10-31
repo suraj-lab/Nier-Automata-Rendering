@@ -135,14 +135,31 @@ def inside():
             assert 'skinned=1 ' in mesh and 'bonesPerVertex=4 ' in mesh, mesh
             verts = int(re.search(r'verts=(\d+)', mesh).group(1))
             weights = int(re.search(r'weights=(\d+)', mesh).group(1))
-            assert weights == 3 * verts, f'{name}: expected three weight slots per vertex, {weights} for {verts}'
+            # verts is the padded 3V; three weights per real vertex plus the 4-float tail the probe proved on 1.6.1.
+            assert weights == verts + 4, f'{name}: expected the proven 3V+4 weight layout, {weights} for {verts} slots'
             assert 'v0=0.000,0.000,0.500' in mesh, f'{name}: mesh is not in bind space, it was baked: {mesh}'
             draws = [l for l in fake.splitlines() if l.startswith('DrawInstance')]
             assert len(draws) >= 30, f'{name}: only {len(draws)} frames drawn'
             assert all('bones=0 ' not in l for l in draws), f'{name}: no bone transforms reached the instance'
             bones = [l for l in fake.splitlines() if l.startswith('Bones count=')]
             assert bones, f'{name}: the runtime never saw a bone palette'
-            xs = [float(re.search(r'b0=[-\d.]+,([-\d.]+)', l).group(1)) for l in bones]
+            # Bone 0's translation is the fourth field of row 0. One Bones line follows each DrawInstance, which carries
+            # presented=, and every frame draws both characters: group per frame and take the first palette, so the steps
+            # below are the animation's own and not the 20 the mock puts between the two actors.
+            per_frame, presented = {}, None
+            for l in fake.splitlines():
+                m = re.match(r'DrawInstance presented=(\d+)', l)
+                if m:
+                    presented = int(m.group(1))
+                elif l.startswith('Bones count='):
+                    pal = [float(x) for x in re.findall(r'b[01]=[-\d.]+,[-\d.]+,[-\d.]+,([-\d.]+)', l)]
+                    assert presented is not None and len(pal) == 2, f'{name}: no b0/b1 palette on frame {presented}: {l}'
+                    per_frame.setdefault(presented, []).append((pal[0], pal[1]))
+            frames = [v for _, v in sorted(per_frame.items())]
+            assert frames and all(len(p) == 2 for p in frames), f'{name}: both characters were not drawn: {len(frames)} frames'
+            assert {round(b1, 3) for p in frames for _, b1 in p} == {5.0}, f'{name}: bone 1 is not the palette\'s own'
+            assert {round(p[1][0] - p[0][0], 3) for p in frames} == {20.0}, f'{name}: the two characters shared a palette'
+            xs = [p[0][0] for p in frames]
             if name == 'gpu-bone-poses':
                 assert set(round(x, 3) for x in xs) == {0.0, 10.0}, f'{name}: bone 0 does not follow the pose: {sorted(set(xs))}'
             else:

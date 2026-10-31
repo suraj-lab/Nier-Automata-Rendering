@@ -277,6 +277,43 @@ inline int single_bone(const live_decode::Output& out) {
     return bone;
 }
 
+// Phase 4: the bind-space mesh in the only weight layout the runtime reads exactly. skinning.h reads vertex i's weights
+// at [i, i+1, i+2] with a hardcoded 4-byte stride, whatever bonesPerVertex says, so real vertex i sits at slot 3i and
+// owns three consecutive weight floats; the fourth index and weight are derived from the packed word and the sum
+// (analysis/UPSTREAM_SKINNING_STRIDE.md).
+// shortcut: the mesh keeps its bind-pose bounds, so a character drawn far from its bind pose can be culled; the anchor
+// instance transform that fixes it (PHASE4_PLAN.md) is not implemented yet.
+inline bool three_slot_layout(live_decode::Output& out) {
+    const std::size_t count = out.vertices.size();
+    if (!count || out.bones.size() != 4 * count || out.weights.size() != 4 * count) return false;
+    std::vector<live_decode::Vertex> vertices(3 * count);
+    std::vector<std::uint32_t> bones(3 * count, 0);
+    // Every slot is skinned, padding included, and the last one reads weights [3V-1, 3V+1]: 3V+4 is the size the
+    // laptop probe proved on 1.6.1 (SKINNING_4BONE_RESULT.md), a bare 3V would read past the end.
+    std::vector<float> weights(3 * count + 4, 0);
+    for (std::size_t i = 0; i < count; ++i) {
+        const auto& src = out.vertices[i];
+        live_decode::Vertex& v = vertices[3 * i];
+        std::memcpy(v.position, src.position, sizeof v.position);
+        std::memcpy(v.normal, src.normal, sizeof v.normal);
+        std::memcpy(v.texcoord, src.texcoord, sizeof v.texcoord);
+        v.color = src.color;
+        vertices[3 * i + 1].normal[2] = vertices[3 * i + 2].normal[2] = 1.f;  // never drawn; the shader still reads a normal
+        for (unsigned k = 0; k < 3; ++k) weights[3 * i + k] = out.weights[4 * i + k];  // the runtime derives the fourth
+        std::uint32_t packed = 0;
+        for (unsigned k = 0; k < 4; ++k) {
+            if (out.bones[4 * i + k] > 255) return false;  // one byte per index in the packed word
+            packed |= out.bones[4 * i + k] << (8 * k);
+        }
+        bones[3 * i] = packed;
+    }
+    for (std::uint32_t& index : out.indices) index *= 3;
+    out.vertices.swap(vertices);
+    out.bones.swap(bones);
+    out.weights.swap(weights);
+    return true;
+}
+
 // The worker evicted these meshes: forget that they were built, so they are uploaded again when drawn.
 inline void forget(const std::vector<std::uint64_t>& keys) {
     if (keys.empty()) return;
@@ -319,6 +356,10 @@ inline unsigned textures_per_frame = 4;  // NIER_REMIX_LIVE_TEX_PER_FRAME (0 = n
 // NIER_REMIX_LIVE_NORMAL: also capture the texture at PS slot 4 as the material's normal map. The game's own shaders
 // name their inputs: slot 0 g_ColorTexture, slot 4 g_NormalTexture (153 of 605 shaders read it). Off until looked at.
 inline bool normal_textures = false;
+// NIER_REMIX_LIVE_GPU_SKIN (Phase 4): a blended skinned draw keeps ONE mesh in bind space and is moved by the frame's
+// CB11 palette, instead of baking every pose into a new mesh (live: pose was 82% of the rebuilds, 2026-10-30). Off by
+// default: the CPU bake stays the shipped path until the A/B on the laptop is green twice (analysis/PHASE4_PLAN.md).
+inline bool gpu_skinning = false;
 // Deferred textures and the geometries that were built before the texture existed: when the texture is finally
 // captured, those geometries are invalidated so the existing rebuild path makes one new mesh with the material.
 inline std::map<ID3D11Resource*, std::vector<std::uint64_t>>& waiting_materials() {
@@ -943,6 +984,8 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     // budget and evicted the static world (live 2026-10-29: 59917 built, 56915 evicted). The pose goes into the
     // version instead, so a new pose rebuilds and replaces the mesh under the same key.
     // shortcut: if the game reorders identical characters between frames, their keys swap and both rebuild each frame.
+    // With gpu_skinning a blended draw keeps the draw's own key: the mesh is in bind space and the palette rides on the
+    // instance, so neither the pose nor the draw's occurrence may enter the key or the mesh would be rebuilt per frame.
     std::uint64_t pose = 0;
     const std::uint64_t skin_base = geometry;
     int rigid_bone = -1;
@@ -950,7 +993,7 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
         const auto known = rigid_bones().find(skin_base);
         if (known != rigid_bones().end() && known->second >= 0 && static_cast<unsigned>(known->second) < bone_count) {
             rigid_bone = known->second;  // one mesh in its own space; the bone becomes the instance transform below
-        } else {
+        } else if (!gpu_skinning) {
             geometry = hash_value(geometry ^ (0x5c1d000000000000ull + skinned_occurrences()[geometry]++));
             pose = hash_mix(1469598103934665603ull, constants->data(), 48ull * bone_count);
         }
@@ -1198,6 +1241,9 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
                 pose = 0;
                 version = version_now();
                 previously = built_versions().find(geometry);
+            } else if (gpu_skinning) {
+                // Phase 4: keep the bind pose and send the palette per frame instead of baking this pose into the mesh.
+                ok = three_slot_layout(decoded);
             } else {
                 ok = live_skinning::bake(decoded, constants->data(), 48ull * bone_count);
             }
@@ -1248,7 +1294,7 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
             upload.geometry = geometry;
             upload.texture = texture;
             upload.normal = normal;
-            upload.skinned = false;  // skinned draws were baked into world space above
+            upload.skinned = gpu_skinning && skinned && !rigid;  // bind space + per-frame palette, or baked above
             upload.blended = blended;
             upload.sky = sky_extent;
             if (alpha.discards) { upload.alpha_op = alpha.op; upload.alpha_ref = alpha.reference; }
@@ -1301,10 +1347,18 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
         std::memcpy(matrix, constants->data() + 48ull * static_cast<std::size_t>(rigid_bone), sizeof matrix);
         frame.transforms.insert(frame.transforms.end(), matrix, matrix + 12);
     } else if (skinned) {
-        // Already world-space: no GPU skinning palette and no second world transform.
+        // Baked meshes are already world-space and bind-space ones are placed by the palette: no second world transform.
         item.count = 1;
         const float identity[12] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0};
         frame.transforms.insert(frame.transforms.end(), identity, identity + 12);
+        if (gpu_skinning) {
+            // The palette travels with the instance (remixapi_InstanceInfoBoneTransformsEXT): 3x4 row-major, straight
+            // from CB11, shared by every instance of this item.
+            const float* palette = reinterpret_cast<const float*>(constants->data());
+            item.first_bone = static_cast<unsigned>(frame.bones.size() / 12);
+            item.bone_count = bone_count;
+            frame.bones.insert(frame.bones.end(), palette, palette + 12ull * bone_count);
+        }
     } else {
         for (unsigned i = 0; i < item.count; ++i) {
             const std::size_t offset = 64ull * (static_cast<std::size_t>(i) + start_instance);

@@ -35,7 +35,8 @@ exact when it owns three consecutive slots:
 
 * build the vertex array with 3x the vertices, the real vertex `i` at slot `3i` (its two neighbours
   `3i+1, 3i+2` are never referenced);
-* weights at `3i, 3i+1, 3i+2` are `w0, w1, w2` of vertex `i`, and `blendWeights_count = 3V`;
+* weights at `3i, 3i+1, 3i+2` are `w0, w1, w2` of vertex `i`, and `blendWeights_count = 3V + 4`: the padding
+  slots are skinned too, and the last one reads up to index `3V+1`, so a bare `3V` reads past the end;
 * one packed `uint32` per slot (four uint8 bone indices) — the index stride of 4 bytes is already right,
   `wordsPerTuple = ceil(4/4) = 1`;
 * remap the index buffer: drawn index `j` becomes `3 * j`.
