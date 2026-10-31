@@ -42,9 +42,10 @@ Tomorrow, in this order:
   (142 draws, 260 MB, untracked) and the compact fixture for gates is
   `analysis/checks/fixtures/skin-weights-nier.json`.
 
-Full gate suite on `dbbdd551` was 58/58 green (`runtime/final-20261030/`); the suite on `45c7f0df` is
-running as this is written (`runtime/final-20261031/`). The laptop is restored to its original `6ba266d6`
-d3d11.dll and its game folder is untouched.
+Full gate suite: 58/58 green on `dbbdd551` (`runtime/final-20261030/`), and 60/60 green on `45c7f0df`
+(`runtime/final-20261031/`, the two extra are `test_live_texture_mips.py` and
+`test_three_slot_skin_layout.py`). The laptop is restored to its original `6ba266d6` d3d11.dll and its game
+folder is untouched; no game run was left half-installed.
 
 **Texture slots measured (2026-10-31 00:20, F9 frame_453279156, 286 main-view draws of 760).** Every
 main-view draw has PS textures bound; 283 of 286 have something at slot 0, 285 at slot 2, 286 at slot 14,
