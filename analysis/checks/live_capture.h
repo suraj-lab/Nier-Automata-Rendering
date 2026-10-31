@@ -13,6 +13,7 @@
 #include <cstring>
 #include <map>
 #include <mutex>
+#include <set>
 #include <string>
 #include <vector>
 #include "live_types.h"
@@ -94,6 +95,11 @@ struct PendingRead {
     unsigned polls = 0;
 };
 inline std::map<ID3D11Buffer*, PendingRead>& pending_reads() { static std::map<ID3D11Buffer*, PendingRead> p; return p; }
+// A copy that lands after the game wrote the buffer again is a consistent snapshot of the older bytes: it is used for
+// the draw that needed it but never stored as the mirror, and the geometry is rebuilt again from a fresh copy. A buffer
+// rewritten every frame then trails by a frame or two instead of never landing (live 2026-10-31: lights=0, frozen meshes).
+inline std::map<ID3D11Buffer*, std::vector<unsigned char>>& stale_snapshots() { static std::map<ID3D11Buffer*, std::vector<unsigned char>> s; return s; }
+inline std::set<std::uint64_t>& stale_built() { static std::set<std::uint64_t> s; return s; }
 inline void drop_pending(std::map<ID3D11Buffer*, PendingRead>::iterator it) {
     it->second.staging->Release();
     it->first->Release();
@@ -132,6 +138,7 @@ inline bool async_reads = false;
 inline unsigned read_latency = 0;  // test switch: report "still drawing" this many polls before really trying
 inline std::atomic<unsigned long long> blocking_reads{0}, pending_polls{0}, read_waits{0};
 inline bool read_pending = false;  // set by buffer_bytes when it returned nothing because a read is in flight
+inline bool read_stale = false;    // set when it returned a snapshot older than the game's latest write
 // Above this, a write is not mirrored: reading a large write-combined mapping back costs more than the whole draw
 // stream (measured on the real game), so the bytes are dropped. A draw that needs them reads them through a staging
 // copy: budgeted for first sight, immediate when the content changed (a changed mesh must never keep its old shape,
@@ -273,6 +280,14 @@ inline std::atomic<unsigned long long> rebuild_reasons[kReasonCount]{};
 // Diagnostics (2026-10-31: the camera froze in steps while game-thread reads took ~40% of wall time): which draws the
 // `buffer` rebuilds come from, and the game's own worst frame interval since the last stats line (reset by the reader).
 inline std::atomic<unsigned long long> buffer_skinned{0}, buffer_dynamic{0}, game_frames{0}, game_max_us{0};
+// Where the window's worst game frame went (live 2026-10-31 async1: 100-230 ms worst frames even in windows with no
+// reads or builds): our draw hooks, our work before the real Present, and the real Present call (GPU/queue wait).
+inline unsigned long long frame_capture_us = 0, present_hook_us = 0, present_call_us = 0;  // game thread only
+inline std::atomic<unsigned long long> worst_capture_us{0}, worst_hook_us{0}, worst_present_us{0};
+struct CaptureTimer {
+    unsigned long long started = now_us();
+    ~CaptureTimer() { frame_capture_us += now_us() - started; }
+};
 inline std::map<std::uint64_t, unsigned>& erased_reason() { static std::map<std::uint64_t, unsigned> m; return m; }
 // Buffer part of the version, without the skinning pose, so a pose-only change is told apart from a buffer write.
 inline std::map<std::uint64_t, std::uint64_t>& built_buffer_versions() { static std::map<std::uint64_t, std::uint64_t> m; return m; }
@@ -527,12 +542,7 @@ inline const std::vector<unsigned char>* buffer_bytes(ID3D11Device* device, ID3D
         const unsigned long long started = now_us();
         bool read = false;
         if (async_reads) {
-            auto it = pending_reads().find(buffer);
-            if (it != pending_reads().end() && it->second.identity != identity(buffer)) {
-                drop_pending(it);  // the game wrote it after the copy was taken: copy again
-                it = pending_reads().end();
-            }
-            if (it == pending_reads().end()) {
+            const auto issue = [&]() -> std::map<ID3D11Buffer*, PendingRead>::iterator {
                 D3D11_BUFFER_DESC staging_desc = desc;
                 staging_desc.Usage = D3D11_USAGE_STAGING;
                 staging_desc.BindFlags = 0;
@@ -540,11 +550,14 @@ inline const std::vector<unsigned char>* buffer_bytes(ID3D11Device* device, ID3D
                 staging_desc.MiscFlags = 0;
                 staging_desc.StructureByteStride = 0;
                 ID3D11Buffer* staging = nullptr;
-                if (FAILED(device->CreateBuffer(&staging_desc, nullptr, &staging)) || !staging) return nullptr;
+                if (FAILED(device->CreateBuffer(&staging_desc, nullptr, &staging)) || !staging) return pending_reads().end();
                 context->CopyResource(staging, buffer);
                 buffer->AddRef();
-                it = pending_reads().emplace(buffer, PendingRead{staging, identity(buffer), frame_number, 0}).first;
-            }
+                return pending_reads().emplace(buffer, PendingRead{staging, identity(buffer), frame_number, 0}).first;
+            };
+            auto it = pending_reads().find(buffer);
+            if (it == pending_reads().end()) it = issue();
+            if (it == pending_reads().end()) return nullptr;
             D3D11_MAPPED_SUBRESOURCE map{};
             const HRESULT hr = it->second.polls++ < read_latency
                                    ? DXGI_ERROR_WAS_STILL_DRAWING
@@ -561,7 +574,21 @@ inline const std::vector<unsigned char>* buffer_bytes(ID3D11Device* device, ID3D
                 read = true;
             } catch (...) {}
             context->Unmap(it->second.staging, 0);
+            const bool stale = it->second.identity != identity(buffer);
             drop_pending(it);
+            if (read && stale) {
+                read_us_total.fetch_add(now_us() - started, std::memory_order_relaxed);
+                read_reasons[!shadow ? 0u : shadow->written ? 2u : 1u].fetch_add(1, std::memory_order_relaxed);
+                read_kinds[(desc.BindFlags & D3D11_BIND_CONSTANT_BUFFER) ? 0u : desc.Usage == D3D11_USAGE_IMMUTABLE ? 1u
+                           : desc.Usage == D3D11_USAGE_DYNAMIC ? 3u : 2u].fetch_add(1, std::memory_order_relaxed);
+                read_bytes_total.fetch_add(bytes.size(), std::memory_order_relaxed);
+                read_bytes_this_frame += bytes.size();
+                issue();  // the copy for the game's newer bytes
+                read_stale = true;
+                std::vector<unsigned char>& snapshot = stale_snapshots()[buffer];
+                snapshot.swap(bytes);
+                return &snapshot;
+            }
         } else {
             read = read_into(device, context, buffer, desc, bytes);
             if (read) blocking_reads.fetch_add(1, std::memory_order_relaxed);
@@ -812,10 +839,17 @@ inline void begin_frame(ID3D11DeviceContext* context, unsigned width = 0, unsign
         building().scene_h = scene_height;
         if (width && height) { final_width = width; final_height = height; }
         ++frame_number;
+        stale_snapshots().clear();  // only valid for the draw that read them
         {
             static unsigned long long last_us = 0;
             const unsigned long long now = now_us();
-            if (last_us && now - last_us > game_max_us.load(std::memory_order_relaxed)) game_max_us.store(now - last_us, std::memory_order_relaxed);
+            if (last_us && now - last_us > game_max_us.load(std::memory_order_relaxed)) {
+                game_max_us.store(now - last_us, std::memory_order_relaxed);
+                worst_capture_us.store(frame_capture_us, std::memory_order_relaxed);
+                worst_hook_us.store(present_hook_us, std::memory_order_relaxed);
+                worst_present_us.store(present_call_us, std::memory_order_relaxed);
+            }
+            frame_capture_us = 0;
             last_us = now;
             game_frames.fetch_add(1, std::memory_order_relaxed);
         }
@@ -914,6 +948,7 @@ inline void release_all(ID3D11Buffer** buffers, unsigned count, ID3D11Buffer* ib
 // One draw -> one Item plus, when the geometry or its buffers changed, one compact Upload.
 inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_index, INT base_vertex,
                     UINT instance_count, UINT start_instance) {
+    const CaptureTimer timer;
     if (!permitted.load(std::memory_order_acquire) || suspended.load(std::memory_order_acquire) ||
         !frame_open.load(std::memory_order_acquire)) return;
     if (!context || active_context.load(std::memory_order_acquire) != context) return;
@@ -1261,8 +1296,10 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     const std::vector<unsigned char>* ib_bytes = nullptr;
     const std::vector<unsigned char>* vb_bytes[4] = {};
     bool readable = false;
+    bool stale_used = false;
     if (rebuild) {
         read_pending = false;
+        read_stale = false;
         ib_bytes = buffer_bytes(device, context, ib);
         readable = ib_bytes != nullptr;
         // Async: issue every read of this draw at once, so they land together instead of one per frame.
@@ -1271,6 +1308,7 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
             readable = readable && vb_bytes[i] != nullptr;
         }
         version = version_now();  // a first read creates the identities
+        stale_used = readable && read_stale;
         if (!readable && read_pending) {
             // Bytes in flight: not a rebuild yet. Nothing is counted or marked built, so the next draw retries.
             rebuild = false;
@@ -1279,7 +1317,9 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     }
     if (rebuild) {
         unsigned reason = kReasonFirst;
-        if (unknown) {
+        if (stale_built().erase(geometry)) {
+            reason = kReasonBuffer;  // the last build used a snapshot older than the game's write: this is its catch-up
+        } else if (unknown) {
             reason = kReasonUnknown;
         } else if (previously == built_versions().end()) {
             const auto tag = erased_reason().find(geometry);
@@ -1417,6 +1457,16 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
         } else {
             ++frame.skipped;
             built_versions()[geometry] = version;  // do not retry a broken draw every frame
+        }
+    }
+
+    if (stale_used) {
+        // Built from a snapshot older than the game's latest write: rebuild from the fresh copy on the next draw.
+        const auto built = built_versions().find(geometry);
+        if (built != built_versions().end()) {
+            built->second ^= 0x5ea1edull;
+            if (stale_built().size() > 200000) stale_built().clear();  // bounded like built_versions
+            stale_built().insert(geometry);
         }
     }
 

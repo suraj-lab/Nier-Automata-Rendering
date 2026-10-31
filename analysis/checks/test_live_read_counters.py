@@ -27,7 +27,7 @@ import test_nscn_scene as ts
 tr.ENV_KEYS = tuple(tr.ENV_KEYS) + ('NIER_REMIX_LIVE_CAMERA_LOG', 'NIER_REMIX_LIVE', 'NIER_REMIX_LIVE_TEX', 'NIER_REMIX_LIVE_STATS_EVERY',
                                      'NIER_REMIX_LIVE_MAX_WRITE_KB', 'NIER_REMIX_LIVE_SHADOW_KB', 'NIER_REMIX_LIVE_BUDGET_KB',
                                      'NIER_REMIX_LIVE_ASYNC_READS', 'NIER_REMIX_LIVE_READ_LATENCY',
-                                     'MOCK_LATE_IMMUTABLE')  # tr.run clears only these: a case's switch must not leak
+                                     'MOCK_LATE_IMMUTABLE', 'MOCK_LIVE_REWRITE_SAME', 'FAKE_REMIX_INSTANCE_LOG')  # tr.run clears only these: a case's switch must not leak
 KEYS = ('reads', 'first', 'trimmed', 'unmirrored', 'const', 'immutable', 'default', 'dynamic', 'read_kb', 'read_ms',
         'texture_ms', 'skinned', 'created', 'blocking', 'pending', 'waits')
 
@@ -43,7 +43,11 @@ def rebuilds(log):
     last = dict(re.findall(r'(\w+)=(\d+)', lines[-1]))
     assert set(REASONS) <= set(last), lines[-1]
     # Stall diagnostics (2026-10-31): per-window game frame count and worst interval, and the buffer-rebuild split.
-    assert {'buffer_skinned', 'buffer_dynamic', 'game_frames', 'game_max_ms'} <= set(last), lines[-1]
+    assert {'buffer_skinned', 'buffer_dynamic', 'game_frames', 'game_max_ms', 'worst_capture_ms', 'worst_hook_ms',
+            'worst_present_ms'} <= set(last), lines[-1]
+    for x in lines:  # the breakdown belongs to the worst frame, so its parts cannot exceed it (1 ms rounding each)
+        d = {k: int(v) for k, v in re.findall(r'(\w+)=(\d+)', x)}
+        assert d['worst_capture_ms'] + d['worst_hook_ms'] + d['worst_present_ms'] <= d['game_max_ms'] + 3, x
     assert any(int(dict(re.findall(r'(\w+)=(\d+)', x))['game_frames']) > 0 for x in lines), lines[-3:]
     assert int(last['buffer_skinned']) <= int(last['buffer']) and int(last['buffer_dynamic']) <= int(last['buffer']), lines[-1]
     return {k: int(last[k]) for k in REASONS}
@@ -155,6 +159,21 @@ def inside():
         assert async_meshes == sync_meshes, f'async reads lost or changed geometry: {async_meshes} vs {sync_meshes}'
         assert r['presented'] == '80', r
         results['async'] = f'{v}; meshes {async_meshes}'
+
+        # 6. Async with a buffer the game rewrites EVERY frame (live 2026-10-31 async1: such reads never landed: each
+        #    write made the in-flight copy stale and it was re-issued forever, so lights=0 and those meshes froze).
+        #    Mesh A's vertex buffer is rewritten each frame and never mirrored: its reads must keep landing, and A must
+        #    still be drawn every frame.
+        r, log = run('async-rewrite', {'NIER_REMIX_LIVE_MAX_WRITE_KB': '0', 'NIER_REMIX_LIVE_ASYNC_READS': '1',
+                                       'NIER_REMIX_LIVE_READ_LATENCY': '1', 'MOCK_LIVE_REWRITE_SAME': '1',
+                                       'FAKE_REMIX_INSTANCE_LOG': '1'})
+        v = reads(log)
+        assert v['blocking'] == 0, f'async mode blocked: {v}'
+        assert v['unmirrored'] >= 15, f'reads of a buffer rewritten every frame stopped landing: {v}'
+        a_frames = {int(m.group(1)) for x in r['fake'].splitlines()
+                    for m in [re.match(r'DrawInstance presented=(\d+)', x)] if m}
+        assert len(a_frames) >= 60, f'instances missing on {80 - len(a_frames)} of 80 frames: {sorted(a_frames)[:10]}'
+        results['async-rewrite'] = f'{v}; drawn on {len(a_frames)} frames'
     except Exception as exc:
         (OUT / 'validation.json').write_text(json.dumps({'passed': False, 'error': str(exc)[-3000:], 'results': results,
                                                          'work': str(work)}, indent=2) + '\n')

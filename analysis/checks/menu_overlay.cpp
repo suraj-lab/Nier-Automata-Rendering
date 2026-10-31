@@ -504,6 +504,7 @@ void render_panel(IDXGISwapChain* swapchain) {
 HRESULT STDMETHODCALLTYPE present(IDXGISwapChain* self, UINT sync, UINT flags) {
     const auto next = reinterpret_cast<PresentFn>(next_present.load(std::memory_order_acquire));
     const bool game_frame = self == target.load(std::memory_order_acquire) && !(flags & DXGI_PRESENT_TEST);
+    const unsigned long long hook_started = live_capture::now_us();
     // Remix replaces the game's image first, so the menu still draws on top. Independent of the menu's phase.
     if (game_frame) {
         try { draw_probe::report(self, host.log, reinterpret_cast<void*>(&draw_capture::hooked_draw_indexed),
@@ -524,8 +525,13 @@ HRESULT STDMETHODCALLTYPE present(IDXGISwapChain* self, UINT sync, UINT flags) {
             disable("unexpected exception");
         }
     }
+    const unsigned long long present_started = live_capture::now_us();
     const HRESULT result = next(self, sync, flags);
     const DWORD error = GetLastError();
+    if (game_frame) {
+        live_capture::present_hook_us = present_started - hook_started;
+        live_capture::present_call_us = live_capture::now_us() - present_started;
+    }
     // Arm only after downstream Present hooks too: their AA/overlay draws are not the next game frame.
     if (game_frame && SUCCEEDED(result)) { try { remix_live::begin_game_frame(self); } catch (...) {} }
     SetLastError(error);
