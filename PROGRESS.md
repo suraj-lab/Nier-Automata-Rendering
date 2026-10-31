@@ -6,6 +6,16 @@ State at this pause: nothing installed on either machine, no game running, lapto
 uncommitted on `main` above `a7a3c0b`. The noon PAUSED note below still applies in substance: do not launch a game or
 render unattended (and a save cannot be loaded without the operator).
 
+**Normal maps (2026-10-31 00:55, `b242078`, build `8ae8f91e`).** Materials now carry the draw's slot-4 texture as
+`normalTexture`, behind `NIER_REMIX_LIVE_NORMAL=1` (off by default: the orientation still needs one look).
+Motivation, from the shaders' own declarations (`analysis/MATERIAL_INPUTS_SLOTS.md`): slot 0 `g_ColorTexture`,
+slot 4 `g_NormalTexture` (153 of 605 shaders, bound on 139 of 286 main-view draws), slot 17 `g_AO_Texture`.
+Everything used to reach Remix with `roughnessConstant 0.6`, `metallicConstant 0`, so metal and cloth were the
+same flat surface. Gate `test_live_normal_map.py`: flag off = one DDS and `normal=-`; flag on = the mock's 8x8
+BC5 bytes as their own DDS and a `CreateMaterial` naming it, albedo never swapped. Two defects in that gate's
+own fixtures (BC5 row pitch 32; slot 4 only bound on the menu path) were found by the worker and fixed in the
+mock; the assertions were not weakened.
+
 **START HERE (2026-10-31 00:40). Read this first, then `analysis/PHASE4_PLAN.md`.**
 
 Overnight result, all committed and gate-verified:
