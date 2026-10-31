@@ -118,8 +118,40 @@ def inside():
                    [x for x in tr.remix_lines(log) if x.startswith('remix: live rebuilds ')][-1])}
             assert why['pose'] <= 2, f'{name}: rigid skinned draws still rebuild per pose: {why}'
             rigid_counts[name] = len(built)
+        gpu_bone = {}
+
+        # Phase 4: a blended skinned mesh is built ONCE in bind space and moved by per-frame bone transforms, so a pose
+        # costs an instance update instead of a mesh rebuild (82% of the rebuilds measured live were `pose`).
+        # Three weight slots per vertex is the only layout the runtime reads exactly (UPSTREAM_SKINNING_STRIDE.md).
+        for name, extra in (('gpu-bone-poses', {}), ('gpu-bone-animate', {'MOCK_SKIN_ANIMATE': '1'})):
+            tex_g = work / f'textures-{name}'
+            tex_g.mkdir()
+            _, r, log, fake = tr.run(work, name, {**base, 'NIER_REMIX_LIVE_GPU_SKIN': '1',
+                                                  'NIER_REMIX_LIVE_TEX': tr.win(tex_g), **extra})
+            assert fake and 'VIOLATION' not in fake, (fake or log)[-2000:]
+            built = [l for l in fake.splitlines() if l.startswith('CreateMesh') and 'indices=192 ' in l]
+            assert len(built) == 1, f'{name}: a pose must not rebuild the mesh, saw {len(built)} builds'
+            mesh = built[0]
+            assert 'skinned=1 ' in mesh and 'bonesPerVertex=4 ' in mesh, mesh
+            verts = int(re.search(r'verts=(\d+)', mesh).group(1))
+            weights = int(re.search(r'weights=(\d+)', mesh).group(1))
+            assert weights == 3 * verts, f'{name}: expected three weight slots per vertex, {weights} for {verts}'
+            assert 'v0=0.000,0.000,0.500' in mesh, f'{name}: mesh is not in bind space, it was baked: {mesh}'
+            draws = [l for l in fake.splitlines() if l.startswith('DrawInstance')]
+            assert len(draws) >= 30, f'{name}: only {len(draws)} frames drawn'
+            assert all('bones=0 ' not in l for l in draws), f'{name}: no bone transforms reached the instance'
+            bones = [l for l in fake.splitlines() if l.startswith('Bones count=')]
+            assert bones, f'{name}: the runtime never saw a bone palette'
+            xs = [float(re.search(r'b0=[-\d.]+,([-\d.]+)', l).group(1)) for l in bones]
+            if name == 'gpu-bone-poses':
+                assert set(round(x, 3) for x in xs) == {0.0, 10.0}, f'{name}: bone 0 does not follow the pose: {sorted(set(xs))}'
+            else:
+                steps = {round(b - a, 3) for a, b in zip(xs, xs[1:])}
+                assert steps <= {0.25, 0.5, 0.75}, f'{name}: bone 0 does not follow the animation: {sorted(steps)}'
+            assert int(r['geometry_reads']) <= 3, f'{name}: GPU skinning must not read geometry back: {r}'
+            gpu_bone[name] = f'{len(draws)} frames, {len(bones)} palettes, {verts} vertices -> {weights} weights, one mesh'
         report = {'passed': True, 'work': str(work), 'poses': sorted(by_pose), 'meshes': len(meshes),
-                  'animated_builds': len(animated), 'animated_keys': len(side), 'rigid_builds': rigid_counts,
+                  'animated_builds': len(animated), 'animated_keys': len(side), 'rigid_builds': rigid_counts, 'gpu_bone': gpu_bone,
                   'limits': 'Real proxy in a software Wine mock, not the real Remix runtime or live game.'}
         (OUT / 'validation.json').write_text(json.dumps(report, indent=2) + '\n')
         print(json.dumps(report))

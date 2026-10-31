@@ -6,6 +6,21 @@ State at this pause: nothing installed on either machine, no game running, lapto
 uncommitted on `main` above `a7a3c0b`. The noon PAUSED note below still applies in substance: do not launch a game or
 render unattended (and a save cannot be loaded without the operator).
 
+**Where the frame time goes (2026-10-31 08:50 run, 2880x1800, `analysis/evidence/remix-current/2026-10-31/`).**
+Per-frame means over the 5 stats windows: readback **37.1 ms**, convert **9.3 ms**, `other` **70.3 ms**
+(1.5 ms in the quiet window, 157.5 ms while churning), everything else 1.1 ms. So:
+- **The churn is still there and is the variable cost**: quiet window = **22.5 fps**, churning = 4.8 fps. Same
+  phase 4 fix, and it is the popping too (`pose=12948` rebuilds).
+- **A ~46 ms floor** exists under that: reading the final image back makes us wait for the path tracer to
+  finish it at 2880x1800 (the probe measured the copy itself at 0.5 ms/11 MB, so it is GPU wait, not
+  bandwidth), plus 9 ms converting ~21 MB on the CPU. Levers: DLSS preset / RR cost, then a GPU-side shared
+  texture instead of the CPU round trip (also a prerequisite for frame generation).
+- **One OMM warning at the end of that run**: `[RTX Opacity Micromap] Out of memory budget. Requested:
+  10233952 bytes. Free: 5550968 bytes, Budget: 1610612736` — once, so not yet a smoking gun. Cheap A/B:
+  `DXVK_ENABLE_OPACITY_MICROMAP=0` versus the budget knobs, on the same save.
+- `skipped_pass=690` in that run is also unexplained; it may be the same pass/culling issue behind part of the
+  popping.
+
 **Normal maps (2026-10-31 00:55, `b242078`, build `8ae8f91e`).** Materials now carry the draw's slot-4 texture as
 `normalTexture`, behind `NIER_REMIX_LIVE_NORMAL=1` (off by default: the orientation still needs one look).
 Motivation, from the shaders' own declarations (`analysis/MATERIAL_INPUTS_SLOTS.md`): slot 0 `g_ColorTexture`,
