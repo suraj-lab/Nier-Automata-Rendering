@@ -388,10 +388,37 @@ int wmain(int argc, wchar_t** argv) {
         t->Release();
         return v;
     };
-    ID3D11ShaderResourceView* mesh_srvs[3] = {
+    // MOCK_TEX_MIPS=1: an 8x8 RGBA texture with a real four-level chain (8,4,2,1), each level a distinct pattern,
+    // so a gate can require that the DDS carries the game's own mips instead of mip 0 only.
+    const bool tex_mips = GetEnvironmentVariableW(L"MOCK_TEX_MIPS", nullptr, 0) > 0;
+    unsigned char mip_bytes[4 * 4 * 4 + 2 * 2 * 4 + 1 * 4 + 1 * 4];
+    D3D11_SUBRESOURCE_DATA mip_levels[4] = {};
+    ID3D11ShaderResourceView* mip_srv = nullptr;
+    if (tex_mips) {
+        unsigned offset = 0;
+        const UINT sizes[4] = {8, 4, 2, 1};
+        for (unsigned m = 0; m < 4; ++m) {
+            const UINT bytes = sizes[m] * sizes[m] * 4;
+            for (UINT i = 0; i < bytes; ++i) mip_bytes[offset + i] = static_cast<unsigned char>((i * 11 + 29 * m) & 0xff);
+            mip_levels[m] = {mip_bytes + offset, sizes[m] * 4, 0};
+            offset += bytes;
+        }
+        D3D11_TEXTURE2D_DESC md{}; md.Width = 8; md.Height = 8; md.MipLevels = 4; md.ArraySize = 1;
+        md.Format = DXGI_FORMAT_R8G8B8A8_UNORM; md.SampleDesc.Count = 1; md.Usage = D3D11_USAGE_DEFAULT;
+        md.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+        ID3D11Texture2D* mt = nullptr;
+        if (FAILED(device->CreateTexture2D(&md, mip_levels, &mt)) || FAILED(device->CreateShaderResourceView(mt, nullptr, &mip_srv))) {
+            std::fprintf(out, "FAIL mip texture\n"); return 3;
+        }
+        mt->Release();
+    }
+    ID3D11ShaderResourceView* mesh_srvs[4] = {
         make_srv(4, 4, DXGI_FORMAT_R8G8B8A8_UNORM, rgba, 16, 0),
         make_srv(16, 16, DXGI_FORMAT_R8G8B8A8_UNORM, nullptr, 0, D3D11_BIND_RENDER_TARGET),
-        make_srv(8, 8, DXGI_FORMAT_BC1_UNORM, bc1, 16, 0)};
+        make_srv(8, 8, DXGI_FORMAT_BC1_UNORM, bc1, 16, 0),
+        mip_srv};
+    // MOCK_TEX_MIPS: the material albedo (slot 0, what the live path captures) is the four-level texture.
+    if (tex_mips) mesh_srvs[0] = mip_srv;
     if (!mesh_srvs[0] || !mesh_srvs[1] || !mesh_srvs[2]) { std::fprintf(out, "FAIL textures\n"); return 3; }
     // The tiled-forward light arrays, bound the way the game binds them, so an F9 capture records them for the laptop
     // probe: points at t20 (48-byte elements, BUFFEREX view, the view starts at element 1), spots at t22 (80 bytes).
