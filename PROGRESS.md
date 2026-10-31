@@ -6,6 +6,46 @@ State at this pause: nothing installed on either machine, no game running, lapto
 uncommitted on `main` above `a7a3c0b`. The noon PAUSED note below still applies in substance: do not launch a game or
 render unattended (and a save cannot be loaded without the operator).
 
+**START HERE (2026-10-31 00:40). Read this first, then `analysis/PHASE4_PLAN.md`.**
+
+Overnight result, all committed and gate-verified:
+1. **The vanishing world is fixed** (`6cfba08`, build `dbbdd551`): repair the draw slots from the input
+   assembler too, because another layer resets them mid-frame. Your 23:36 recording shows 20 of 20 frames
+   with the full camp (the 21:54 one had 4 of 20 empty). The scene-target hysteresis and the camera theory
+   were both innocent; the camera log cleared them.
+2. **Skinned geometry is mostly really animated.** Census of 142 skinned main-view draws from the F9 capture:
+   110 blended (77%), 24 single-bone rigid, 8 piecewise rigid; weights sum to exactly 255/255; 46% of
+   vertices use one influence, 13% two, 12% three, **29% four**. The rigid path only covers the quarter that
+   is rigid, which is why the pose counter barely moved in the 23:35 run: that churn is real animation, and
+   the fix is Phase 4, not a stricter heuristic.
+3. **Four-bone GPU skinning is possible on the shipped runtime, verified end to end** (`SKINNING_4BONE_RESULT.md`).
+   Upstream reads weights at a 1-float stride, so a vertex must own three consecutive slots: real vertex `i`
+   at slot `3i`, `w0..w2` at `3i..3i+2`, fourth derived, one packed index word per slot, indices remapped
+   `j -> 3j`. Probe `f5d2c6d0` on the laptop against the 1.6.1 A64EC runtime: **silhouette IoU 1.000 versus
+   the CPU bake, max 1/255 per pixel** (two bones was 0.982, dense four bones 0.763 torn). Offline gate
+   `test_three_slot_skin_layout.py` pins the upstream sources by SHA-256 and fails the mutation.
+4. **Replacement textures now carry the game's own mip chain** (`1685d9d`, build `45c7f0df`), which is what
+   Remix wanted before calling them suboptimal. No filtering: BC data is copied level for level.
+   Gate `test_live_texture_mips.py` (red before, green after).
+5. **Grey surfaces are a wrong-slot problem, not a missing-texture one** (measured, see the entry below).
+
+Tomorrow, in this order:
+* One live laptop run with the new build (`1685d9d`) to see the mip effect and to confirm nothing regressed:
+  `python3 analysis/deploy/laptop_port.py run live-mips --seconds 120 --live --no-ec-hooks --rtx-conf
+  analysis/deploy/rtx/laptop-b-dlss-perf.conf --env NIER_REMIX_LIVE_TEX_PER_FRAME=16 --runtime
+  "...\upstream-1.6.1-x64\d3d9_a64ec.dll"`, then `laptop_port.py restore`. Compare fps and the
+  "suboptimal" warnings in the kept runtime log; look at the world textures.
+* Then Phase 4 per the plan: gate first (`gpu-bone` case), then the bind-space mesh plus per-frame
+  `InstanceInfoBoneTransformsEXT` behind `NIER_REMIX_LIVE_GPU_SKIN=1`, A/B on the same save. Expect the
+  `pose` rebuild counter to go to zero; that is the churn we could not remove any other way.
+* The F9 capture with the full weight data is at `analysis/runtime/laptop-port/live-hyst/skin-draws/`
+  (142 draws, 260 MB, untracked) and the compact fixture for gates is
+  `analysis/checks/fixtures/skin-weights-nier.json`.
+
+Full gate suite on `dbbdd551` was 58/58 green (`runtime/final-20261030/`); the suite on `45c7f0df` is
+running as this is written (`runtime/final-20261031/`). The laptop is restored to its original `6ba266d6`
+d3d11.dll and its game folder is untouched.
+
 **Texture slots measured (2026-10-31 00:20, F9 frame_453279156, 286 main-view draws of 760).** Every
 main-view draw has PS textures bound; 283 of 286 have something at slot 0, 285 at slot 2, 286 at slot 14,
 plus 11/12/3/4/7. 21 distinct pixel shaders. So the live path's "first usable PS texture is the albedo" rule
