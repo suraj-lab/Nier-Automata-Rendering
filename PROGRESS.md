@@ -33,7 +33,9 @@ mock; the assertions were not weakened.
 
 **START HERE (2026-10-31 10:00): Phase 4 is built and gated; next is one laptop A/B.**
 
-`3151ea6`, build **`caa4ab5d`**, suite 61/61 (`analysis/runtime/final-20261031c/`). Blended skinned draws keep
+`c91f080`, build **`33fe971c`**, suite 61/61 (`analysis/runtime/final-20261031d/`). The first live run of
+`caa4ab5d` crashed: bone indices were passed pre-packed and the runtime over-read them. Fixed and re-probed on the
+laptop with a control that must fail (`analysis/PHASE4_CRASH.md`). Blended skinned draws keep
 one bind-space mesh (three-slot layout, 3V+4 weights, as proven on 1.6.1) and get the CB11 palette per frame
 as instance bone transforms. Behind `NIER_REMIX_LIVE_GPU_SKIN=1`, off by default.
 
