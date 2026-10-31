@@ -72,7 +72,13 @@ remixapi_ErrorCode REMIXAPI_CALL create_material(const remixapi_MaterialInfo* i,
         const char* slash = std::strrchr(path, '\\');
         const auto* ext = static_cast<const remixapi_MaterialInfoOpaqueEXT*>(i->pNext);
         const bool opaque_ext = ext && ext->sType == REMIXAPI_STRUCT_TYPE_MATERIAL_INFO_OPAQUE_EXT;
-        note("CreateMaterial path=%s presented=%u alpha=%d/%u hash=%llu", slash ? slash + 1 : path, frames,
+        char normal[MAX_PATH * 3] = "";
+        if (i->normalTexture) {
+            WideCharToMultiByte(CP_UTF8, 0, i->normalTexture, -1, normal, sizeof normal, nullptr, nullptr);
+            if (const char* cut = std::strrchr(normal, '\\')) std::memmove(normal, cut + 1, std::strlen(cut + 1) + 1);
+        }
+        note("CreateMaterial path=%s normal=%s presented=%u alpha=%d/%u hash=%llu", slash ? slash + 1 : path,
+             normal[0] ? normal : "-", frames,
              opaque_ext ? ext->alphaTestType : -1, opaque_ext ? unsigned(ext->alphaReferenceValue) : 0u,
              static_cast<unsigned long long>(i->hash));
     }

@@ -412,6 +412,14 @@ int wmain(int argc, wchar_t** argv) {
         }
         mt->Release();
     }
+    // MOCK_NORMAL_TEX=1: a BC5 (two-channel) 8x8 normal map at slot 4, the slot the game's shaders name
+    // g_NormalTexture. Two channels and a block format on purpose: that is what NieR's normal maps are, and it
+    // exercises the block-aware DDS writer.
+    const bool normal_tex = GetEnvironmentVariableW(L"MOCK_NORMAL_TEX", nullptr, 0) > 0;
+    unsigned char bc5[2 * 2 * 16];
+    for (unsigned i = 0; i < sizeof bc5; ++i) bc5[i] = static_cast<unsigned char>((i * 19 + 5) & 0xff);
+    ID3D11ShaderResourceView* normal_srv = normal_tex ? make_srv(8, 8, DXGI_FORMAT_BC5_UNORM, bc5, 16, 0) : nullptr;
+    if (normal_tex && !normal_srv) { std::fprintf(out, "FAIL normal texture\n"); return 3; }
     ID3D11ShaderResourceView* mesh_srvs[4] = {
         make_srv(4, 4, DXGI_FORMAT_R8G8B8A8_UNORM, rgba, 16, 0),
         make_srv(16, 16, DXGI_FORMAT_R8G8B8A8_UNORM, nullptr, 0, D3D11_BIND_RENDER_TARGET),
@@ -1166,6 +1174,9 @@ int wmain(int argc, wchar_t** argv) {
                 for (int pass = (frame >= 40 || live_late || live_hud) ? 2 : 1; pass >= 1; --pass) {
                     if (live_evict && pass == 2 && frame > 45 && frame < 65) continue;  // B unused in between
                     if (live_evict || live_late || live_hud) context->PSSetShaderResources(0, 1, &mesh_srvs[pass == 2 ? 2 : 0]);
+                    // MOCK_NORMAL_TEX: slot 4 is the normal map on the world draw (the live path must not treat it as albedo).
+                    if (normal_srv) context->PSSetShaderResources(4, 1, &normal_srv);
+                    else if (live_evict || live_late || live_hud) { ID3D11ShaderResourceView* none = nullptr; context->PSSetShaderResources(4, 1, &none); }
                     ID3D11Buffer* vb = pass == 2 ? live_vb2 : live_vb;
                     ID3D11Buffer* ib = pass == 2 ? live_ib2 : live_ib;
                     context->IASetVertexBuffers(0, 1, &vb, &mstride, &moff);
