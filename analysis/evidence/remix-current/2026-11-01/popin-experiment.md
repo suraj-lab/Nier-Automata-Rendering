@@ -181,3 +181,14 @@ Per-phase fps difference (on - off): -0.34 to +0.43, no sign. Phase 1: 17.8 off,
 measurable and removes ~85% of visible still-camera drops.** The 11-12 fps runs were machine state, not code;
 receipts now record the power source and plan (the laptop was at 35% charge mid-session), so the next slow run can
 be checked against it.
+
+## Movement, first look (popin-walk1-b4000, DLL 47ab13a5)
+
+Scripted walking goes through XInput (`back` = left stick back; the save's camera faces 2B). Pad recognised:
+1,740 walk polls. 2B walked ~8 s (phase 2: 0.37 units/frame, instances 155 → 419, 924 first-sight builds = 117/s,
+missing mean 4.1, max 74, holes 37 instance·s), then stood blocked for ~50 s; from t≈172 s the user moved her by hand
+(human input, not scripted). Moving frames vs still frames: drops/frame 13.8 vs 0.7, holes (instances with no mesh)
+5.2 vs 0.55 per frame, peaks up to 251 when new areas stream in. While moving, most dropped keys are the game no
+longer drawing them (65%, median largest dropped object 0.4% of the screen): objects leaving the view and LOD swaps,
+not pop-in. **For movement the metric is holes weighted by screen size, not dropped keys.** User, watching live:
+"the world seems pretty stable in terms of pop-in". Next walk run: a save with a long open path, scripted only.
