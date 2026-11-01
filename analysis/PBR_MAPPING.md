@@ -70,3 +70,24 @@ draws skipped per stats window; 13.1 Remix fps (AC power). User: surfaces **"cle
 puddles gone); colours **"better, but somewhat"** washed out still. Not yet sent: the per-instance tint
 (cb4 × cb8[instance]) and the second-UV texture the game multiplies into albedo, and its screen-space AO (t17,
 which Remix replaces with its own GI).
+
+## Diagnostic run pbr-diag1 (DLL d0b5048d) and what the recording shows
+
+Per-shader `remix: material` lines + the run's own 605 shader blobs (kept by restore) + the user's recording (camp,
+city ruins, desert).
+
+1. **No albedo or metal role on any live shader.** Microsoft's D3DDisassemble (the one the game process uses) prints
+   scalar swizzles replicated (`r7.yyyy`) and literals as `0.030000`; the tracer had been tuned on Wine's output
+   (`r7.y`, `2.99999993e-02`) and the metal/albedo pattern required a 1-char swizzle. Fixed in `108ec3c`: on the same
+   605 blobs, roles from Microsoft's and Wine's text are now identical (albedo 104, metal 102, gloss 94, normal 111,
+   detail 103); both gates went red with the old rule.
+2. **Untextured dunes, white ground in the city: terrain shaders tile their UVs from constants.** The lit terrain
+   family (`ps_550777957256`, `ps_550782035336`; t0..t7 + lights) samples layer 0 at `v2.xy * cb1[5].xy + cb3[1].xy`,
+   layer 1 at `v2.zw * cb1[5].zw`, layer 2 at `v2.zw * cb1[6].xy`, and height-blends the three by vertex colour against
+   each texture's alpha (`saturate((v1.x - t0.a) / cb1[1].w)`). Normals are t5..t7 blended the same way; gloss/metal are
+   per-layer constants (cb1[3], cb1[4]) blended too. We send t0 with the raw UVs: one sand texture stretched over a
+   whole dune. Every role is a blend, so the tracer (correctly) names none.
+3. **Chrome-looking rocks and far terrain** persist in a run where no metal was sent at all (bug 1), so they are not
+   metalness. Not yet attributed (roughness from a gloss role on rock shaders, or something outside the material).
+4. **Foliage**: trees and bushes present in the city ruins; 11 shaders were skipped as effects, all blended
+   no-depth-write. Which foliage is missing has to be pointed out on screen. Particles are off by decision.
