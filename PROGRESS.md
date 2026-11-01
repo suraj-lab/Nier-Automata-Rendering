@@ -1,5 +1,24 @@
 # NieR:Automata Rendering — Progress & Resume
 
+## START HERE / PAUSED (2026-11-01, after frametime1)
+
+The operator requested a pause. Laptop game files restored and hash-verified (`d3d11.dll` original
+`6ba266d64a8f6776`); no test build remains installed. Do not launch a game without renewed approval.
+
+- Tested combined build `8b0f167225e480c3`, suite **77/77**: SSE2 frame conversion and a single raw mask capture
+  shared by metallic/roughness within each draw. Every new fix has a failing mutation check.
+- Approved AC/Performance run `frametime1`: conversion **3.5 ms** in world-associated report windows, versus
+  **11.0 ms** in the earlier AC run; remaining readback/GPU wait **58.4 ms**, median Remix FPS **13.1**.
+  The user reports much better frame times. Different routes/builds/draw thresholds prevent a code-only FPS claim.
+- Texture/terrain/overlay faults persist. The user suspects LOD/texture-related slowdowns; investigate existing
+  recording/logs before treating LOD as the cause or changing it. No more implementation at this pause.
+- Resume plan: `analysis/NEXT_STEPS_2026-11-01.md`. Latest evidence and recording locations:
+  `analysis/evidence/remix-current/2026-11-01/frametime1.md`.
+- Current material roles come from the draw's own shader. Slot-4 normal-map assumptions in the older notes below
+  are superseded by `analysis/PBR_MAPPING.md`; they are historical findings, not current instructions.
+
+Everything below this checkpoint is historical unless the current plan refers to it.
+
 ## PAUSED — operator logging off (2026-10-30 evening)
 
 State at this pause: nothing installed on either machine, no game running, laptop restored and hash-verified, work
