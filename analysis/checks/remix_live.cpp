@@ -335,7 +335,7 @@ struct Worker {
         std::map<std::uint64_t, std::uint64_t> carry;
         if (!dropped.empty() && !appeared.empty())
             dropout_watch::attribute(dropped, appeared, previous, capture_now, {}, nullptr, &carry, true);
-        live.carry = carry;
+        live_scene::merge_carry(live, carry);
     }
 
     void report_visibility(const live_capture::Frame& frame, const visibility_trace::Batch& submitted, const char* work) {
@@ -567,6 +567,11 @@ struct Worker {
                 ++submitted.dropped; // no submission attempted: never infer that a retained instance vanished
                 report_visibility(frame, submitted, why);
             };
+            // Publish the last frame's unbuilt share so the capture side can raise its build budget during a backlog.
+            if (live.frame_instances) {
+                live_capture::submitted_instances.store(live.frame_instances, std::memory_order_relaxed);
+                live_capture::submitted_missing.store(live.frame_missing, std::memory_order_relaxed);
+            }
             plan_carry(frame);
             std::vector<live_capture::Upload> uploads = live_capture::take_uploads();
             std::vector<live_capture::TextureFile> textures = live_capture::take_textures();

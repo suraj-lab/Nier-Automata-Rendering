@@ -272,6 +272,15 @@ int main() {
             instances.clear();
             live_scene::submit(api, churn, s, camera, 1.7f);
             check("missing stand-in was drawn", instances.empty() && s.carried == 0);
+            // A pair recognised on an earlier frame survives until that key's own mesh exists.
+            s.carry.clear();
+            live_scene::merge_carry(s, {{88, 11}});
+            check("planned carry merged", s.carry.count(88) == 1 && s.carry[88] == 11);
+            live_scene::merge_carry(s, {});          // nothing recognised this frame
+            check("unbuilt carry kept", s.carry.count(88) == 1);
+            live_scene::update(api, {make_upload(88, 10)}, {}, live_capture::Frame{}, s, nscn::Options{});
+            live_scene::merge_carry(s, {});          // 88 is built now: its pair is stale
+            check("built carry dropped", s.carry.count(88) == 0);
             s.carry.clear();
         }
 

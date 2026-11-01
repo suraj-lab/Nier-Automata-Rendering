@@ -95,3 +95,30 @@ Instance-level per ~3 s window: steady state 0.5-2.3% of instances reach the ren
 The same early window defers 2,915 builds on the 4 ms budget. Standing-still `absent` (61% of still-camera dropouts)
 is not a two-way key swap (absent == appeared in 151 of 951 events) and cannot be a pre-key rejection (such a draw is
 filtered identically every frame), so it is the game not issuing those draws: engine cull / FAR LOD, not capture.
+
+## Prior art that validates the design (web research, 2026-11-01)
+
+- Remix's default asset identity is `positions,indices,geometrydescriptor`
+  (`rtx.geometryAssetHashRuleString`, RtxOptions.md): no layout, no strides, no pointers. Our key includes four
+  pointers, four strides, four offsets, IB pointer/offset/format, layout and base vertex, i.e. everything volatile.
+- Remix's own `HashComponents` has no buffer pointers, and `getVertexRegion()` reads through the bind offset, so ring
+  slots hash equal (`d3d9_rtx_geometry.cpp`); it hashes only the vertices the indices touch.
+- `DrawCallCache` pairs a draw with its previous frame by exact geometry hash, then by *fuzzy world position*
+  (`rtx_draw_call_cache.cpp`): the same rule as our `place_same` stand-in.
+- Remix states it keeps `boneHash` stable across frames rather than recomputing it, for exactly this reason.
+- FAR (the known NieR:Automata fix mod) identifies its target buffer by `D3D11_BUFFER_DESC` fields and keeps a
+  `std::map<ID3D11Buffer*, ...>`: desc signatures plus per-pointer state, not a global geometry key.
+
+Consequence: the durable fix is a content key over the ranges the indices touch (positions and indices), with the
+volatile pointer/stride/offset components out of the key, hashed off the draw thread. Until then, the stand-in keeps
+the hole closed.
+
+## Build budget policy and persistent stand-ins (ad516f32..58e88c0a)
+
+- `backlog_policy.h`: when unbuilt instances exceed 10% of the submitted frame the build budget rises to 20 ms (5x,
+  capped), converting a stream-in spike from 50% missing geometry into slower frames. Gated
+  (`test_backlog_policy.py`: normal, spike, boundaries, disabled, ceiling).
+- Stand-in pairs now persist until the new key's own mesh exists (`live_scene::merge_carry`), so a pair recognised on
+  one frame still covers a build that lands several frames later. Gated in `test_live_scene.py`, shown red by
+  dropping every old pair.
+26 affected gates pass (build 58e88c0a).

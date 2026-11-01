@@ -17,6 +17,7 @@
 #include <string>
 #include <vector>
 #include "live_types.h"
+#include "backlog_policy.h"
 #include "funnel.h"
 #include "layout_signature.h"
 #include "live_vertex_decode.h"
@@ -268,6 +269,9 @@ inline std::size_t read_budget_per_frame = std::size_t(64) << 20;
 // (or again after eviction). Live 2026-10-31: turning the camera toward new geometry built hundreds of meshes in one
 // frame, 114-304 ms. Past the budget a first-sight build waits for a later frame; a changed mesh is still rebuilt.
 inline unsigned long long build_budget_us = 0, build_us_this_frame = 0;
+// Last submitted frame's unbuilt share, written by the worker: a stream-in backlog raises the build budget so the
+// holes become one slow frame instead of half a missing world (backlog_policy.h).
+inline std::atomic<unsigned long long> submitted_instances{0}, submitted_missing{0};
 // First-sight decoding is what the budget is meant to pace, so it is charged separately: rebuilds of a buffer the game
 // rewrote every frame are mandatory work and must not consume the allowance (live-normal1: they did, so after the first
 // few rebuilds every never-built mesh was deferred, and 24.5% of submitted instances had no mesh).
@@ -1382,7 +1386,10 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     const bool first_sight = previously == built_versions().end() || unknown;
     // A deferred texture must not hold the geometry back: it is uploaded without a material for now, and the
     // texture's arrival invalidates it (waiting_materials) so the next draw rebuilds the mesh with the material.
-    const bool over_build_budget = build_budget_us && !changed && first_sight_us_this_frame >= build_budget_us && first_sight;
+    const unsigned long long budget_now = backlog_policy::budget(
+        build_budget_us, submitted_instances.load(std::memory_order_relaxed),
+        submitted_missing.load(std::memory_order_relaxed));
+    const bool over_build_budget = budget_now && !changed && first_sight_us_this_frame >= budget_now && first_sight;
     if (over_build_budget) build_deferred.fetch_add(1, std::memory_order_relaxed);
     const bool over_read_budget = !changed && needs_read && read_bytes_this_frame >= read_budget_per_frame;
     if (over_read_budget) read_deferred.fetch_add(1, std::memory_order_relaxed);

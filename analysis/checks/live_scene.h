@@ -56,6 +56,7 @@ struct State {
     // two are provably the same object in the same place (dropout_watch). One frame of the old geometry beats a hole.
     std::map<std::uint64_t, std::uint64_t> carry;
     std::uint64_t carried = 0;   // instances drawn with a stand-in mesh, reported per stats window
+    unsigned long long frame_instances = 0, frame_missing = 0;  // last submit: instances, and instances with no mesh
     remixapi_LightHandle sun = nullptr, sky = nullptr;
     live_capture::Sun sun_value;  // what `sun` was created with, when sun_captured
     bool sun_captured = false;
@@ -322,6 +323,17 @@ inline bool update(const remixapi_Interface& api, std::vector<live_capture::Uplo
 // A frame needs at least one ray-traced (non-sky) instance: Remix hides SKY instances from ray tracing, and a frame
 // with zero ray-traced surfaces crashes it (0-byte "Surface Material Buffer", divide by zero; NieR's title screen,
 // 2026-10-29). Such a frame is held back and the previous image stays up.
+// Carry entries stay valid until their own mesh exists: a re-key can be recognised on one frame and still be
+// unbuilt several frames later, and dropping the pair would put the hole back.
+inline void merge_carry(State& s, const std::map<std::uint64_t, std::uint64_t>& planned) {
+    std::map<std::uint64_t, std::uint64_t> merged = planned;
+    for (const auto& kv : s.carry) {
+        const auto own = s.meshes.find(kv.first);
+        if (own == s.meshes.end() || !own->second) merged.emplace(kv.first, kv.second);
+    }
+    s.carry = std::move(merged);
+}
+
 // A usable mesh: its own, or the mesh of the key it replaced (a planned stand-in that still exists).
 inline bool drawable(const State& s, std::uint64_t geometry) {
     if (const auto m = s.meshes.find(geometry); m != s.meshes.end() && m->second) return true;
@@ -348,6 +360,8 @@ inline remixapi_ErrorCode submit(const remixapi_Interface& api, const live_captu
         if (trace) ++trace->dropped; // submission did not run: absence is unknown, not a vanished instance
         return REMIXAPI_ERROR_CODE_GENERAL_FAILURE;
     }
+    s.frame_instances = 0;
+    s.frame_missing = 0;
     if (const remixapi_ErrorCode r = nscn::setup_camera(api, camera, aspect)) {
         if (trace) ++trace->dropped;
         return r;
@@ -377,6 +391,8 @@ inline remixapi_ErrorCode submit(const remixapi_Interface& api, const live_captu
             event.reason = visibility_trace::Reason::MeshMissing;
             event.instances = item.count;
             funnel::count_instance(event.reason, item.count);
+            s.frame_instances += item.count;
+            s.frame_missing += item.count;
             if (trace) trace->add(event);
             continue;
         }
@@ -434,6 +450,7 @@ inline remixapi_ErrorCode submit(const remixapi_Interface& api, const live_captu
                 }
             }
             const remixapi_ErrorCode result = api.DrawInstance(&instance);
+            s.frame_instances += 1;
             if (carried && !result) ++s.carried;   // drawn, but with the predecessor's mesh this frame
             funnel::count_instance(result ? visibility_trace::Reason::DrawFailed : visibility_trace::Reason::Drawn);
             if (trace) {
