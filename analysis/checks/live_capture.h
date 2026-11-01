@@ -18,6 +18,7 @@
 #include <vector>
 #include "live_types.h"
 #include "backlog_policy.h"
+#include "geometry_key.h"
 #include "funnel.h"
 #include "layout_signature.h"
 #include "live_vertex_decode.h"
@@ -297,6 +298,10 @@ inline std::map<std::uint64_t, bool>& sky_geometries() { static std::map<std::ui
 inline std::map<std::uint64_t, std::uint64_t>& content_hashes() { static std::map<std::uint64_t, std::uint64_t> m; return m; }
 // Skinned draws of one buffer set seen so far this frame (cleared by begin_frame): the occurrence is part of the key.
 inline std::map<std::uint64_t, unsigned>& skinned_occurrences() { static std::map<std::uint64_t, unsigned> m; return m; }
+inline std::map<std::uint64_t, std::vector<std::uint64_t>>& key_variants() {
+    static std::map<std::uint64_t, std::vector<std::uint64_t>> m;
+    return m;
+}
 // Why a geometry was rebuilt (analysis/LAPTOP_PORT.md, 2026-10-30: the live world popped in and out while ~250 meshes a
 // second were rebuilt with almost no identical content). Counted once per rebuild attempt at the decision below.
 // A key erased for a texture arrival or an eviction comes back looking like first sight, so the erase sites tag it.
@@ -907,6 +912,7 @@ inline void begin_frame(ID3D11DeviceContext* context, unsigned width = 0, unsign
         first_sight_us_this_frame = 0;
         target_sizes().clear();
         skinned_occurrences().clear();
+        key_variants().clear();
         expire_entries();
     }
     active_context.store(context, std::memory_order_release);
@@ -1095,10 +1101,16 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
         if (e.semantic == "BLENDINDICES" || e.semantic == "BLENDWEIGHT") skinned = true;
 
     const unsigned index_width = ib_format == DXGI_FORMAT_R16_UINT ? 2 : 4;
+    // Only the POSITION stream's pointer names the object; the others are versions of it (geometry_key.h).
+    unsigned position_slot = 4;  // 4 = no POSITION element: every pointer stays in the key
+    for (const auto& e : elements.elements)
+        if (e.semantic == "POSITION" && e.slot_class == D3D11_INPUT_PER_VERTEX_DATA) { position_slot = e.slot; break; }
     std::uint64_t key = 1469598103934665603ull;
+    std::uint64_t secondary = 1469598103934665603ull;
     for (unsigned i = 0; i < vb_count; ++i) {
         const std::uint64_t pointer = static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(vbs[i]));
-        key = hash_mix(key, &pointer, sizeof pointer);
+        if (position_slot == 4 || i == position_slot) key = hash_mix(key, &pointer, sizeof pointer);
+        else secondary = hash_mix(secondary, &pointer, sizeof pointer);
         key = hash_value(key ^ strides[i]);
         key = hash_value(key ^ offsets[i]);
     }
@@ -1110,6 +1122,11 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     key = hash_value(key ^ start_index);
     key = hash_value(key ^ static_cast<std::uint64_t>(static_cast<std::uint32_t>(base_vertex)));
     key = hash_value(key ^ static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(layout)));
+    {
+        std::lock_guard<std::recursive_mutex> lock(mutex());
+        if (key_variants().size() > 65536) key_variants().clear();  // bounded; cleared every frame anyway
+        key = geometry_key::variant(key, secondary, key_variants());
+    }
     std::uint64_t geometry = key;
     trace.event.source = key;
     trace.event.geometry = geometry;

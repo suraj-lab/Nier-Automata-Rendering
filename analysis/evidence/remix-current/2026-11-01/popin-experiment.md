@@ -64,3 +64,33 @@ Prediction written before the run: first-turn holes 821 → ~100–270 instance�
   different scene, not a regression. It is the λ_churn·W_read term: the content key / stand-in work.
 - The same mouse delta produced 6.1° and 12.0° per frame on the first turn in two runs; turn rate must be measured,
   never assumed from the script.
+
+## Fix: stable geometry key (DLL dc40a0da), A/B against popin-fast-b4000
+
+Churn breakdown from the per-frame log: 99% of re-keys were `vb2_ptr` alone (6,713 / 7,433 per run), all `place_same`.
+The key now hashes only the POSITION stream's pointer (plus strides, offsets, IB, range, layout as before); the other
+streams' pointers go into the version, so a moved stream rebuilds the mesh under the same key and the old mesh keeps
+drawing meanwhile (`geometry_key.h`). Draws sharing a key in one frame with different secondary streams get stable
+variant keys by order, so they never alias; identical repeats still share one mesh. Gates 73/73: `test_geometry_key.py`
+and a Wine case (`MOCK_CHURN_SLOT2`: slot 2 moves to an identical copy every 10 frames) that fails with the old key
+and passes with the new one. Also fixed: `MOCK_CHURN_EVERY` leaked into later runs of `test_live_visibility.py`.
+
+| | popin-fast-b4000 | popin-key-b4000 |
+|---|---|---|
+| churn_pointer (whole run) | 3,693 | **73** |
+| arrived_missing (whole run) | 1,522 | **0** |
+| still camera: keys dropping per frame (pop events) | 10.1 | **2.25** |
+| still camera: of which absent (game stopped drawing) | 5.6 | 2.0 |
+| Remix fps (median) | 10.4 | **15.5** |
+| worst game frame per window, p90 | 104 ms | **70 ms** |
+| version rebuilds (`buffer`) / bytes read | 5,770 / 14.8 GB | 13,558 / 32.0 GB |
+| first turn holes / peak | 199 / 163 | 224 / 216 (N 1,262 both) |
+| later turns: peak | 8-9 | 9-13 |
+
+- Prediction (churn ~0, arrived_missing ~0) met. The remaining still-camera drops are the game's own `absent` draws.
+- Still-camera *missing* stays at 2-5 instances (2.6 keys), constant, already present before (2.5 keys in
+  fast-b4000): objects that are never built, with ~5 draws a frame in `read_pending`. A steady hole, not pop-in;
+  needs a per-key trace (`NIER_REMIX_LIVE_TRACE=1`) to name.
+- Cost: moved secondary streams are now read and rebuilt (2.2× version rebuilds, 2.2× bytes read). Frame rate still
+  rose, because the runtime no longer creates a new mesh per re-key. Reading only the moved stream, and skipping the
+  rebuild when the decoded content is unchanged before the read, is the follow-up if reads become the limit.

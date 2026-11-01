@@ -34,7 +34,7 @@ DLL_HEADERS = ['live_capture.h', 'live_scene.h', 'live_types.h', 'live_vertex_de
                'visibility_trace.h', 'funnel.h', 'dropout_watch.h', 'visibility_math.h', 'layout_signature.h',
                'texture_capture.h', 'nscn_scene.h', 'alpha_test.h', 'camera_capture.h', 'hud_replay.h',
                'light_convert.h', 'input_layout_hook.h', 'vtable_hook.h', 'input_capture.h', 'input_drive.h',
-               'backlog_policy.h']
+               'backlog_policy.h', 'geometry_key.h']
 ARGS = {'test_camera_decode.py': ['camera_decode.h'], 'test_camera_decode_hidden.py': ['camera_decode.h'],
         'test_nscn_scene.py': ['nscn_scene.h'], 'test_nscn_scene_hidden.py': ['nscn_scene.h'],
         'test_remix_scale.py': ['render_settings.h']}

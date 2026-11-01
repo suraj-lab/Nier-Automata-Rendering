@@ -561,7 +561,10 @@ int wmain(int argc, wchar_t** argv) {
     ID3D11Buffer* late_vb = nullptr, *late_ib = nullptr;
     const bool rewrite_same = std::getenv("MOCK_LIVE_REWRITE_SAME") != nullptr;  // same bytes every frame
     const int spender_from = [] { const char* v = std::getenv("MOCK_LIVE_SPENDER_FROM"); return v ? std::atoi(v) : 0; }();
-    ID3D11InputLayout* live_layout = nullptr, *live_layout_slot1 = nullptr;
+    ID3D11InputLayout* live_layout = nullptr, *live_layout_slot1 = nullptr, *live_layout_split = nullptr;
+    // MOCK_CHURN_SLOT2=N: the main draw reads TEXCOORD from slot 2, and every N frames slot 2 moves to an identical copy
+    // of the buffer while POSITION (slot 0) stays: the live NieR pattern (popin runs: 99% of re-keys were vb2_ptr).
+    const unsigned churn_slot2 = std::getenv("MOCK_CHURN_SLOT2") ? static_cast<unsigned>(std::atoi(std::getenv("MOCK_CHURN_SLOT2"))) : 0;
     unsigned cb11_refs_20 = 0, cb11_refs_79 = 0;
     ID3D11VertexShader* live_vs = nullptr;
     bool skinned_ready = false;
@@ -738,6 +741,12 @@ int wmain(int argc, wchar_t** argv) {
         };
         if (FAILED(device->CreateInputLayout(ld1, 2, lb->GetBufferPointer(), lb->GetBufferSize(), &live_layout_slot1)))
             { lb->Release(); std::fprintf(out, "FAIL live layout slot1\n"); return 3; }
+        D3D11_INPUT_ELEMENT_DESC lds[2] = {
+            {"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0,  D3D11_INPUT_PER_VERTEX_DATA, 0},
+            {"TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,    2, 12, D3D11_INPUT_PER_VERTEX_DATA, 0},
+        };
+        if (churn_slot2 && FAILED(device->CreateInputLayout(lds, 2, lb->GetBufferPointer(), lb->GetBufferSize(), &live_layout_split)))
+            { lb->Release(); std::fprintf(out, "FAIL live layout split\n"); return 3; }
         if (FAILED(device->CreateInputLayout(ld, 2, lb->GetBufferPointer(), lb->GetBufferSize(), &live_layout)) ||
             FAILED(device->CreateVertexShader(lb->GetBufferPointer(), lb->GetBufferSize(), nullptr, &live_vs)))
             { lb->Release(); std::fprintf(out, "FAIL live pipeline\n"); return 3; }
@@ -831,7 +840,7 @@ int wmain(int argc, wchar_t** argv) {
         context->Unmap(live_vb, 0);
         // MOCK_CHURN_EVERY=N: every N frames the main draw swaps to an identical copy of its vertex buffer, the way a
         // game re-creates or double-buffers one: the same object under a new geometry key (presence_why churn).
-        if (std::getenv("MOCK_CHURN_EVERY") && !live_offset) {
+        if ((std::getenv("MOCK_CHURN_EVERY") || churn_slot2) && !live_offset) {
             D3D11_SUBRESOURCE_DATA copy = {lverts, 0, 0};
             D3D11_BUFFER_DESC cd = lbd; cd.Usage = D3D11_USAGE_IMMUTABLE; cd.CPUAccessFlags = 0;
             if (FAILED(device->CreateBuffer(&cd, &copy, &churn_vb))) { std::fprintf(out, "FAIL churn vb\n"); return 3; }
@@ -1213,6 +1222,17 @@ int wmain(int argc, wchar_t** argv) {
                             context->IASetInputLayout(live_layout);
                             context->VSSetShader(live_vs, nullptr, 0);
                         }
+                        if (live_layout_split && pass == 1) {
+                            ID3D11Buffer* streams[3] = {vb, vb, (frame / churn_slot2) % 2 ? churn_vb : live_vb};
+                            const UINT st[3] = {mstride, mstride, mstride}, of[3] = {0, 0, 0};
+                            context->IASetVertexBuffers(0, 3, streams, st, of);
+                            context->IASetInputLayout(live_layout_split);
+                            context->DrawIndexed(192, 0, 0);
+                            ID3D11Buffer* none[2] = {};
+                            const UINT zero[2] = {};
+                            context->IASetVertexBuffers(1, 2, none, zero, zero);
+                            context->IASetInputLayout(live_layout);
+                        } else
                         context->DrawIndexed(192, 0, 0);
                         if (live_evict && pass == 1 && frame >= 55) context->DrawIndexed(189, 0, 0);  // mesh C
                     }
@@ -1382,6 +1402,7 @@ int wmain(int argc, wchar_t** argv) {
     for (ID3D11Buffer* b : {live_vb, live_ib, live_vb2, live_ib2, live_cb11, live_sky_vb, live_sky_ib}) if (b) b->Release();
     if (live_layout) live_layout->Release();
     if (live_layout_slot1) live_layout_slot1->Release();
+    if (live_layout_split) live_layout_split->Release();
     if (live_vs) live_vs->Release();
     for (IUnknown* p : std::initializer_list<IUnknown*>{native_hdr, native_hdr_rtv, native_hdr_srv, native_hud_ps,
                                                           native_hud_vs, native_blit_vs, native_blit_ps, native_identity, native_raster})

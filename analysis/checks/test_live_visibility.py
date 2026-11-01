@@ -19,7 +19,7 @@ import test_nscn_scene as ts
 OUT = A / 'runtime/live-visibility'
 tr.ENV_KEYS = tuple(tr.ENV_KEYS) + ('NIER_REMIX_LIVE', 'NIER_REMIX_LIVE_TEX', 'NIER_REMIX_LIVE_BUDGET',
                                   'NIER_REMIX_LIVE_TRACE', 'FAKE_REMIX_INSTANCE_LOG', 'NIER_REMIX_LIVE_PRESENCE_MIN',
-                                  'NIER_REMIX_LIVE_DRIVE')
+                                  'NIER_REMIX_LIVE_DRIVE', 'MOCK_CHURN_EVERY', 'MOCK_CHURN_SLOT2')
 NATIVE = tls.HARNESS.replace('int main() {', 'int original_scene_gate() {') + r'''
 #include <cassert>
 static remixapi_ErrorCode REMIXAPI_CALL reject_instance(const remixapi_InstanceInfo*) {
@@ -201,7 +201,7 @@ def wine(work):
     # Churn: the same draw re-bound to an identical copy of its vertex buffer every 10 frames. It must be named as
     # churn_pointer with the vertex buffer (and only it) moved, not as a loss.
     _, _, churn_log, _ = tr.run(work, 'churn', {**on, 'NIER_REMIX_LIVE_PRESENCE_MIN': '1', 'MOCK_CHURN_EVERY': '10'})
-    churn = [{**{k: int(v) for k, v in re.findall(r'([a-z_]+)=(\d+)', l)},
+    churn = [{**{k: int(v) for k, v in re.findall(r'([a-z_]+)=(\d+)\b', l)},
               'key_moved': int(re.search(r'key_moved=0x([0-9a-f]+)', l).group(1), 16)}
              for l in churn_log.splitlines() if 'remix: presence_why ' in l]
     swaps = [f for f in churn if f.get('churn_pointer', 0) > 0]
@@ -217,6 +217,21 @@ def wine(work):
     # The swapped copy is the same object in the same place.
     assert all(f['place_same'] == f['churn_pointer'] and f['place_far'] == 0 for f in swaps), swaps[:3]
     print('churn sample:', swaps[:2], 'arrived_missing total', sum(f['arrived_missing'] for f in swaps))
+    # Secondary-stream churn (the live pattern): slot 2 moves to an identical copy every 10 frames while POSITION stays.
+    # The object must keep its key (no churn, nothing dropped), and the move must still reach the version (a rebuild).
+    _, _, s2_log, _ = tr.run(work, 'churn-slot2', {**on, 'NIER_REMIX_LIVE_PRESENCE_MIN': '0', 'MOCK_CHURN_SLOT2': '10'})
+    s2 = [{k: int(v) for k, v in re.findall(r'([a-z_]+)=(\d+)', l)}
+          for l in s2_log.splitlines() if 'remix: presence_why ' in l]
+    assert len(s2) > 30, f'too few frames to cover several slot-2 moves: {len(s2)}'
+    assert sum(f.get('churn_pointer', 0) for f in s2) == 0, \
+        f'a moved secondary stream re-keyed the object: {[f for f in s2 if f.get("churn_pointer")][:3]}'
+    # ~7 moves in the run; the mock's own scene change around frame 45 may drop one key once, a move would drop every time
+    drops = [f for f in s2[5:] if f['dropped']]
+    assert len(drops) <= 1, f'object left the scene on slot-2 moves: {drops[:3]}'
+    rebuilds = [dict(re.findall(r'(\w+)=(\d+)', l)) for l in s2_log.splitlines() if 'remix: live rebuilds ' in l]
+    moved = int(rebuilds[-1]['buffer']) + int(rebuilds[-1]['unknown'])
+    assert moved > 0, f'slot-2 moves never reached the version: the mesh would keep stale secondary data {rebuilds[-1]}'
+    print('slot-2 churn: frames', len(s2), 'drops after warm-up', len(drops), 'version rebuilds', moved)
     _, _, log, _ = tr.run(work, 'trace-passes', {**on, 'NIER_REMIX_LIVE_TRACE': '1',
                                                'MOCK_CAMERA': 'live-passes', 'MOCK_PREPASS': '1'})
     capture = rows(log, 'capture')
