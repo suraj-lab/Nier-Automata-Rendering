@@ -61,3 +61,12 @@ not captured; standard MikkTSpace data says Remix's own frame handles the mirror
 
 Slot 4 in the generic family is a 2-channel detail normal on its own tiling. Remix's second normal is for water only,
 so detail normals are left out; sending one as the main normal map is what produced blotchy, wet-looking surfaces.
+
+## First live look (pbr-look1, DLL 0b59ad90, 2026-11-01)
+
+Normals on (`NIER_REMIX_LIVE_NORMAL=1`), PBR on (default), roughness floor 0.15, effects left out; user driving.
+Clean: no mask/normal conversion failures, no runtime texture warnings, no stuck keys; 855 textures; ~2,800 effect
+draws skipped per stats window; 13.1 Remix fps (AC power). User: surfaces **"clearly better"** (less plastic, the
+puddles gone); colours **"better, but somewhat"** washed out still. Not yet sent: the per-instance tint
+(cb4 × cb8[instance]) and the second-UV texture the game multiplies into albedo, and its screen-space AO (t17,
+which Remix replaces with its own GI).
