@@ -1,0 +1,897 @@
+{
+  "scope": "FO4-Remix complete first-party module inventory and integration reconstruction; selected shipped-plugin binary corroboration, not full binary equivalence or live verification",
+  "source": {
+    "repo": "Kim2091/FO4-Remix",
+    "revision": "cb23b9e44a69896f4fa5e6143d83a798e7efd402",
+    "files": {
+      "FO4RemixPlugin.ini": {
+        "sha256": "a5289a6fe521d0b24ddc8fb68e785d3247a2fef8af420db172152d75a1d41ead",
+        "bytes": 16085
+      },
+      "KNOWLEDGEBASE.md": {
+        "sha256": "c42996fd12f7cf0263c9242e99390aa68cc346fe2b8530adc2c9bc8da8cec422",
+        "bytes": 57807
+      },
+      "README.md": {
+        "sha256": "f2b52952fe9a92e9bccfe9b7f6bce75f382d63b2d7b1ff121ec83f54bc29f792",
+        "bytes": 2777
+      },
+      "extern/remix/remix_c.h": {
+        "sha256": "7d2c6c323ec1a4a8d359028db537a2b2aa5471819b460a7fb904a5c7c5a49d0c",
+        "bytes": 56417
+      },
+      "src/ba2_texture_source.cpp": {
+        "sha256": "6b62873fd0de27fc026e3a34fefe4da5d970da9c333fe78309d6d798e0739659",
+        "bytes": 19213
+      },
+      "src/ba2_texture_source.h": {
+        "sha256": "b6976f5395d676682c1d781c74f2fff24bf78c0af1e1d634e9e672ccae52e4fd",
+        "bytes": 1455
+      },
+      "src/bcdec_bc7.h": {
+        "sha256": "b63499121103eb8f69462e282b1a0a1c56bf97d7d020de2a065d4f1804105934",
+        "bytes": 23400
+      },
+      "src/bs_extraction.cpp": {
+        "sha256": "5f05bc210fbc744ff2ac96bd7b3f54db6f7692f91bda0dacde5b9d7e6e955653",
+        "bytes": 202488
+      },
+      "src/bs_extraction.h": {
+        "sha256": "c74eee2bec81824be737cbcbeca42028e186ded176bebe7586fb61068cfedcfc",
+        "bytes": 30983
+      },
+      "src/camera.cpp": {
+        "sha256": "01e6dbe08e25162dc29e20e140f3df3265b5c9a493bae6d9b060d2319dbb52f9",
+        "bytes": 10243
+      },
+      "src/camera.h": {
+        "sha256": "4476305b121ba6ac47341aedc8843864c394cc768d1cdcd12426aaf1e3e9b3a2",
+        "bytes": 1319
+      },
+      "src/config.cpp": {
+        "sha256": "c33b375b5221d8dbf900b14794405d641da0c382d9179edd5db4d576046a3f31",
+        "bytes": 23235
+      },
+      "src/config.h": {
+        "sha256": "dae843d2e52142aa21d39a20ca90e18297e9b8383727bc35eb28da79aba49878",
+        "bytes": 41060
+      },
+      "src/crash_diag.cpp": {
+        "sha256": "34a5d59158f9dcc1880ac1ec040bc87b1d23654e8c89275b0a29c5c649971cbc",
+        "bytes": 12575
+      },
+      "src/crash_diag.h": {
+        "sha256": "4d05511a58577831ff2b725a127921f005d6fa0727ea12873e83d1ec77d610f4",
+        "bytes": 2138
+      },
+      "src/draw_capture.cpp": {
+        "sha256": "24dd992300c0dce6bfa64e67acb3ecf1edf7ecf6537b3814c4f893ff39b9d4b2",
+        "bytes": 49407
+      },
+      "src/draw_capture.h": {
+        "sha256": "c7534e4bd2fc6a6d89b15f995dd6869fcebae6249ef26f3ffeae1af5743b436a",
+        "bytes": 9064
+      },
+      "src/f4se_compat.h": {
+        "sha256": "6cd83d86554c40d90f63ec9e6352a6eb98f5371be4ee425297191cb34cad21f6",
+        "bytes": 1699
+      },
+      "src/fo4_diagnostics.cpp": {
+        "sha256": "d06b7933c04fdb270d8fcbb353c73f75a69916e3795e93747856420ae1b802c5",
+        "bytes": 5455
+      },
+      "src/fo4_diagnostics.h": {
+        "sha256": "098839d07749c505d4dd1edf67e6d823d589cc0da3a85e1380782b3471a90fe9",
+        "bytes": 1876
+      },
+      "src/fo4_tracy.h": {
+        "sha256": "64235c4b6abde298d3bee1cf05044bd6772f79881d6cc6fbde87568467e7c150",
+        "bytes": 1365
+      },
+      "src/hzb_occlusion.cpp": {
+        "sha256": "4adc2fd20e168bcc27eb0c468c4f236dbab9f924b1814a897349e43625d70c8f",
+        "bytes": 14400
+      },
+      "src/hzb_occlusion.h": {
+        "sha256": "6b078148253ba522479884236d05d5babcd7523bac3b6d5b5d8be54d6c09f6de",
+        "bytes": 7087
+      },
+      "src/main.cpp": {
+        "sha256": "14f9bc88a2cb5886e90830111392b6d942e3f5ce41b1bba05e5de27750d8772e",
+        "bytes": 8026
+      },
+      "src/present_hook.cpp": {
+        "sha256": "c1f9a57e7bccbff2f47738f8d365ad107436e08772c6120126bc54199b2acf48",
+        "bytes": 76908
+      },
+      "src/present_hook.h": {
+        "sha256": "317be104ed9c1256bb0fbef27c7251ee9c4aa8803f2ed6bf2211e1054d3fa9cc",
+        "bytes": 605
+      },
+      "src/raster_suppress.cpp": {
+        "sha256": "0511aadea49ff7b167f16b100c0c2bce65c52d2e0b72d685bbd90b28e7467888",
+        "bytes": 4303
+      },
+      "src/raster_suppress.h": {
+        "sha256": "4b9bcfea53f5139b2cc4cbdaa52957b5898554fe603102defb947b643f89f96d",
+        "bytes": 4103
+      },
+      "src/remix_api.cpp": {
+        "sha256": "4c4b62a7f751bf111bed12cc2559d66c2da4383449f594ae3afe3da9cb7935eb",
+        "bytes": 9176
+      },
+      "src/remix_api.h": {
+        "sha256": "35aa6508dc77828e301001cec4c32bf8fed33a74a3388120b0dcc93b4465fbfe",
+        "bytes": 1798
+      },
+      "src/remix_renderer.cpp": {
+        "sha256": "2dd43e8f1386a9fbda8ef75fbf877d793335db5d463dab5da284dd1da3525675",
+        "bytes": 207367
+      },
+      "src/remix_renderer.h": {
+        "sha256": "b7ee22d8f49deb445f49265ef2c84aa80eabff5d42170aa09311e9ae1a5c6a40",
+        "bytes": 9192
+      },
+      "src/resolvers/lighting_static.cpp": {
+        "sha256": "23f60d0df2328091b950127d0363f68665280ed7ddbf72aa37ecc4c3cc11c44d",
+        "bytes": 222529
+      },
+      "src/resolvers/lighting_static.h": {
+        "sha256": "d8269c78138a8ea1e0c4f085c660a346d1ee6445e4672a57884a946865284427",
+        "bytes": 4996
+      },
+      "src/resolvers/water.cpp": {
+        "sha256": "3de3490f3d4b95745172e92ec42e7de012199452ac08e119c9ce0e9626026814",
+        "bytes": 10583
+      },
+      "src/resolvers/water.h": {
+        "sha256": "27a5e523cd8fd69bf78a5df3e1f935d4c68cc10d7636c08720f363a5ad210caf",
+        "bytes": 700
+      },
+      "src/semantic_capture.cpp": {
+        "sha256": "0045a996275089a84207c41210b3a34d988da2d522ec755c75a33c56f70feede",
+        "bytes": 140538
+      },
+      "src/semantic_capture.h": {
+        "sha256": "aa51df421183f14add1905252cd22a917b769d574fe13ec6be6f8d71d979e563",
+        "bytes": 27469
+      },
+      "src/skinned_meshes.cpp": {
+        "sha256": "68dd08531c1690472c78540730d96d2c786d9c0520723c64b176f1e5182a3ba7",
+        "bytes": 31151
+      },
+      "src/skinned_meshes.h": {
+        "sha256": "ad5ee6884d4c5c8718ba59263c4c108b36353baf2e84c70f88e1a0d1b06647e6",
+        "bytes": 5289
+      },
+      "src/startup_diag.cpp": {
+        "sha256": "b3ab03015e5bf428502dbd00a9b45ee0357bf313deebb191b754ca2306cd6378",
+        "bytes": 8995
+      },
+      "src/startup_diag.h": {
+        "sha256": "e2b60ec56cbff285117708a008a93f68eb7f32952d12b8e3b28663b141ccad0d",
+        "bytes": 698
+      },
+      "src/watchdog_main.cpp": {
+        "sha256": "52411be82383db2c19211d82a3745fc2c69d4ca02e1a6af7a3b4b3e70592d47b",
+        "bytes": 14871
+      },
+      "src/weather_bridge.cpp": {
+        "sha256": "3924e5356fed66638c40b1ccfa6ddb354cb68d255a505c8fb8fe65305d8bf027",
+        "bytes": 3189
+      },
+      "src/weather_bridge.h": {
+        "sha256": "73af98b69eb0d0306d7c9eb8d2fe8c566b53aff5f6645620a85973c054727b3e",
+        "bytes": 782
+      },
+      "src/window_manager.cpp": {
+        "sha256": "c0903567bb08ddfa19ef6ac7e89c376e1af9c135863d990cf9fddd52dc7c6dfa",
+        "bytes": 10596
+      },
+      "src/window_manager.h": {
+        "sha256": "ea12cb49a0c99d0010c40405276f1ec46db217a76cdf55fc839ce3c7a8ecd7c6",
+        "bytes": 2219
+      },
+      "CMakeLists.txt": {
+        "sha256": "28ed6cc0224df3524f1f59b28ba130d4f85838e611964ba5f4adf1390d5e9986",
+        "bytes": 7705
+      },
+      "RELEASE_NOTES_v0.0.4.md": {
+        "sha256": "29a33403c63f7a1f22ead91299c4f74899d19cc6af32a8d50cbab2ebd118d1cf",
+        "bytes": 6011
+      },
+      "scripts/dynamic_trishape_desc.md": {
+        "sha256": "0dc7fb3e589ff34673486eba50984689db2876c8db80b073359a5ac030161c33",
+        "bytes": 40226
+      },
+      "scripts/merge_partition_research.md": {
+        "sha256": "dd6d7d72239b57bb0281f1718f5cc806ed6c32467951dea4ce48fe6fe3e829ca",
+        "bytes": 48601
+      },
+      "scripts/thread_snapshot.py": {
+        "sha256": "74ab0eab55dc79abc333f7c37fef46633192053398278f7e0e41c3600ddbc925",
+        "bytes": 2318
+      },
+      "scripts/winddiag_nif_groundtruth.md": {
+        "sha256": "f9b6ab164a0b896b9a60690d7b7fd8aa3f3dee0044ab792acb3b122df5e589aa",
+        "bytes": 10079
+      },
+      "build.bat": {
+        "sha256": "cf600126731396f8a1048aeca3fc541b532b44163ef5b7ab1e533d240d36805c",
+        "bytes": 783
+      }
+    },
+    "errors": [],
+    "scope": "selected source paths; not full repository"
+  },
+  "release_tag_source": {
+    "repository": "Kim2091/FO4-Remix",
+    "revision": "901e211af75ac618e62d23601201de0da71591d2",
+    "files": {
+      "CMakeLists.txt": {
+        "sha256": "d5a957183d950ce34f96a8a9e253184509fcdd5ea90498537c91d0ae3b494a0b",
+        "bytes": 6036
+      },
+      "FO4RemixPlugin.ini": {
+        "sha256": "f978e9d7bb6247ce2b77d11ad7b55975d04754790552c92cea1e1cdbc75766fb",
+        "bytes": 14441
+      },
+      "KNOWLEDGEBASE.md": {
+        "sha256": "603d2f3d50437653608b3e7c7a108bf88a14a88710f53740366a43d773a2ca50",
+        "bytes": 49186
+      },
+      "README.md": {
+        "sha256": "932147e2972985120b164763cf7780d0fde055eac40b2c53392fb2eb03e36c37",
+        "bytes": 2727
+      },
+      "extern/remix/remix_c.h": {
+        "sha256": "82675bedff87e09e80b6cac0fa6dc6ada49a4e8b6b32d3c66ce0c7c4eefab978",
+        "bytes": 54420
+      },
+      "src/bcdec_bc7.h": {
+        "sha256": "b63499121103eb8f69462e282b1a0a1c56bf97d7d020de2a065d4f1804105934",
+        "bytes": 23400
+      },
+      "src/bs_extraction.cpp": {
+        "sha256": "b676c82000688f3e9c9e4b9b6b211fafcedfe9ade591888e2766af2c60aa4a14",
+        "bytes": 174565
+      },
+      "src/bs_extraction.h": {
+        "sha256": "5c726cde481d1bf8de22fa24d9e100e510694a57be23187769399795c49b5ccd",
+        "bytes": 29124
+      },
+      "src/camera.cpp": {
+        "sha256": "01e6dbe08e25162dc29e20e140f3df3265b5c9a493bae6d9b060d2319dbb52f9",
+        "bytes": 10243
+      },
+      "src/camera.h": {
+        "sha256": "4476305b121ba6ac47341aedc8843864c394cc768d1cdcd12426aaf1e3e9b3a2",
+        "bytes": 1319
+      },
+      "src/config.cpp": {
+        "sha256": "e84e84be686a32fe77bab2730c5b35e8eb97002a4a0f9b61f1716646149a3d47",
+        "bytes": 22029
+      },
+      "src/config.h": {
+        "sha256": "72b6c1290a736c084a9c7e440037538c8cb5656ed1f4d6d4e378114de97c32d8",
+        "bytes": 39508
+      },
+      "src/crash_diag.cpp": {
+        "sha256": "34a5d59158f9dcc1880ac1ec040bc87b1d23654e8c89275b0a29c5c649971cbc",
+        "bytes": 12575
+      },
+      "src/crash_diag.h": {
+        "sha256": "4d05511a58577831ff2b725a127921f005d6fa0727ea12873e83d1ec77d610f4",
+        "bytes": 2138
+      },
+      "src/draw_capture.cpp": {
+        "sha256": "24dd992300c0dce6bfa64e67acb3ecf1edf7ecf6537b3814c4f893ff39b9d4b2",
+        "bytes": 49407
+      },
+      "src/draw_capture.h": {
+        "sha256": "c7534e4bd2fc6a6d89b15f995dd6869fcebae6249ef26f3ffeae1af5743b436a",
+        "bytes": 9064
+      },
+      "src/f4se_compat.h": {
+        "sha256": "6cd83d86554c40d90f63ec9e6352a6eb98f5371be4ee425297191cb34cad21f6",
+        "bytes": 1699
+      },
+      "src/fo4_diagnostics.cpp": {
+        "sha256": "d06b7933c04fdb270d8fcbb353c73f75a69916e3795e93747856420ae1b802c5",
+        "bytes": 5455
+      },
+      "src/fo4_diagnostics.h": {
+        "sha256": "098839d07749c505d4dd1edf67e6d823d589cc0da3a85e1380782b3471a90fe9",
+        "bytes": 1876
+      },
+      "src/fo4_tracy.h": {
+        "sha256": "64235c4b6abde298d3bee1cf05044bd6772f79881d6cc6fbde87568467e7c150",
+        "bytes": 1365
+      },
+      "src/hzb_occlusion.cpp": {
+        "sha256": "4adc2fd20e168bcc27eb0c468c4f236dbab9f924b1814a897349e43625d70c8f",
+        "bytes": 14400
+      },
+      "src/hzb_occlusion.h": {
+        "sha256": "6b078148253ba522479884236d05d5babcd7523bac3b6d5b5d8be54d6c09f6de",
+        "bytes": 7087
+      },
+      "src/main.cpp": {
+        "sha256": "14f9bc88a2cb5886e90830111392b6d942e3f5ce41b1bba05e5de27750d8772e",
+        "bytes": 8026
+      },
+      "src/present_hook.cpp": {
+        "sha256": "350fdf2d5f01a66edad5896b92b61755b0777d98df9211a6f063f381ed83c85e",
+        "bytes": 74968
+      },
+      "src/present_hook.h": {
+        "sha256": "317be104ed9c1256bb0fbef27c7251ee9c4aa8803f2ed6bf2211e1054d3fa9cc",
+        "bytes": 605
+      },
+      "src/raster_suppress.cpp": {
+        "sha256": "0511aadea49ff7b167f16b100c0c2bce65c52d2e0b72d685bbd90b28e7467888",
+        "bytes": 4303
+      },
+      "src/raster_suppress.h": {
+        "sha256": "4b9bcfea53f5139b2cc4cbdaa52957b5898554fe603102defb947b643f89f96d",
+        "bytes": 4103
+      },
+      "src/remix_api.cpp": {
+        "sha256": "4c4b62a7f751bf111bed12cc2559d66c2da4383449f594ae3afe3da9cb7935eb",
+        "bytes": 9176
+      },
+      "src/remix_api.h": {
+        "sha256": "35aa6508dc77828e301001cec4c32bf8fed33a74a3388120b0dcc93b4465fbfe",
+        "bytes": 1798
+      },
+      "src/remix_renderer.cpp": {
+        "sha256": "2b7dbe3076046f8ea2584d95b78a88ee212e68821872309e16b9e24d7972ee89",
+        "bytes": 193474
+      },
+      "src/remix_renderer.h": {
+        "sha256": "c584ef09485a73c7d9d5d7cac0d3e9eb66c9444291e42aee44d0e636b5e07c55",
+        "bytes": 8537
+      },
+      "src/resolvers/lighting_static.cpp": {
+        "sha256": "6455e3a1bc2647c05de5d1eee38d0cceb3797f4abf5732e286f16432d050b21a",
+        "bytes": 206712
+      },
+      "src/resolvers/lighting_static.h": {
+        "sha256": "d8269c78138a8ea1e0c4f085c660a346d1ee6445e4672a57884a946865284427",
+        "bytes": 4996
+      },
+      "src/resolvers/water.cpp": {
+        "sha256": "3de3490f3d4b95745172e92ec42e7de012199452ac08e119c9ce0e9626026814",
+        "bytes": 10583
+      },
+      "src/resolvers/water.h": {
+        "sha256": "27a5e523cd8fd69bf78a5df3e1f935d4c68cc10d7636c08720f363a5ad210caf",
+        "bytes": 700
+      },
+      "src/semantic_capture.cpp": {
+        "sha256": "e24c3b347a3bd006d5756334f6a8ed09241be5d8238cb2cd76b4fc1b051e78ad",
+        "bytes": 135116
+      },
+      "src/semantic_capture.h": {
+        "sha256": "1b2f4db73a2ffc4a249f9452d5d5e61502fe18145ecd7a992b7b6ff3a1388116",
+        "bytes": 26436
+      },
+      "src/skinned_meshes.cpp": {
+        "sha256": "c9367104ac23d89052bb33c37601b7639af74d5aef9f2ee7038f76c7e869a15e",
+        "bytes": 17426
+      },
+      "src/skinned_meshes.h": {
+        "sha256": "ccd310cd40879e5e526c14383b9ada35294b3d9116f6dffb54b7db796c379827",
+        "bytes": 4730
+      },
+      "src/startup_diag.cpp": {
+        "sha256": "b3ab03015e5bf428502dbd00a9b45ee0357bf313deebb191b754ca2306cd6378",
+        "bytes": 8995
+      },
+      "src/startup_diag.h": {
+        "sha256": "e2b60ec56cbff285117708a008a93f68eb7f32952d12b8e3b28663b141ccad0d",
+        "bytes": 698
+      },
+      "src/watchdog_main.cpp": {
+        "sha256": "52411be82383db2c19211d82a3745fc2c69d4ca02e1a6af7a3b4b3e70592d47b",
+        "bytes": 14871
+      },
+      "src/weather_bridge.cpp": {
+        "sha256": "3924e5356fed66638c40b1ccfa6ddb354cb68d255a505c8fb8fe65305d8bf027",
+        "bytes": 3189
+      },
+      "src/weather_bridge.h": {
+        "sha256": "73af98b69eb0d0306d7c9eb8d2fe8c566b53aff5f6645620a85973c054727b3e",
+        "bytes": 782
+      },
+      "src/window_manager.cpp": {
+        "sha256": "c0903567bb08ddfa19ef6ac7e89c376e1af9c135863d990cf9fddd52dc7c6dfa",
+        "bytes": 10596
+      },
+      "src/window_manager.h": {
+        "sha256": "ea12cb49a0c99d0010c40405276f1ec46db217a76cdf55fc839ce3c7a8ecd7c6",
+        "bytes": 2219
+      }
+    }
+  },
+  "source_ahead_of_release_commits": 19,
+  "abi_difference_despite_same_version": {
+    "both_header_versions": "0.1000.0",
+    "release_view_model_bit": 25,
+    "default_source_view_model_bit": 26,
+    "default_source_hair_cards_bit": 25,
+    "default_source_startup_info_added_field": "combineGuiInFinalColor",
+    "conclusion": "Matching API version numbers alone do not establish compatibility between these source lines. Header hashes are exact matches; the bundled runtime build commit is not proven."
+  },
+  "source_header_sha256": "7d2c6c323ec1a4a8d359028db537a2b2aa5471819b460a7fb904a5c7c5a49d0c",
+  "release_tag_header_sha256": "82675bedff87e09e80b6cac0fa6dc6ada49a4e8b6b32d3c66ce0c7c4eefab978",
+  "runtime_header_matches": {
+    "runtime-fo4-numos3-main": {
+      "repository": "Kim2091/dxvk-remix",
+      "revision": "05c52a14a312fc3e0b0d088e7297ed75be14bd46",
+      "branch": "fo4-numos3-main",
+      "header_sha256": "7d2c6c323ec1a4a8d359028db537a2b2aa5471819b460a7fb904a5c7c5a49d0c"
+    },
+    "runtime-fo4-workstream": {
+      "repository": "Kim2091/dxvk-remix",
+      "revision": "aff568efd933858154ce14faa82911f32ecccdea",
+      "branch": "fo4-workstream",
+      "header_sha256": "82675bedff87e09e80b6cac0fa6dc6ada49a4e8b6b32d3c66ce0c7c4eefab978"
+    }
+  },
+  "released_artifacts": {
+    "release-v0.0.5/Fallout_4_RTX_v0.0.5.7z": {
+      "sha256": "e5911fcf70fd7efbc3cadf8c8d55cf60f83ab8a384c434e85c6b50aa5736f2b3",
+      "bytes": 187331627
+    },
+    "release-v0.0.5/selected/Data/F4SE/Plugins/FO4RemixPlugin.dll": {
+      "sha256": "bc2ac3460882661b20f4577d4913a6c010f32c9b1ece6d8a3299b84028a1f707",
+      "bytes": 808448
+    },
+    "release-v0.0.5/selected/Data/F4SE/Plugins/FO4RemixPlugin.ini": {
+      "sha256": "bb70df9ffa3635a5a8308dcc585cefeb06b69607b690442aa257e822bbbe3746",
+      "bytes": 18688
+    },
+    "release-v0.0.5/selected/artifacts_readme.txt": {
+      "sha256": "ffa4c95b5c3c56c62151340a6b09bd2c0f9a8427f1df9965db1e7665e3d0ad77",
+      "bytes": 6208
+    },
+    "release-v0.0.5/selected/rtx.conf": {
+      "sha256": "5ddebcd930452928a65b79024a8fa5ee6203df28d34ae47aac237ca51c4b7107",
+      "bytes": 1363
+    }
+  },
+  "binary_evidence": {
+    "plugin-artifact-evidence.json": {
+      "id": "ev_5112ed7a350956a849740e339c39d188ed26a081b1430b7d9a514165e335414f",
+      "sha256": "bc2ac3460882661b20f4577d4913a6c010f32c9b1ece6d8a3299b84028a1f707",
+      "procedure": null,
+      "authority": "shipped-artifact",
+      "confidence": "observed"
+    },
+    "plugin-load-evidence.json": {
+      "id": "ev_c5826ec7ef1e3a7f02ad30eb70691395b319cb6f896470912659507428fedfc6",
+      "sha256": "bc2ac3460882661b20f4577d4913a6c010f32c9b1ece6d8a3299b84028a1f707",
+      "procedure": {
+        "address": "0x180002ae0",
+        "name": "F4SEPlugin_Load",
+        "classification": {
+          "external": false,
+          "thunk": false,
+          "thunk_target": null,
+          "provenance": "ghidra-function-manager"
+        },
+        "body": {
+          "available": true,
+          "provenance": "ghidra-function-body-address-set",
+          "ranges": [
+            {
+              "start": "0x180002ae0",
+              "end": "0x180002d0b"
+            }
+          ],
+          "total_bytes": 556,
+          "span_bytes": 556,
+          "non_contiguous": false,
+          "contains_entry": true
+        },
+        "signature": "undefined8 __fastcall F4SEPlugin_Load(FILE * param_1, char * param_2, undefined8 * param_3, ulonglong param_4)",
+        "locals": [
+          {
+            "description": "undefined local_128 @ Stack[-0x128]:1",
+            "provenance": "ghidra-function-database"
+          },
+          {
+            "description": "undefined8 local_138 @ Stack[-0x138]:8",
+            "provenance": "ghidra-function-database"
+          },
+          {
+            "description": "undefined8 local_18 @ Stack[-0x18]:8",
+            "provenance": "ghidra-function-database"
+          },
+          {
+            "description": "undefined8 local_res10 @ Stack[0x10]:8",
+            "provenance": "ghidra-function-database"
+          },
+          {
+            "description": "undefined8 local_res8 @ Stack[0x8]:8",
+            "provenance": "ghidra-function-database"
+          }
+        ]
+      },
+      "authority": "shipped-artifact",
+      "confidence": "observed"
+    },
+    "plugin-message-callback-evidence.json": {
+      "id": "ev_0c9a11625d55d52f571a728c691262c926cc49dfb8ec0ad73d70e7b1280b1a58",
+      "sha256": "bc2ac3460882661b20f4577d4913a6c010f32c9b1ece6d8a3299b84028a1f707",
+      "procedure": {
+        "address": "0x1800026b0",
+        "name": "FUN_1800026b0",
+        "classification": {
+          "external": false,
+          "thunk": false,
+          "thunk_target": null,
+          "provenance": "ghidra-function-manager"
+        },
+        "body": {
+          "available": true,
+          "provenance": "ghidra-function-body-address-set",
+          "ranges": [
+            {
+              "start": "0x1800026b0",
+              "end": "0x1800028cd"
+            }
+          ],
+          "total_bytes": 542,
+          "span_bytes": 542,
+          "non_contiguous": false,
+          "contains_entry": true
+        },
+        "signature": "undefined __fastcall FUN_1800026b0(longlong param_1, undefined8 param_2, undefined * param_3, ulonglong param_4)",
+        "locals": [
+          {
+            "description": "undefined local_128 @ Stack[-0x128]:1",
+            "provenance": "ghidra-function-database"
+          },
+          {
+            "description": "undefined8 local_138 @ Stack[-0x138]:8",
+            "provenance": "ghidra-function-database"
+          },
+          {
+            "description": "undefined8 local_18 @ Stack[-0x18]:8",
+            "provenance": "ghidra-function-database"
+          },
+          {
+            "description": "undefined8 local_res10 @ Stack[0x10]:8",
+            "provenance": "ghidra-function-database"
+          },
+          {
+            "description": "undefined8 local_res8 @ Stack[0x8]:8",
+            "provenance": "ghidra-function-database"
+          }
+        ]
+      },
+      "authority": "shipped-artifact",
+      "confidence": "observed"
+    },
+    "plugin-semantic-install-evidence.json": {
+      "id": "ev_bde9bc6a0dc894d3a2cda371cb45db05f2c87ae92c6e4b8da19050dee95c164c",
+      "sha256": "bc2ac3460882661b20f4577d4913a6c010f32c9b1ece6d8a3299b84028a1f707",
+      "procedure": {
+        "address": "0x180043f90",
+        "name": "FUN_180043f90",
+        "classification": {
+          "external": false,
+          "thunk": false,
+          "thunk_target": null,
+          "provenance": "ghidra-function-manager"
+        },
+        "body": {
+          "available": true,
+          "provenance": "ghidra-function-body-address-set",
+          "ranges": [
+            {
+              "start": "0x180043f90",
+              "end": "0x180044836"
+            }
+          ],
+          "total_bytes": 2215,
+          "span_bytes": 2215,
+          "non_contiguous": false,
+          "contains_entry": true
+        },
+        "signature": "undefined8 __fastcall FUN_180043f90(undefined8 param_1, undefined8 param_2, undefined8 * param_3, ulonglong param_4)",
+        "locals": [
+          {
+            "description": "undefined local_138 @ Stack[-0x138]:1",
+            "provenance": "ghidra-function-database"
+          },
+          {
+            "description": "undefined8 local_140 @ Stack[-0x140]:8",
+            "provenance": "ghidra-function-database"
+          },
+          {
+            "description": "undefined8 local_148 @ Stack[-0x148]:8",
+            "provenance": "ghidra-function-database"
+          },
+          {
+            "description": "undefined local_20 @ Stack[-0x20]:1",
+            "provenance": "ghidra-function-database"
+          },
+          {
+            "description": "undefined8 local_28 @ Stack[-0x28]:8",
+            "provenance": "ghidra-function-database"
+          },
+          {
+            "description": "undefined local_68 @ Stack[-0x68]:1",
+            "provenance": "ghidra-function-database"
+          },
+          {
+            "description": "undefined8 local_res0 @ Stack[0x0]:8",
+            "provenance": "ghidra-function-database"
+          },
+          {
+            "description": "undefined8 local_res10 @ Stack[0x10]:8",
+            "provenance": "ghidra-function-database"
+          },
+          {
+            "description": "undefined8 local_res18 @ Stack[0x18]:8",
+            "provenance": "ghidra-function-database"
+          },
+          {
+            "description": "undefined8 local_res8 @ Stack[0x8]:8",
+            "provenance": "ghidra-function-database"
+          }
+        ]
+      },
+      "authority": "shipped-artifact",
+      "confidence": "observed"
+    }
+  },
+  "module_inventory": [
+    {
+      "path": "src/ba2_texture_source.cpp",
+      "lines": 550,
+      "sha256": "6b62873fd0de27fc026e3a34fefe4da5d970da9c333fe78309d6d798e0739659"
+    },
+    {
+      "path": "src/ba2_texture_source.h",
+      "lines": 46,
+      "sha256": "b6976f5395d676682c1d781c74f2fff24bf78c0af1e1d634e9e672ccae52e4fd"
+    },
+    {
+      "path": "src/bcdec_bc7.h",
+      "lines": 393,
+      "sha256": "b63499121103eb8f69462e282b1a0a1c56bf97d7d020de2a065d4f1804105934"
+    },
+    {
+      "path": "src/bs_extraction.cpp",
+      "lines": 4437,
+      "sha256": "5f05bc210fbc744ff2ac96bd7b3f54db6f7692f91bda0dacde5b9d7e6e955653"
+    },
+    {
+      "path": "src/bs_extraction.h",
+      "lines": 534,
+      "sha256": "c74eee2bec81824be737cbcbeca42028e186ded176bebe7586fb61068cfedcfc"
+    },
+    {
+      "path": "src/camera.cpp",
+      "lines": 259,
+      "sha256": "01e6dbe08e25162dc29e20e140f3df3265b5c9a493bae6d9b060d2319dbb52f9"
+    },
+    {
+      "path": "src/camera.h",
+      "lines": 34,
+      "sha256": "4476305b121ba6ac47341aedc8843864c394cc768d1cdcd12426aaf1e3e9b3a2"
+    },
+    {
+      "path": "src/config.cpp",
+      "lines": 350,
+      "sha256": "c33b375b5221d8dbf900b14794405d641da0c382d9179edd5db4d576046a3f31"
+    },
+    {
+      "path": "src/config.h",
+      "lines": 671,
+      "sha256": "dae843d2e52142aa21d39a20ca90e18297e9b8383727bc35eb28da79aba49878"
+    },
+    {
+      "path": "src/crash_diag.cpp",
+      "lines": 271,
+      "sha256": "34a5d59158f9dcc1880ac1ec040bc87b1d23654e8c89275b0a29c5c649971cbc"
+    },
+    {
+      "path": "src/crash_diag.h",
+      "lines": 40,
+      "sha256": "4d05511a58577831ff2b725a127921f005d6fa0727ea12873e83d1ec77d610f4"
+    },
+    {
+      "path": "src/draw_capture.cpp",
+      "lines": 1083,
+      "sha256": "24dd992300c0dce6bfa64e67acb3ecf1edf7ecf6537b3814c4f893ff39b9d4b2"
+    },
+    {
+      "path": "src/draw_capture.h",
+      "lines": 171,
+      "sha256": "c7534e4bd2fc6a6d89b15f995dd6869fcebae6249ef26f3ffeae1af5743b436a"
+    },
+    {
+      "path": "src/f4se_compat.h",
+      "lines": 54,
+      "sha256": "6cd83d86554c40d90f63ec9e6352a6eb98f5371be4ee425297191cb34cad21f6"
+    },
+    {
+      "path": "src/fo4_diagnostics.cpp",
+      "lines": 132,
+      "sha256": "d06b7933c04fdb270d8fcbb353c73f75a69916e3795e93747856420ae1b802c5"
+    },
+    {
+      "path": "src/fo4_diagnostics.h",
+      "lines": 51,
+      "sha256": "098839d07749c505d4dd1edf67e6d823d589cc0da3a85e1380782b3471a90fe9"
+    },
+    {
+      "path": "src/fo4_tracy.h",
+      "lines": 33,
+      "sha256": "64235c4b6abde298d3bee1cf05044bd6772f79881d6cc6fbde87568467e7c150"
+    },
+    {
+      "path": "src/hzb_occlusion.cpp",
+      "lines": 334,
+      "sha256": "4adc2fd20e168bcc27eb0c468c4f236dbab9f924b1814a897349e43625d70c8f"
+    },
+    {
+      "path": "src/hzb_occlusion.h",
+      "lines": 143,
+      "sha256": "6b078148253ba522479884236d05d5babcd7523bac3b6d5b5d8be54d6c09f6de"
+    },
+    {
+      "path": "src/main.cpp",
+      "lines": 179,
+      "sha256": "14f9bc88a2cb5886e90830111392b6d942e3f5ce41b1bba05e5de27750d8772e"
+    },
+    {
+      "path": "src/present_hook.cpp",
+      "lines": 1584,
+      "sha256": "c1f9a57e7bccbff2f47738f8d365ad107436e08772c6120126bc54199b2acf48"
+    },
+    {
+      "path": "src/present_hook.h",
+      "lines": 15,
+      "sha256": "317be104ed9c1256bb0fbef27c7251ee9c4aa8803f2ed6bf2211e1054d3fa9cc"
+    },
+    {
+      "path": "src/raster_suppress.cpp",
+      "lines": 107,
+      "sha256": "0511aadea49ff7b167f16b100c0c2bce65c52d2e0b72d685bbd90b28e7467888"
+    },
+    {
+      "path": "src/raster_suppress.h",
+      "lines": 80,
+      "sha256": "4b9bcfea53f5139b2cc4cbdaa52957b5898554fe603102defb947b643f89f96d"
+    },
+    {
+      "path": "src/remix_api.cpp",
+      "lines": 233,
+      "sha256": "4c4b62a7f751bf111bed12cc2559d66c2da4383449f594ae3afe3da9cb7935eb"
+    },
+    {
+      "path": "src/remix_api.h",
+      "lines": 36,
+      "sha256": "35aa6508dc77828e301001cec4c32bf8fed33a74a3388120b0dcc93b4465fbfe"
+    },
+    {
+      "path": "src/remix_renderer.cpp",
+      "lines": 3853,
+      "sha256": "2dd43e8f1386a9fbda8ef75fbf877d793335db5d463dab5da284dd1da3525675"
+    },
+    {
+      "path": "src/remix_renderer.h",
+      "lines": 180,
+      "sha256": "b7ee22d8f49deb445f49265ef2c84aa80eabff5d42170aa09311e9ae1a5c6a40"
+    },
+    {
+      "path": "src/resolvers/lighting_static.cpp",
+      "lines": 4220,
+      "sha256": "23f60d0df2328091b950127d0363f68665280ed7ddbf72aa37ecc4c3cc11c44d"
+    },
+    {
+      "path": "src/resolvers/lighting_static.h",
+      "lines": 106,
+      "sha256": "d8269c78138a8ea1e0c4f085c660a346d1ee6445e4672a57884a946865284427"
+    },
+    {
+      "path": "src/resolvers/water.cpp",
+      "lines": 233,
+      "sha256": "3de3490f3d4b95745172e92ec42e7de012199452ac08e119c9ce0e9626026814"
+    },
+    {
+      "path": "src/resolvers/water.h",
+      "lines": 22,
+      "sha256": "27a5e523cd8fd69bf78a5df3e1f935d4c68cc10d7636c08720f363a5ad210caf"
+    },
+    {
+      "path": "src/semantic_capture.cpp",
+      "lines": 2846,
+      "sha256": "0045a996275089a84207c41210b3a34d988da2d522ec755c75a33c56f70feede"
+    },
+    {
+      "path": "src/semantic_capture.h",
+      "lines": 473,
+      "sha256": "aa51df421183f14add1905252cd22a917b769d574fe13ec6be6f8d71d979e563"
+    },
+    {
+      "path": "src/skinned_meshes.cpp",
+      "lines": 733,
+      "sha256": "68dd08531c1690472c78540730d96d2c786d9c0520723c64b176f1e5182a3ba7"
+    },
+    {
+      "path": "src/skinned_meshes.h",
+      "lines": 94,
+      "sha256": "ad5ee6884d4c5c8718ba59263c4c108b36353baf2e84c70f88e1a0d1b06647e6"
+    },
+    {
+      "path": "src/startup_diag.cpp",
+      "lines": 250,
+      "sha256": "b3ab03015e5bf428502dbd00a9b45ee0357bf313deebb191b754ca2306cd6378"
+    },
+    {
+      "path": "src/startup_diag.h",
+      "lines": 19,
+      "sha256": "e2b60ec56cbff285117708a008a93f68eb7f32952d12b8e3b28663b141ccad0d"
+    },
+    {
+      "path": "src/watchdog_main.cpp",
+      "lines": 333,
+      "sha256": "52411be82383db2c19211d82a3745fc2c69d4ca02e1a6af7a3b4b3e70592d47b"
+    },
+    {
+      "path": "src/weather_bridge.cpp",
+      "lines": 72,
+      "sha256": "3924e5356fed66638c40b1ccfa6ddb354cb68d255a505c8fb8fe65305d8bf027"
+    },
+    {
+      "path": "src/weather_bridge.h",
+      "lines": 16,
+      "sha256": "73af98b69eb0d0306d7c9eb8d2fe8c566b53aff5f6645620a85973c054727b3e"
+    },
+    {
+      "path": "src/window_manager.cpp",
+      "lines": 268,
+      "sha256": "c0903567bb08ddfa19ef6ac7e89c376e1af9c135863d990cf9fddd52dc7c6dfa"
+    },
+    {
+      "path": "src/window_manager.h",
+      "lines": 48,
+      "sha256": "ea12cb49a0c99d0010c40405276f1ec46db217a76cdf55fc839ce3c7a8ecd7c6"
+    }
+  ],
+  "fork_only_pfn_names_vs_upstream_1_6_1": [
+    "PFN_remixapi_AddTextureHash",
+    "PFN_remixapi_AutoInstancePersistentLights",
+    "PFN_remixapi_BridgeCallback",
+    "PFN_remixapi_CreateLightBatched",
+    "PFN_remixapi_CreateMeshBatched",
+    "PFN_remixapi_CreateTexture",
+    "PFN_remixapi_DestroyTexture",
+    "PFN_remixapi_DrawScreenOverlay",
+    "PFN_remixapi_GetGameValue",
+    "PFN_remixapi_GetVramStats",
+    "PFN_remixapi_RegisterCallbacks",
+    "PFN_remixapi_RemoveTextureHash",
+    "PFN_remixapi_RequestTextureVramFree",
+    "PFN_remixapi_RequestVramCompaction",
+    "PFN_remixapi_SetGameValue",
+    "PFN_remixapi_UpdateLightDefinition",
+    "PFN_remixapi_dxvk_GetSharedD3D11TextureHandle",
+    "PFN_remixapi_dxvk_GetTextureHash"
+  ],
+  "review_corrections": [
+    "Worker repository/commit links were wrong; curated report uses actual archived manifest commits.",
+    "Static lighting resolver DOES handle skinned meshes when Skinning.Enabled is true.",
+    "Skinned Remix mesh handles are per-drawable, not safely shareable merely via per-instance bone arrays.",
+    "MaterialInfoTranslucentEXT, InstanceInfoBlendEXT and InstanceInfoBoneTransformsEXT are not fork-only.",
+    "Official remix-1.6.1 header declares API 0.6.5; project vendor header declares 0.6.6.",
+    "Shared D3D11 texture handle is exposed in fork header but not called by this plugin."
+  ]
+}

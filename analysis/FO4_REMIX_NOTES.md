@@ -1,5 +1,7 @@
 # Research: Kim2091/FO4-Remix (F4SE → RTX Remix via remixapi) vs. our NieR:Automata d3d11 proxy
 
+> Follow-up: [pinned integration reconstruction, release-binary checks and portability matrix](FO4_REMIX_RECONSTRUCTION.md) supersedes the floating-version assumptions below. It separates the v0.0.5 release from source 19 commits ahead, identifies matching fork headers, and records source/license boundaries. Official `remix-1.6.1` declares API 0.6.5; our vendored probe header declares 0.6.6.
+
 Sources: I cloned the repo (default branch `master`) and read README.md, KNOWLEDGEBASE.md (KB), FO4RemixPlugin.ini, and these source files: src/remix_api.cpp, src/remix_renderer.cpp, src/skinned_meshes.{h,cpp}, src/draw_capture.h, src/raster_suppress.h, src/hzb_occlusion.h, src/window_manager.h, src/bs_extraction.cpp, src/resolvers/lighting_static.cpp, src/present_hook.cpp, and extern/remix/remix_c.h. I also compared against the upstream header at https://raw.githubusercontent.com/NVIDIAGameWorks/dxvk-remix/main/public/include/remix/remix_c.h.
 Raw URL pattern: `https://raw.githubusercontent.com/Kim2091/FO4-Remix/master/<path>`
 
