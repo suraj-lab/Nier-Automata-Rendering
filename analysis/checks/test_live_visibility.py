@@ -19,7 +19,8 @@ import test_nscn_scene as ts
 OUT = A / 'runtime/live-visibility'
 tr.ENV_KEYS = tuple(tr.ENV_KEYS) + ('NIER_REMIX_LIVE', 'NIER_REMIX_LIVE_TEX', 'NIER_REMIX_LIVE_BUDGET',
                                   'NIER_REMIX_LIVE_TRACE', 'FAKE_REMIX_INSTANCE_LOG', 'NIER_REMIX_LIVE_PRESENCE_MIN',
-                                  'NIER_REMIX_LIVE_DRIVE', 'MOCK_CHURN_EVERY', 'MOCK_CHURN_SLOT2', 'NIER_REMIX_LIVE_HOLD')
+                                  'NIER_REMIX_LIVE_DRIVE', 'MOCK_CHURN_EVERY', 'MOCK_CHURN_SLOT2', 'NIER_REMIX_LIVE_HOLD',
+                                  'NIER_REMIX_LIVE_DRIVE_MIN_INSTANCES')
 NATIVE = tls.HARNESS.replace('int main() {', 'int original_scene_gate() {') + r'''
 #include <cassert>
 static remixapi_ErrorCode REMIXAPI_CALL reject_instance(const remixapi_InstanceInfo*) {
@@ -169,7 +170,8 @@ def wine(work):
     # always-on counter was incremented inside the TRACE guard, so a live run answered nothing.
     # threshold 0 = every submitted frame (the per-frame pop-in log), so the mock's handful of meshes exercises it
     _, _, plain_log, plain_fake = tr.run(work, 'presence-off', {**on, 'NIER_REMIX_LIVE_PRESENCE_MIN': '0',
-                                                                 'NIER_REMIX_LIVE_DRIVE': 'still:0.4,turn:0.4:40'})
+                                                                 'NIER_REMIX_LIVE_DRIVE': 'still:0.4,turn:0.4:40',
+                                                                 'NIER_REMIX_LIVE_DRIVE_MIN_INSTANCES': '1'})
     lines = [l for l in plain_log.splitlines() if 'remix: presence ' in l]
     assert lines, 'no presence line with the trace off: the watch is gated behind TRACE again'
     # Per-frame log: no frame skipped, and the queue fields the pop-in fit needs are on every line.
@@ -185,7 +187,8 @@ def wine(work):
     # Drive clock: starts at the first live frame, phases only advance, and the drive counters are reported.
     assert 'remix: drive start phases=2' in plain_log, 'drive script not started at the first live frame'
     phases = [q['phase'] for q in queue]
-    order = [p if p >= 0 else 99 for p in phases]
+    started = next((i for i, p in enumerate(phases) if p >= 0), len(phases))  # -1 before the start, -1 after the end
+    order = [p if p >= 0 else 99 for p in phases[started:]]
     assert 0 in phases and order == sorted(order), phases
     assert 'remix: drive phase=' in plain_log, 'drive counters missing from the stats window'
     print('frame log:', len(lines), 'frames, phases', sorted(set(phases)), 'last', queue[-1])
@@ -246,7 +249,10 @@ def wine(work):
     assert churn_gaps and churn_gaps[-1] > 0, f'a key returning after 10 frames was not measured: {churn_gaps[-3:]}'
     # Secondary-stream churn (the live pattern): slot 2 moves to an identical copy every 10 frames while POSITION stays.
     # The object must keep its key (no churn, nothing dropped), and the move must still reach the version (a rebuild).
-    _, _, s2_log, _ = tr.run(work, 'churn-slot2', {**on, 'NIER_REMIX_LIVE_PRESENCE_MIN': '0', 'MOCK_CHURN_SLOT2': '10'})
+    _, _, s2_log, _ = tr.run(work, 'churn-slot2', {**on, 'NIER_REMIX_LIVE_PRESENCE_MIN': '0', 'MOCK_CHURN_SLOT2': '10',
+                                                   'NIER_REMIX_LIVE_DRIVE': 'still:1'})
+    # A handful of mock instances is a loading screen, not a world: the script must not start (default 100).
+    assert 'remix: drive start' not in s2_log, 'the drive started before a world was on screen'
     s2 = [{k: int(v) for k, v in re.findall(r'([a-z_]+)=(\d+)', l)}
           for l in s2_log.splitlines() if 'remix: presence_why ' in l]
     assert len(s2) > 30, f'too few frames to cover several slot-2 moves: {len(s2)}'

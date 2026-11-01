@@ -50,6 +50,7 @@ unsigned long long stats_every = 300;  // NIER_REMIX_LIVE_STATS_EVERY
 // if the captured camera jumps on exactly those frames, a pass other than the main view supplied it.
 bool camera_log = false;
 bool normal_octahedral = false, normal_flip_y = false;
+unsigned long long drive_min_instances = 100;  // submitted instances that mean a world is loaded (drive start)
 std::size_t presence_min = 8;  // keys that must move on one frame for a presence line (NIER_REMIX_LIVE_PRESENCE_MIN)  // NIER_REMIX_LIVE_NORMAL: convert vs raw, and Y handedness
 
 // The game's camera position, at the address Special K's NieR plugin reads (src/plugins/nier.cpp, far_cam.pCamera).
@@ -202,7 +203,9 @@ State configure() {
             const unsigned long long v = _wcstoui64(n.c_str(), nullptr, 10);
             if (v >= 1 || n == L"0") presence_min = static_cast<std::size_t>(v);
         }
-        // NIER_REMIX_LIVE_DRIVE: scripted turn/walk/still phases from the first live frame (input_drive.h).
+        // NIER_REMIX_LIVE_DRIVE: scripted turn/walk/still phases from the first frame with a world (input_drive.h).
+        if (const std::wstring n = env(L"NIER_REMIX_LIVE_DRIVE_MIN_INSTANCES"); !n.empty())  // test switch
+            drive_min_instances = _wcstoui64(n.c_str(), nullptr, 10);
         if (const std::wstring d = env(L"NIER_REMIX_LIVE_DRIVE"); !d.empty()) {
             input_drive::script = input_drive::parse(std::string(d.begin(), d.end()));  // ASCII script
             if (input_drive::script.empty()) logger.load()("remix: drive script rejected: %ls", d.c_str());
@@ -686,10 +689,6 @@ struct Worker {
                     logger.load()("remix: live scene first frame draws=%u meshes=%u instances=%u textures=%u skinned=%u",
                                   frame.draws, live.built, static_cast<unsigned>(frame.transforms.size() / 12),
                                   static_cast<unsigned>(live.texture_paths.size()), frame.skinned);
-                    if (!input_drive::script.empty()) {
-                        input_drive::start_us.store(input_drive::now_us(), std::memory_order_release);
-                        logger.load()("remix: drive start phases=%zu", input_drive::script.size());
-                    }
                 }
                 if (!live_scene::ready(frame, live)) {  // nothing built yet: keep the previous image
                     held_trace("not_ready");
@@ -704,6 +703,14 @@ struct Worker {
                     report_visibility(frame, submitted, "submit_failed"); fail("live submit", r); return false;
                 }
                 report_visibility(frame, submitted, "submitted");
+                // The script starts once a world is on screen: the first live frame can be a loading screen minutes
+                // before it (popin-hold-b4000: 3 draws, the world 2 min later, 9 of 14 phases driven into nothing).
+                if (!input_drive::script.empty() && !input_drive::start_us.load(std::memory_order_relaxed) &&
+                    live.frame_instances >= drive_min_instances) {
+                    input_drive::start_us.store(input_drive::now_us(), std::memory_order_release);
+                    logger.load()("remix: drive start phases=%zu instances=%llu", input_drive::script.size(),
+                                  live.frame_instances);
+                }
                 t_submit += live_capture::now_us() - s0;
                 if (seq % stats_every == 1) {
                     // One accounting line per window: every draw the hook saw, by the reason it produced no upload, and
