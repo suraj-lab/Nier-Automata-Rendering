@@ -91,3 +91,11 @@ city ruins, desert).
    metalness. Not yet attributed (roughness from a gloss role on rock shaders, or something outside the material).
 4. **Foliage**: trees and bushes present in the city ruins; 11 shaders were skipped as effects, all blended
    no-depth-write. Which foliage is missing has to be pointed out on screen. Particles are off by decision.
+
+## Verification run pbr-verify1 (DLL 7f56d0a7, `NIER_REMIX_LIVE_MIN_INDICES=3`, on battery)
+
+Albedo/metal now traced live. Foliage and grass back with the size filter lowered: the 128-index filter hid them.
+It also hid overlays that are not world geometry: 2B solid green / blue, white slabs in the sky, flat pale cards,
+floating sheets; accepted draws 124 -> 8,588 per window, 169,916 meshes built. Dunes still flat, city ground still
+white, far terrain still chrome; logged terrain repeat `1,1` (logged before the constant buffer is readable).
+Plan: `analysis/NEXT_STEPS_2026-11-01.md`.
