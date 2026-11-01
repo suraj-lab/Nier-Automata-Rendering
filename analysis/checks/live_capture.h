@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <algorithm>
 #include <cstring>
+#include <cmath>
 #include <map>
 #include <mutex>
 #include <set>
@@ -1360,6 +1361,9 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
 
     std::uint32_t texture = 0;
     std::uint32_t normal = 0, metallic = 0, roughness = 0;
+    int albedo_slot = -1;                 // the PS slot the albedo came from (role, or first usable)
+    float uv_scale[2] = {1.f, 1.f};       // the shader's own texture repeat at that slot, baked into the mesh UVs
+    std::uint64_t uv_bits = 0;            // ... folded into the version, so a changed repeat rebuilds the mesh
     bool texture_deferred = false;
     {
         // One capture path for both material inputs: the resource cache and the write budget are shared, so a normal map
@@ -1430,11 +1434,45 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
             return r;
         };
         if (roles.albedo.slot >= 0) {
+            albedo_slot = roles.albedo.slot;
             if (take(roles.albedo.slot, texture, 0) == TextureResult::Deferred) texture_deferred = true;
         } else {
-            for (int slot = 0; slot < 16 && !texture && !texture_deferred; ++slot)  // untraced shader: first usable texture
+            for (int slot = 0; slot < 16 && !texture && !texture_deferred; ++slot) {  // untraced shader: first usable texture
+                albedo_slot = slot;
                 if (take(slot, texture, 0) == TextureResult::Deferred)
                     texture_deferred = true;  // the texture lands later; this geometry is uploaded without it for now
+            }
+            if (!texture && !texture_deferred) albedo_slot = -1;
+        }
+        // Texture repeat the shader applies to the albedo's UVs from a constant (terrain: uv * cb1[5].xy). Remix 1.6.1
+        // has no material texture transform (API 0.6.5), so it is baked into the mesh UVs below.
+        if (albedo_slot >= 0 && albedo_slot < 8 && pixel.roles.uv[albedo_slot].cb >= 0 && pixel.roles.uv[albedo_slot].cb < 14) {
+            const material_roles::UvScale& u = pixel.roles.uv[albedo_slot];
+            ID3D11Buffer* cb = nullptr;
+            context->PSGetConstantBuffers(static_cast<UINT>(u.cb), 1, &cb);
+            if (cb) {
+                const std::vector<unsigned char>* bytes = buffer_bytes(device, context, cb);
+                const std::size_t at = static_cast<std::size_t>(u.reg) * 16;
+                if (bytes && u.lanes.size() == 2 && at + 16 <= bytes->size()) {
+                    float s[2];
+                    for (int k = 0; k < 2; ++k)
+                        std::memcpy(&s[k], bytes->data() + at + 4 * std::string("xyzw").find(u.lanes[static_cast<std::size_t>(k)]), 4);
+                    // Only a plausible repeat: a garbage constant must not shred the UVs.
+                    if (std::isfinite(s[0]) && std::isfinite(s[1]) && std::fabs(s[0]) > 1e-4f && std::fabs(s[1]) > 1e-4f &&
+                        std::fabs(s[0]) < 1e4f && std::fabs(s[1]) < 1e4f && (s[0] != 1.f || s[1] != 1.f)) {
+                        uv_scale[0] = s[0];
+                        uv_scale[1] = s[1];
+                        std::uint32_t bits[2];
+                        std::memcpy(bits, s, sizeof bits);
+                        uv_bits = hash_value((static_cast<std::uint64_t>(bits[0]) << 32) | bits[1]);
+                    }
+                }
+                cb->Release();
+            }
+            char note[64];
+            std::snprintf(note, sizeof note, " uv:%d:cb%d[%d].%s=%.3g,%.3g", albedo_slot, u.cb, u.reg, u.lanes.c_str(),
+                          uv_scale[0], uv_scale[1]);
+            slot_notes += note;
         }
         const auto lane = [](const std::string& c) { return c.empty() ? 0u : static_cast<unsigned>(std::string("xyzw").find(c[0])); };
         if (normal_textures && roles.normal.slot >= 0) take(roles.normal.slot, normal, 1);
@@ -1567,6 +1605,7 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     const auto version_now = [&] {
         std::uint64_t v = identity(ib);
         for (unsigned i = 0; i < vb_count; ++i) v = hash_value(v ^ identity(vbs[i]));
+        if (uv_bits) v = hash_value(v ^ uv_bits);
         return skinned ? hash_value(v ^ pose) : v;
     };
     version = version_now();
@@ -1619,7 +1658,7 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
         }
         const std::uint64_t used_bytes = stale_used ? draw_bytes_hash(ib_bytes, vb_bytes, vb_count, strides, offsets,
                                                                       static_cast<std::size_t>(ib_offset) + static_cast<std::size_t>(start_index) * index_width,
-                                                                      index_count, index_width, base_vertex) ^ pose
+                                                                      index_count, index_width, base_vertex) ^ pose ^ uv_bits
                                                 : 0;
         if (used_bytes && previously != built_versions().end() && content_hashes().count(geometry)) {
             // Built before from these very bytes: the mesh on the GPU already is this geometry.
@@ -1713,6 +1752,8 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
             }
         }
         if (ok && rigid) { decoded.bones.clear(); decoded.weights.clear(); }  // bind pose; Remix applies the bone
+        if (ok && uv_bits)
+            for (auto& v : decoded.vertices) { v.texcoord[0] *= uv_scale[0]; v.texcoord[1] *= uv_scale[1]; }
         if (ok && !decoded.indices.empty()) {
             // World-space extent of the first instance, exactly like the accepted captured-scene rule: a sky
             // dome only reveals itself after the world matrix, and local space alone would misjudge scaled meshes.

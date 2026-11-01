@@ -346,9 +346,24 @@ int wmain(int argc, wchar_t** argv) {
         "  return float4(F0 * a + normalize(n) * light.xyz, albedo.a);\n"
         "}\n";
     const bool mesh_pbr = std::getenv("MOCK_PBR_PS") != nullptr;
+    // MOCK_UV_PS: the albedo is sampled at uv * cb1[5].xy, the way NieR's terrain layers repeat their textures; cb1 is
+    // bound with (4, 2) there, so the live path must bake that repeat into the mesh UVs.
+    const char uv_ps_src[] =
+        "Texture2D t0 : register(t0); SamplerState s : register(s0);\n"
+        "cbuffer M : register(b1) { float4 pad0, pad1, pad2, pad3, pad4; float4 tile; };\n"
+        "float4 main(float4 p : SV_POSITION) : SV_TARGET { return t0.Sample(s, p.xy * tile.xy); }\n";
+    const bool mesh_uv = std::getenv("MOCK_UV_PS") != nullptr;
     ID3DBlob* ps_blob = nullptr;
-    const char* mesh_ps_src = mesh_pbr ? pbr_ps_src : mesh_discards ? cutout_ps_src : ps_src;
-    const SIZE_T mesh_ps_len = mesh_pbr ? sizeof pbr_ps_src - 1 : mesh_discards ? sizeof cutout_ps_src - 1 : sizeof ps_src - 1;
+    const char* mesh_ps_src = mesh_uv ? uv_ps_src : mesh_pbr ? pbr_ps_src : mesh_discards ? cutout_ps_src : ps_src;
+    const SIZE_T mesh_ps_len = mesh_uv ? sizeof uv_ps_src - 1 : mesh_pbr ? sizeof pbr_ps_src - 1
+                             : mesh_discards ? sizeof cutout_ps_src - 1 : sizeof ps_src - 1;
+    ID3D11Buffer* uv_cb = nullptr;
+    if (mesh_uv) {
+        const float tile_data[24] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4.f, 2.f, 0, 0};
+        D3D11_BUFFER_DESC cd{}; cd.ByteWidth = sizeof tile_data; cd.Usage = D3D11_USAGE_DEFAULT; cd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+        D3D11_SUBRESOURCE_DATA cdata = {tile_data, 0, 0};
+        if (FAILED(device->CreateBuffer(&cd, &cdata, &uv_cb))) { std::fprintf(out, "FAIL uv cb\n"); return 3; }
+    }
     if (!compile || FAILED(compile(mesh_ps_src, mesh_ps_len, "ps", nullptr, nullptr, "main", "ps_4_0", 0, 0, &ps_blob, nullptr)))
         { std::fprintf(out, "FAIL mesh ps\n"); return 3; }
     ID3D11PixelShader* mesh_ps = nullptr;
@@ -1057,6 +1072,7 @@ int wmain(int argc, wchar_t** argv) {
                 context->IASetInputLayout(live_layout);
                 context->VSSetShader(live_vs, nullptr, 0);
                 context->PSSetShader(mesh_ps, nullptr, 0);
+                if (uv_cb) context->PSSetConstantBuffers(1, 1, &uv_cb);
                 context->VSSetConstantBuffers(0, 1, &camera_buffer);
                 context->VSSetConstantBuffers(11, 1, &live_cb11);
                 context->PSSetShaderResources(0, 1, &mesh_srvs[0]);
@@ -1132,6 +1148,7 @@ int wmain(int argc, wchar_t** argv) {
                 context->IASetInputLayout(live_layout);
                 context->VSSetShader(live_vs, nullptr, 0);
                 context->PSSetShader(mesh_ps, nullptr, 0);
+                if (uv_cb) context->PSSetConstantBuffers(1, 1, &uv_cb);
                 context->VSSetConstantBuffers(0, 1, &camera_buffer);
                 context->VSSetConstantBuffers(11, 1, &live_cb11);
                 context->PSSetShaderResources(0, 1, &mesh_srvs[0]);

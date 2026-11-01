@@ -62,6 +62,20 @@ mul r13.y, r7.z, r7.z
 max r13.z, r13.y, l(0.001000)
 ret
 """
+# Terrain-style UVs (ps_550777957256): layers sampled at uv * cb1[5].xy / .zw; an offset-only coordinate and a
+# transform written inside a branch must not be reported as a scale.
+TERRAIN_UV = """ps_5_0
+mad r6.xyzw, v2.xyzw, cb1[5].xyzw, cb3[1].xyxy
+sample_indexable(texture2d) r7.xyzw, r6.xyxx, t0.xyzw, s0
+sample_indexable(texture2d) r8.xyzw, r6.zwzz, t1.xyzw, s1
+add r0.zw, v1.xxxy, cb3[1].xxxy
+sample_indexable(texture2d) r9.xyzw, r0.zwzz, t2.xyzw, s2
+if_nz r1.x
+  mad r3.xy, v2.xyxx, cb1[6].xyxx, l(0.000000, 0.000000, 0.000000, 0.000000)
+endif
+sample_indexable(texture2d) r4.xyzw, r3.xyxx, t3.xyzw, s3
+ret
+"""
 EFFECT = """ps_5_0
 sample_indexable(texture2d) r1.xy, v3.xyxx, t4.xyzw, s4
 sample_indexable(texture2d) r2.xyzw, r1.xyxx, t0.xyzw, s0
@@ -88,6 +102,15 @@ def main():
     got = pbr_trace.roles(LIT_MS)
     assert got == WANT_SYNTH, f"the same shader in Microsoft's disassembly format: {got}"
     checks.append("Microsoft disassembly format")
+    uv = pbr_trace.roles(TERRAIN_UV).get('uv_scale')
+    assert uv == {0: {'cb': 1, 'register': 5, 'lanes': 'xy'}, 1: {'cb': 1, 'register': 5, 'lanes': 'zw'}}, uv
+    checks.append('terrain UV scale from constants; offset-only and branch-written coordinates refused')
+    terrain = C.parent / 'runtime' / 'pbr-re' / 'paired_diag1' / 'wine' / 'ps_550777957256.asm'
+    if terrain.exists():
+        uv = pbr_trace.roles(terrain.read_text(errors='replace')).get('uv_scale', {})
+        assert uv.get(0) == {'cb': 1, 'register': 5, 'lanes': 'xy'} and uv.get(1) == {'cb': 1, 'register': 5, 'lanes': 'zw'} \
+            and uv.get(2) == {'cb': 1, 'register': 6, 'lanes': 'xy'}, uv
+        checks.append('real terrain shader: layers 0/1/2 at cb1[5].xy, cb1[5].zw, cb1[6].xy')
     assert pbr_trace.roles(EFFECT) == {}, f'an effects shader was given material roles: {pbr_trace.roles(EFFECT)}'
     checks.append('effects shader has no material roles')
     real = C.parent / 'runtime' / 'pbr-re'

@@ -30,7 +30,7 @@ import test_nscn_scene as ts
 
 tr.ENV_KEYS = tuple(tr.ENV_KEYS) + ('NIER_REMIX_LIVE', 'NIER_REMIX_LIVE_TEX', 'MOCK_NORMAL_TEX',
                                     'NIER_REMIX_LIVE_NORMAL', 'NIER_REMIX_LIVE_NORMAL_RAW', 'FAKE_REMIX_INSTANCE_LOG',
-                                    'MOCK_CAMERA', 'MOCK_PBR_PS', 'NIER_REMIX_LIVE_PBR', 'NIER_REMIX_LIVE_ROUGHNESS_FLOOR')
+                                    'MOCK_CAMERA', 'MOCK_PBR_PS', 'NIER_REMIX_LIVE_PBR', 'NIER_REMIX_LIVE_ROUGHNESS_FLOOR', 'MOCK_UV_PS')
 
 BC5 = bytes((i * 19 + 5) & 0xff for i in range(2 * 2 * 16))  # the mock's 8x8 BC5 normal map
 RGBA4 = bytes((i * 7 + 3) & 0xff for i in range(4 * 4 * 4))  # the mock's 4x4 albedo
@@ -69,6 +69,7 @@ def main():
         assert mats, fake[-800:]
         files = {f['name']: f for f in (dds(p) for p in sorted(tex.glob('*.dds')))}
         notes[name] = [line.split('remix: ', 1)[1] for line in log.splitlines() if 'remix: material ps=' in line]
+        fakes[name] = fake
         return files, mats
 
     def field(line, key):
@@ -76,6 +77,7 @@ def main():
 
     results = {}
     notes = {}
+    fakes = {}
     # 1. No traceable roles: albedo only, whatever slot 4 holds.
     files, mats = run('plain', {'NIER_REMIX_LIVE_NORMAL': '1'})
     assert len(files) == 1 and next(iter(files.values()))['payload'] in (RGBA4, BC1), list(files)
@@ -118,6 +120,23 @@ def main():
     files, mats = run('pbr-disabled', {'MOCK_PBR_PS': '1', 'NIER_REMIX_LIVE_PBR': '0'})
     assert all(field(m, 'roughness') == '-' and field(m, 'metallic') == '-' for m in mats), mats[:2]
     results['disabled'] = 'NIER_REMIX_LIVE_PBR=0: no metallic/roughness textures'
+    # 7. Texture repeat from the shader's constants (terrain): uv * cb1[5].xy = (4, 2) is baked into the mesh UVs.
+    def last_uv(fake):
+        out = {}
+        for line in fake.splitlines():
+            if line.startswith('CreateMesh '):
+                out[line.split('v0=')[1].split()[0]] = tuple(float(x) for x in line.split('uvsum=')[1].split()[0].split(','))
+        return out
+    run('uv-off', {'MOCK_CAMERA': 'live'})              # the non-skinned live mesh: every vertex at uv (0.25, 0.75)
+    run('uv-on', {'MOCK_CAMERA': 'live', 'MOCK_UV_PS': '1'})
+    off, on = last_uv(fakes['uv-off']), last_uv(fakes['uv-on'])
+    scaled = [(k, off[k], on[k]) for k in off if k in on and abs(off[k][0]) > 1e-3 and abs(off[k][1]) > 1e-3]
+    assert scaled, (off, on)
+    assert all(abs(b[0] - 4 * a[0]) < 1e-2 * max(1, abs(a[0])) and abs(b[1] - 2 * a[1]) < 1e-2 * max(1, abs(a[1]))
+               for _, a, b in scaled), scaled[:3]
+    assert any('uv:0:cb1[5].xy=4,2' in n for n in notes['uv-on']), notes['uv-on'][:3]
+    assert not any(' uv:' in n for n in notes['uv-off']), notes['uv-off'][:3]
+    results['uv'] = f'albedo repeat cb1[5].xy=(4,2) baked into mesh UVs: {scaled[0][1]} -> {scaled[0][2]}'
     # 6. One diagnostic line per pixel shader: its roles and what happened at each role's slot.
     assert any('roles=-' in n for n in notes['plain']), notes['plain'][:3]
     pbr = [n for n in notes['pbr'] if 'albedo=0.xyz' in n]

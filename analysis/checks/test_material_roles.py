@@ -10,7 +10,8 @@ if the corpus is missing rather than passing on a handful of cases).
 Required API (material_roles.h, header-only, C++17, no Windows headers):
     namespace material_roles {
     struct Channel { int slot = -1; std::string channels; bool invert = false; };  // slot -1: role not found
-    struct Roles { Channel albedo, metal, gloss, normal, detail_normal; };
+    struct UvScale { int cb = -1; int reg = -1; std::string lanes; };
+    struct Roles { Channel albedo, metal, gloss, normal, detail_normal; UvScale uv[8]; };
     Roles parse(const std::string& disassembly);
     }
 """
@@ -45,6 +46,11 @@ int main(int argc, char** argv) {
         const material_roles::Channel* c[5] = {&r.albedo, &r.metal, &r.gloss, &r.normal, &r.detail_normal};
         std::printf("%s", argv[i]);
         for (int k = 0; k < 5; ++k) std::printf(" %d:%s:%d", c[k]->slot, c[k]->slot < 0 ? "-" : c[k]->channels.c_str(), c[k]->invert ? 1 : 0);
+        std::printf(" uv=");
+        bool any = false;
+        for (int s = 0; s < 8; ++s)
+            if (r.uv[s].cb >= 0) { std::printf("%s%d:%d:%d:%s", any ? "," : "", s, r.uv[s].cb, r.uv[s].reg, r.uv[s].lanes.c_str()); any = true; }
+        if (!any) std::printf("-");
         std::printf("\n");
     }
     return 0;
@@ -54,8 +60,9 @@ int main(int argc, char** argv) {
 
 def expected(text):
     r = pbr_trace.roles(text)
+    uv = ','.join(f"{s}:{v['cb']}:{v['register']}:{v['lanes']}" for s, v in sorted(r.get('uv_scale', {}).items())) or '-'
     return ' '.join(f"{r[k]['slot']}:{r[k]['channels']}:{1 if r[k].get('invert') else 0}" if k in r else '-1:-:0'
-                    for k in ROLES)
+                    for k in ROLES) + f' uv={uv}'
 
 
 def fail(msg):

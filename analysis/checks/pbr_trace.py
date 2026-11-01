@@ -27,6 +27,7 @@ NO_DEST = OPENS + CLOSES + ('else', 'discard_nz', 'discard_z', 'breakc_nz', 'bre
                              'continuec_nz', 'continuec_z', 'case', 'default', 'retc_nz', 'retc_z')
 REG = re.compile(r'^(-?)(\|?)([rvo])(\d+)\.([xyzw]+)\|?$')
 TEX = re.compile(r'^t(\d+)\.([xyzw]{4})$')
+CB = re.compile(r'^cb(\d+)\[(\d+)\]\.([xyzw]+)$')
 
 
 def split_operands(text):
@@ -81,6 +82,53 @@ def trace(asm):
     writer = {}    # ('r', 7, 'x') -> index of the instruction that last wrote it
     ins = parse(asm)
     found = {'metal': set(), 'albedo': set(), 'gloss': set(), 'normal': set(), 'detail': set(), 'cutout': set()}
+    wrote = {}     # ('r', 6, 'x') -> (op, srcs, dest mask, depth) of the instruction that last wrote it
+    found['uv'] = {}  # texture slot -> the UV transform of its first sample (uv_transform below)
+
+    def uv_transform(coord):
+        """Scale of a sample coordinate's two lanes, read back to the one instruction that wrote them: a vertex input
+        times a constant (mad v, cb, cb / mul v, cb), an offset only (add v, cb), or the input itself. ('scale',
+        cb slot, register, lanes) or ('none',) when the coordinate is the input untransformed; None when not simple."""
+        m = REG.match(coord)
+        if not m:
+            return None
+        _, _, kind, n, sw = m.groups()
+        if kind == 'v':
+            return ('none',)
+        sw = (sw * 4)[:4] if len(sw) == 1 else sw
+        found_scale = []
+        for lane in sw[:2]:
+            w = wrote.get((kind, int(n), lane))
+            if not w or w[3] > 0:  # unwritten temp, or written inside a branch: not a simple transform
+                return None
+            op, srcs, dmask, _ = w
+            k = dmask.index(lane)
+            def at(operand):  # the source lane feeding destination lane k of a component-wise op
+                mm = REG.match(operand) or CB.match(operand)
+                if not mm:
+                    return None
+                s = mm.groups()[-1]
+                s = (s * 4)[:4] if len(s) == 1 else s
+                return mm, s[LANES.index(lane)] if len(s) == 4 else s[min(k, len(s) - 1)]
+            if op in ('mad', 'mul') and len(srcs) >= 2:
+                a, b = at(srcs[0]), at(srcs[1])
+                if not a or not b:
+                    return None
+                vin = [x for x in (a, b) if REG.match(srcs[(a, b).index(x)]) and x[0].group(3) == 'v']
+                cbs = [(srcs[i], x) for i, x in enumerate((a, b)) if CB.match(srcs[i])]
+                if len(vin) != 1 or len(cbs) != 1:
+                    return None
+                cm = CB.match(cbs[0][0])
+                found_scale.append((int(cm.group(1)), int(cm.group(2)), cbs[0][1][1]))
+            elif op in ('add', 'mov') and srcs and REG.match(srcs[0]) and REG.match(srcs[0]).group(3) == 'v':
+                found_scale.append(None)
+            else:
+                return None
+        if found_scale == [None, None]:
+            return ('none',)
+        if None in found_scale or found_scale[0][:2] != found_scale[1][:2]:
+            return None
+        return ('scale', found_scale[0][0], found_scale[0][1], found_scale[0][2] + found_scale[1][2])
 
     def src_lanes(operand, dst_lanes):
         """Per destination lane, the source register lane it reads (component-wise ops)."""
@@ -124,6 +172,8 @@ def trace(asm):
             tex = next((TEX.match(s) for s in srcs if TEX.match(s)), None)
             if tex:
                 slot, sw = int(tex.group(1)), tex.group(2)
+                if slot not in found['uv'] and slot in MATERIAL_SLOTS:
+                    found['uv'][slot] = uv_transform(srcs[0])
                 # destination lane k takes the texture channel at the k-th position of the resource swizzle
                 for lane in dmask:
                     new[lane] = frozenset({(slot, sw[LANES.index(lane)])}) if slot in MATERIAL_SLOTS else frozenset()
@@ -160,6 +210,7 @@ def trace(asm):
             # A write inside a branch may not happen: keep what the register held before as well.
             prov[(dkind, dn, lane)] = s | prov.get((dkind, dn, lane), frozenset()) if depth else s
             writer[(dkind, dn, lane)] = i
+            wrote[(dkind, dn, lane)] = (op, srcs, dmask, depth)
     return found
 
 
@@ -212,6 +263,12 @@ def roles(asm):
         out['normal'] = n
     if (d := one_slot(f['detail'], 2)):
         out['detail_normal'] = d
+    # Texture repeat the game applies from a constant, per sampled slot (terrain layers: uv * cb1[5].xy). Reported for
+    # every slot, because the albedo of a blended (terrain) shader is not a traced role and falls back to slot 0.
+    scales = {slot: {'cb': uv[1], 'register': uv[2], 'lanes': uv[3]}
+              for slot, uv in sorted(f['uv'].items()) if uv and uv[0] == 'scale'}
+    if scales:
+        out['uv_scale'] = scales
     return out
 
 

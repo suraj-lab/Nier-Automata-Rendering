@@ -128,13 +128,19 @@ remixapi_ErrorCode REMIXAPI_CALL create_mesh(const remixapi_MeshInfo* i, remixap
                 }
         }
     }
-    float v0[3] = {0, 0, 0};
-    if (i && i->surfaces_count && i->surfaces_values[0].vertices_values && i->surfaces_values[0].vertices_count)
+    float v0[3] = {0, 0, 0}, uv0[2] = {0, 0};
+    if (i && i->surfaces_count && i->surfaces_values[0].vertices_values && i->surfaces_values[0].vertices_count) {
         std::memcpy(v0, i->surfaces_values[0].vertices_values[0].position, sizeof v0);
-    note("CreateMesh hash=%llu surfaces=%u verts=%llu indices=%llu materials=%u skinned=%d bonesPerVertex=%u weights=%llu v0=%.3f,%.3f,%.3f presented=%u started=%d key=%llu",
+        // Sum over every vertex: a texture repeat baked into the UVs scales it exactly, even when vertex 0 sits at 0,0.
+        for (std::uint32_t k = 0; k < i->surfaces_values[0].vertices_count; ++k) {
+            uv0[0] += i->surfaces_values[0].vertices_values[k].texcoord[0];
+            uv0[1] += i->surfaces_values[0].vertices_values[k].texcoord[1];
+        }
+    }
+    note("CreateMesh hash=%llu surfaces=%u verts=%llu indices=%llu materials=%u skinned=%d bonesPerVertex=%u weights=%llu v0=%.3f,%.3f,%.3f presented=%u started=%d key=%llu uvsum=%.4f,%.4f",
          i ? static_cast<unsigned long long>(i->hash) : 0ull, i ? i->surfaces_count : 0u, verts, indices, materials,
          skinned ? 1 : 0, bones_per_vertex, weights, v0[0], v0[1], v0[2], frames, started,
-         i ? static_cast<unsigned long long>(i->hash) >> 32 : 0ull);  // live_scene: capture key in the high 32 bits
+         i ? static_cast<unsigned long long>(i->hash) >> 32 : 0ull, uv0[0], uv0[1]);  // live_scene: capture key in the high 32 bits
     if (!started) note("VIOLATION CreateMesh before Startup");
     const unsigned long long hash = i ? static_cast<unsigned long long>(i->hash) : 0ull;
     if (!hash) { *h = reinterpret_cast<remixapi_MeshHandle>(handle++); return REMIXAPI_ERROR_CODE_SUCCESS; }

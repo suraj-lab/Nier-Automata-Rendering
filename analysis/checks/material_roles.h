@@ -18,7 +18,9 @@
 namespace material_roles {
 
 struct Channel { int slot = -1; std::string channels; bool invert = false; };  // slot -1: role not found
-struct Roles { Channel albedo, metal, gloss, normal, detail_normal; };
+// Texture repeat the game applies from a constant at one sampled slot: uv * cb<cb>[<reg>].<lanes> (terrain layers).
+struct UvScale { int cb = -1; int reg = -1; std::string lanes; };  // cb -1: the slot is sampled untransformed / unknown
+struct Roles { Channel albedo, metal, gloss, normal, detail_normal; UvScale uv[8]; };
 
 namespace detail {
 
@@ -259,9 +261,38 @@ using RegisterLane = std::tuple<char, std::string, char>;  // register kind, reg
 
 inline void merge(Provenance& into, const Provenance& from) { into.insert(from.begin(), from.end()); }
 
+struct UvResult { int kind = -1; int cb = -1; int reg = -1; std::string lanes; };  // kind: -1 not simple, 0 none, 1 scale
+
 struct Found {
     std::set<Provenance> metal, albedo, gloss, normal, detail, cutout;
+    std::map<int, UvResult> uv;  // texture slot -> transform of its first sample
 };
+
+struct Write { std::string op; std::vector<std::string> srcs; std::string mask; int depth = 0; };
+
+// ^cb(\d+)\[(\d+)\]\.([xyzw]+)$
+struct CbOperand { int slot = -1; int reg = -1; std::string swizzle; };
+inline bool parse_cb(const std::string& s, CbOperand& out) {
+    if (s.size() < 7 || s.compare(0, 2, "cb") != 0) return false;
+    std::size_t i = 2;
+    const std::size_t a = i;
+    while (i < s.size() && is_digit(s[i])) ++i;
+    if (i == a || i >= s.size() || s[i] != '[') return false;
+    const std::string slot = s.substr(a, i - a);
+    const std::size_t b = ++i;
+    while (i < s.size() && is_digit(s[i])) ++i;
+    if (i == b || i + 1 >= s.size() || s[i] != ']' || s[i + 1] != '.') return false;
+    const std::string reg = s.substr(b, i - b);
+    i += 2;
+    const std::size_t c = i;
+    while (i < s.size() && is_lane(s[i])) ++i;
+    if (i == c || i != s.size()) return false;
+    if (slot.size() > 6 || reg.size() > 6) return false;
+    out.slot = std::stoi(slot);
+    out.reg = std::stoi(reg);
+    out.swizzle = s.substr(c);
+    return true;
+}
 
 class Tracer {
 public:
@@ -271,8 +302,10 @@ public:
 
 private:
     std::map<RegisterLane, Provenance> prov_;
+    std::map<RegisterLane, Write> wrote_;
 
     Provenance sources(const std::string& operand, const std::string& lanes) const;
+    UvResult uv_transform(const std::string& coord) const;
 };
 
 // Provenance of each lane a source operand feeds into the destination lanes.
@@ -287,6 +320,61 @@ inline Provenance Tracer::sources(const std::string& operand, const std::string&
         if (it != prov_.end()) merge(out, it->second);
     }
     return out;
+}
+
+// Scale of a sample coordinate's two lanes, read back to the one instruction that wrote them (pbr_trace.py uv_transform).
+inline UvResult Tracer::uv_transform(const std::string& coord) const {
+    Register reg;
+    if (!parse_register(coord, reg)) return {};
+    if (reg.kind == 'v') return {0, -1, -1, {}};
+    std::string sw = reg.swizzle.size() == 1 ? std::string(4, reg.swizzle[0]) : reg.swizzle;
+    struct Entry { bool scale = false; int cb = -1, reg = -1; char lane = 0; };
+    std::vector<Entry> entries;
+    for (std::size_t li = 0; li < 2 && li < sw.size(); ++li) {
+        const char lane = sw[li];
+        const auto w = wrote_.find(RegisterLane{reg.kind, reg.number, lane});
+        if (w == wrote_.end() || w->second.depth > 0) return {};
+        const Write& wr = w->second;
+        const std::size_t k = wr.mask.find(lane);
+        const auto at = [&](const std::string& operand, char& out) {
+            Register r;
+            CbOperand cb;
+            std::string s;
+            if (parse_register(operand, r)) s = r.swizzle;
+            else if (parse_cb(operand, cb)) s = cb.swizzle;
+            else return false;
+            if (s.size() == 1) s = std::string(4, s[0]);
+            out = s.size() == 4 ? s[kLanes.find(lane)] : s[std::min(k, s.size() - 1)];
+            return true;
+        };
+        if ((wr.op == "mad" || wr.op == "mul") && wr.srcs.size() >= 2) {
+            char la = 0, lb = 0;
+            if (!at(wr.srcs[0], la) || !at(wr.srcs[1], lb)) return {};
+            int vin = 0;
+            int cbs = 0;
+            CbOperand found_cb;
+            char cb_lane = 0;
+            for (int i = 0; i < 2; ++i) {
+                Register r;
+                CbOperand cb;
+                if (parse_register(wr.srcs[i], r) && r.kind == 'v') ++vin;
+                if (parse_cb(wr.srcs[i], cb)) { ++cbs; found_cb = cb; cb_lane = i == 0 ? la : lb; }
+            }
+            if (vin != 1 || cbs != 1) return {};
+            entries.push_back({true, found_cb.slot, found_cb.reg, cb_lane});
+        } else if ((wr.op == "add" || wr.op == "mov") && !wr.srcs.empty()) {
+            Register r;
+            if (!parse_register(wr.srcs[0], r) || r.kind != 'v') return {};
+            entries.push_back({});
+        } else {
+            return {};
+        }
+    }
+    if (entries.size() == 2 && !entries[0].scale && !entries[1].scale) return {0, -1, -1, {}};
+    if (entries.size() != 2 || !entries[0].scale || !entries[1].scale || entries[0].cb != entries[1].cb ||
+        entries[0].reg != entries[1].reg)
+        return {};
+    return {1, entries[0].cb, entries[0].reg, std::string{entries[0].lane, entries[1].lane}};
 }
 
 inline bool is_metal_f0(const std::vector<double>& values) {
@@ -320,6 +408,8 @@ inline void Tracer::run(const std::string& disassembly) {
                     break;
                 }
             }
+            if (has_tex && tex.slot >= 0 && !found.uv.count(tex.slot) && !srcs.empty())
+                found.uv[tex.slot] = uv_transform(srcs[0]);
             for (const char lane : dst.swizzle) {
                 if (has_tex && tex.slot >= 0) {
                     fresh[lane] = Provenance{SlotChannel{tex.slot, tex.swizzle[kLanes.find(lane)]}};
@@ -385,6 +475,7 @@ inline void Tracer::run(const std::string& disassembly) {
             // A write inside a branch may not happen: keep what the register held before as well.
             if (depth > 0) merge(slot, values);
             else slot = values;
+            wrote_[RegisterLane{dst.kind, dst.number, lane}] = Write{op, srcs, dst.swizzle, depth};
         }
     }
 }
@@ -487,6 +578,8 @@ inline Roles parse(const std::string& disassembly) {
     out.gloss = detail::to_channel(gloss, true);
     out.normal = detail::to_channel(normal, false);
     out.detail_normal = detail::to_channel(detail_normal, false);
+    for (const auto& [slot, uv] : f.uv)
+        if (slot >= 0 && slot < 8 && uv.kind == 1) out.uv[slot] = UvScale{uv.cb, uv.reg, uv.lanes};
     return out;
 }
 
