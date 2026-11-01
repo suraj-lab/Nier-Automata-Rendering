@@ -132,3 +132,21 @@ The cost row is the snapshot fix: objects on every-frame-rewritten buffers now r
 steps), and a draw whose snapshot contents and resident buffer identities match its last build skips the decode
 (mock: 142 → 4 rebuilds, 138 skipped). The view differed between runs (first turn 11.5° vs 8° per frame,
 375 vs 250 instances), so fps is not a clean A/B.
+
+### popin-skip-b4000 (DLL 2b569a36): still-camera gains hold; the rebuild cost needed a finer key
+
+| still camera | popin-hold2-b4000 | popin-skip-b4000 |
+|---|---|---|
+| instances without a mesh, per frame | 0.03 | **0.00** |
+| frames with any visible drop | 5.4% | 5.5% |
+| stuck keys | 0 | 0 |
+| later turns: holes (instance·s) | 4, 0, 0 | 5, 0, 0 |
+| buffer rebuilds/s / skipped/s | 380 / – | 305 / 61 |
+
+Whole-snapshot hashing skipped only 61 of ~365 rebuilds/s, yet `identical` shows ~5-7 rebuilds per frame decoding to
+the mesh already on the GPU: NieR rewrites other objects' regions of a shared vertex buffer every frame, so the whole
+buffer changes while each object's own vertices do not. `2b569a36` → `46ffadff`: the skip compares a hash of only the
+bytes the draw reads (its index slice and the referenced vertex range of each slot, plus the pose); the landing hash is
+gone. Gate: async-shared-other (an unindexed vertex changes every frame) 142 rebuilds with whole-buffer hashing,
+4 with range hashing. Not yet measured live. Views differ between these runs (250-460 instances per frame), so
+Remix fps is not compared here.

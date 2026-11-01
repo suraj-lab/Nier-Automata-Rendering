@@ -1167,6 +1167,10 @@ int wmain(int argc, wchar_t** argv) {
                     D3D11_MAPPED_SUBRESOURCE map{};
                     if (SUCCEEDED(context->Map(live_vb, 0, D3D11_MAP_WRITE_DISCARD, 0, &map))) {
                         std::memcpy(map.pData, live_vb_template, sizeof live_vb_template);
+                        // MOCK_SHARED_REWRITE=2: the last vertex (never indexed by mesh A) changes every frame, like
+                        // another object's region of a shared buffer: A's own bytes stay the same.
+                        if (shared_rewrite && std::getenv("MOCK_SHARED_REWRITE")[0] == '2')
+                            std::memcpy(static_cast<unsigned char*>(map.pData) + 129 * 20, &frame, sizeof frame);
                         context->Unmap(live_vb, 0);
                     }
                 }

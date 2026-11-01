@@ -221,6 +221,16 @@ def inside():
         skips, rebuilt = int(rd[-1]['stale_skips']), int(rb[-1]['buffer'])
         assert skips >= 40 and rebuilt <= skips // 2, f'unchanged snapshots were decoded again: buffer rebuilds {rebuilt}, skips {skips}'
         results['async-shared'] = f'meshes {len(meshes)}; both drawn on {len(both)} frames; rebuilds {rebuilt}, skipped {skips}'
+        # Same, but a region neither object indexes changes every frame (popin-skip-b4000: whole-buffer contents changed
+        # every frame while each object's own vertices did not): only the bytes a draw reads may trigger a rebuild.
+        r, log = run('async-shared-other', {'NIER_REMIX_LIVE_MAX_WRITE_KB': '0', 'NIER_REMIX_LIVE_ASYNC_READS': '1',
+                                            'NIER_REMIX_LIVE_READ_LATENCY': '1', 'MOCK_LIVE_REWRITE_SAME': '1',
+                                            'MOCK_SHARED_REWRITE': '2', 'FAKE_REMIX_INSTANCE_LOG': '1'})
+        rb = [dict(re.findall(r'(\w+)=(\d+)', x)) for x in tr.remix_lines(log) if x.startswith('remix: live rebuilds ')]
+        rd = [dict(re.findall(r'(\w+)=(\d+)', x)) for x in tr.remix_lines(log) if x.startswith('remix: live reads=')]
+        skips, rebuilt = int(rd[-1]['stale_skips']), int(rb[-1]['buffer'])
+        assert skips >= 40 and rebuilt <= skips // 2, f'a change outside the drawn range rebuilt the meshes: {rebuilt} rebuilds, {skips} skips'
+        results['async-shared-other'] = f'rebuilds {rebuilt}, skipped {skips}'
 
         # 7. NIER_REMIX_LIVE_BUILD_BUDGET_US (live 2026-10-31 async2: worst game frames of 114-304 ms were our own draw hooks
         #    building hundreds of new meshes in one frame when the camera turned). A 1 us budget allows one new build per
