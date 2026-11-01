@@ -45,6 +45,7 @@ instances reach the renderer before their mesh exists. Not a bug in the identity
 | `b0d37c38` | churn breakdown: which key component moved, and `arrived_missing` | unit + Wine (`MOCK_CHURN_EVERY`) |
 | `9b81c477` | `place_same/near/far` (same object vs a neighbour sharing a buffer); gates retry a Wine device flake once | unit + Wine |
 | `f6368383` | `key_moved` mask + `key_names` over all 17 key inputs | unit + Wine (vb0_ptr) |
+| `58e88c0a` | backlog-aware build budget (`backlog_policy.h`: >10% unbuilt raises 4 ms to 20 ms, capped) and stand-in pairs that persist until the key's own mesh exists | `test_backlog_policy.py`, `test_live_scene.py` (merge kept/dropped, shown red) |
 | `ad516f32` | **stand-in mesh**: a re-keyed object whose mesh is unbuilt is drawn with its predecessor's mesh for that frame; `ready()` accepts stand-in-only frames; `carried=` in the log | unit (carry, planning) + live_scene case, shown red by disabling it |
 
 Also fixed tonight: a merged comment that made the occurrence match never consume its arrival, so `churn_occurrence`
@@ -53,6 +54,22 @@ looked odd there).
 
 Gate loop is now ~4 minutes for the whole suite (`gates.py --all --run --jobs 8`, 70/70 in 229 s, receipt
 `analysis/runtime/gates/last.json`), 1–3 minutes for the affected subset, seconds for pure logic.
+
+## 2b. Prior art found overnight (web research)
+
+- Remix's default asset identity is `positions,indices,geometrydescriptor`; **no layout, no stride, no pointer**.
+  Its `HashComponents` has no pointers, `getVertexRegion()` reads through the bind offset (ring slots hash equal),
+  and it hashes only the vertices the indices touch.
+- Remix's `DrawCallCache` pairs a draw with its previous frame by exact hash then by *fuzzy world position* — the
+  same rule as our `place_same` stand-in. It also keeps `boneHash` stable across frames on purpose.
+- FAR, the known NieR fix mod, keys its state by `D3D11_BUFFER_DESC` fields plus a `std::map<ID3D11Buffer*, ...>`:
+  desc signature and per-pointer state, not one global geometry key.
+- No public documentation of NieR's buffer strategy exists; a per-frame scratch ring for index/UV/tangent streams is
+  inference, not sourced.
+
+**Consequence:** our key hashes 17 volatile inputs. The durable fix is a content key over the index-touched ranges
+(positions + indices), computed off the draw thread, with pointers, strides and offsets out of the key. The stand-in
+is the cheap bridge until then — and the `key_names` field tells us which component to drop first.
 
 ## 3. Next instrument, in the order I would run them
 
@@ -68,10 +85,11 @@ Gate loop is now ~4 minutes for the whole suite (`gates.py --all --run --jobs 8`
      data watch on `DAT_1412500d0`);
    - or log, per frame, how many LOD transitions the FAR setup applies (fields verified in
      `analysis/runtime/prior-art-deep-20261031/far-lod-setup.json`).
-4. **Content-key fallback.** If `key_names` shows a component that legitimately moves every frame (ring offset,
-   alternate buffer pair), key by content of the referenced range instead of by pointer: hash a bounded window
-   (first N bytes plus a stride sample) so two names for identical bytes collapse. Only worth doing if the stand-in
-   does not already hide it.
+4. **Content key** (validated by the prior art above): hash positions over the index-touched vertices and the index
+   bytes, per `(buffer, offset, bytes)`, invalidating on `Map(DISCARD/WRITE)`; keep
+   `{layout, slot-0 stride, index count, start index, content hashes}` and drop every pointer, offset and stride.
+   Remix does exactly this and never keys on resources. Worth it even after the stand-in: it also stops the wasted
+   reads and builds that churn causes.
 
 ## 4. Additional points of investigation (not yet scheduled)
 
