@@ -41,6 +41,8 @@ feature off should be byte-for-byte the game as it ships today.
 
 - **Replacing assets.** No remaster art project, no retexturing, no new models. Materials stay "whatever the
   game's data gives us plus what we can extract" — secondary by decision, not by limitation.
+  *Revised 2026-11-01 (user):* game data first; an AI remaster pass (RTX Remix Toolkit / ComfyUI, e.g. upscaling
+  albedo) may come later, as its own scoped project, once the extracted materials are right.
 - **UI and cutscenes.** The game's HUD stays the game's HUD. While a menu is open, present the game's own frame.
   Cutscenes and 2D segments are left alone.
 - **Fixing NieR's design.** 60 fps cap stays; we are not re-tuning the game's logic, physics or AI.

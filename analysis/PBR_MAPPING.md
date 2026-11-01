@@ -39,3 +39,25 @@ world materials that is wrong: see below.
 - The robust mapping is per pixel shader: trace, in each shader's disassembly, which texture channel feeds the F0
   lerp (metalness), the GGX α (gloss/roughness), the TBN (normal) and the colour (albedo), and key the live material
   on the bound pixel shader.
+
+## What Remix expects (remix-1.6.1 source, commit 0ba9973f: `opaque_surface_material_interaction.slangh`, `math.slangh`)
+
+- `roughnessTexture`: **R channel = perceptual roughness** (`roughness = roughnessSample.x`, then squared to α).
+  NieR's GGX α is (1 − gloss)², so roughness texture R = **1 − gloss channel**, exactly.
+- `metallicTexture`: **R channel** = metalness. NieR: the mask's metal channel as is.
+- `normalTexture`: **unsigned octahedral** in RG (`unsignedOctahedralToHemisphereDirection(normalSample.xy)`), applied
+  in a frame built from the triangle's UVs: T = dP/du, B = dP/dv (`genTangSpace`), world = x·T + y·B + z·N.
+
+## NieR's tangent frame matches Remix's (measured)
+
+735 captured draws of `frame_9443695` with NORMAL + TANGENT + TEXCOORD, 2,990,577 triangles: the game's tangent points
+along +dP/du and `w·cross(N, T)` along **+dP/dv** in every draw (median share 100%; 74.4% of triangles have w = +1).
+That is standard MikkTSpace, the same frame Remix rebuilds from UVs, so the normal map needs **no channel flip**,
+only the right slot and the octahedral encoding. (The pixel shader multiplies x by the varying's w; with w = +1 its
+formula is x·T + y·cross(N, T) + z·N, identical to Remix's. The w = −1 case depends on the vertex shader, which was
+not captured; standard MikkTSpace data says Remix's own frame handles the mirroring.)
+
+## Detail normals
+
+Slot 4 in the generic family is a 2-channel detail normal on its own tiling. Remix's second normal is for water only,
+so detail normals are left out; sending one as the main normal map is what produced blotchy, wet-looking surfaces.
