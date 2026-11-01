@@ -521,6 +521,8 @@ int wmain(int argc, wchar_t** argv) {
     const bool live_mode = camera_mode && (!std::strcmp(camera_mode, "live") || live_skinned || live_untransformed || live_offset ||
                                            live_box || live_evict || live_passes || live_odd || live_blend || live_additive ||
                                            live_late || live_lights || live_nolights || live_hud);
+    ID3D11Buffer* churn_vb = nullptr;
+    const unsigned churn_every = std::getenv("MOCK_CHURN_EVERY") ? static_cast<unsigned>(std::atoi(std::getenv("MOCK_CHURN_EVERY"))) : 0;
     ID3D11Buffer* live_vb = nullptr, *live_ib = nullptr, *live_vb2 = nullptr, *live_ib2 = nullptr, *live_cb11 = nullptr;
     ID3D11Buffer* live_sky_vb = nullptr, *live_sky_ib = nullptr;
     ID3D11Texture2D* atlas_tex = nullptr;
@@ -827,6 +829,13 @@ int wmain(int argc, wchar_t** argv) {
         if (FAILED(context->Map(live_vb, 0, D3D11_MAP_WRITE_DISCARD, 0, &lm))) { std::fprintf(out, "FAIL live vb map\n"); return 3; }
         std::memcpy(lm.pData, lverts, lbd.ByteWidth);
         context->Unmap(live_vb, 0);
+        // MOCK_CHURN_EVERY=N: every N frames the main draw swaps to an identical copy of its vertex buffer, the way a
+        // game re-creates or double-buffers one: the same object under a new geometry key (presence_why churn).
+        if (std::getenv("MOCK_CHURN_EVERY") && !live_offset) {
+            D3D11_SUBRESOURCE_DATA copy = {lverts, 0, 0};
+            D3D11_BUFFER_DESC cd = lbd; cd.Usage = D3D11_USAGE_IMMUTABLE; cd.CPUAccessFlags = 0;
+            if (FAILED(device->CreateBuffer(&cd, &copy, &churn_vb))) { std::fprintf(out, "FAIL churn vb\n"); return 3; }
+        }
         D3D11_BUFFER_DESC lib{}; lib.ByteWidth = live_offset ? sizeof lindices : 192 * 4; lib.Usage = D3D11_USAGE_IMMUTABLE;
         lib.BindFlags = D3D11_BIND_INDEX_BUFFER;
         D3D11_SUBRESOURCE_DATA lid = {lindices, 0, 0};
@@ -1184,6 +1193,7 @@ int wmain(int argc, wchar_t** argv) {
                     if (normal_srv) context->PSSetShaderResources(4, 1, &normal_srv);
                     else if (live_evict || live_late || live_hud) { ID3D11ShaderResourceView* none = nullptr; context->PSSetShaderResources(4, 1, &none); }
                     ID3D11Buffer* vb = pass == 2 ? live_vb2 : live_vb;
+                    if (churn_vb && churn_every && pass != 2 && (frame / churn_every) % 2) vb = churn_vb;
                     ID3D11Buffer* ib = pass == 2 ? live_ib2 : live_ib;
                     context->IASetVertexBuffers(0, 1, &vb, &mstride, &moff);
                     context->IASetIndexBuffer(ib, DXGI_FORMAT_R32_UINT, 0);

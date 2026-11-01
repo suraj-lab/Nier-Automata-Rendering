@@ -310,7 +310,9 @@ struct Worker {
         if (!(submitted.events.empty() && submitted.dropped)) {
             std::set<std::uint64_t> now;
             std::map<std::uint64_t, unsigned> submit_other;
+            std::set<std::uint64_t> missing;  // submitted without a built mesh: in the set, but not in the image
             for (const auto& e : submitted.events) {
+                if (e.reason == visibility_trace::Reason::MeshMissing) missing.insert(e.geometry);
                 if (e.reason == visibility_trace::Reason::Drawn || e.reason == visibility_trace::Reason::MeshMissing)
                     now.insert(e.geometry);
                 else
@@ -320,7 +322,7 @@ struct Worker {
             capture_now.reserve(frame.visibility.events.size());
             for (const auto& e : frame.visibility.events)
                 capture_now.push_back({e.geometry, e.source, e.ib, e.index_count, e.start_index,
-                                       static_cast<unsigned>(e.reason)});
+                                       static_cast<unsigned>(e.reason), e.vb, e.layout, e.vb_offset, e.base_vertex});
             const dropout_watch::Step w = present_watch.step(now);
             // Your test: did the camera move, and how visible was what left? Both measured against the previous frame.
             const dropout_watch::Motion cam_motion = have_previous_camera ? dropout_watch::motion(previous_camera, scene.camera)
@@ -355,7 +357,7 @@ struct Worker {
                               cap[static_cast<unsigned>(visibility_trace::Reason::DecodeFailed)]);
                 (void)name;
                 const dropout_watch::Why why =
-                    dropout_watch::attribute(w.dropped, w.appeared, previous_ident, capture_now, submit_other);
+                    dropout_watch::attribute(w.dropped, w.appeared, previous_ident, capture_now, submit_other, &missing);
                 char reasons[512] = {};
                 int at = 0;
                 for (unsigned r = 0; r < static_cast<unsigned>(visibility_trace::Reason::Count) && r < 32 && at < 480; ++r)
@@ -365,17 +367,21 @@ struct Worker {
                 std::size_t known = 0;  // plumbing proof: dropped keys whose last-frame identity was recorded
                 for (const auto k : w.dropped) known += previous_ident.count(k);
                 logger.load()("remix: presence_why seq=%llu dropped=%zu known=%zu capture_events=%zu submit_other=%u "
-                              "churn_occurrence=%u churn_pointer=%u churn_shape=%u absent=%u capture_overflow=%u%s",
+                              "churn_occurrence=%u churn_pointer=%u churn_shape=%u absent=%u capture_overflow=%u "
+                              "moved_vb=%u moved_offset=%u moved_base=%u moved_layout=%u moved_other=%u "
+                              "arrived_missing=%u missing_now=%zu%s",
                               static_cast<unsigned long long>(frame.sequence), w.dropped.size(), known,
                               capture_now.size(), why.submit_other,
                               why.churn_occurrence, why.churn_pointer, why.churn_shape, why.absent,
-                              frame.visibility.dropped, reasons);
+                              frame.visibility.dropped, why.moved_vb, why.moved_offset, why.moved_base,
+                              why.moved_layout, why.moved_other, why.arrived_missing, missing.size(), reasons);
             }
             // Identity of every key submitted now, for next frame's attribution.
             previous_ident.clear();
             for (const auto& e : capture_now)
                 if (e.geometry && now.count(e.geometry))
-                    previous_ident[e.geometry] = {e.source, e.ib, e.index_count, e.start_index};
+                    previous_ident[e.geometry] = {e.source, e.ib, e.index_count, e.start_index, e.vb, e.layout,
+                                                  e.vb_offset, e.base_vertex};
         }
         if (!live_capture::visibility_trace_enabled.load(std::memory_order_relaxed) ||
             !frame.sequence || frame.sequence <= trace_sequence) return;

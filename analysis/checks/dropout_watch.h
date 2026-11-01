@@ -93,20 +93,35 @@ inline double max_fraction(const std::vector<std::uint64_t>& keys, const std::ma
 struct Ident {
     std::uint64_t source = 0, ib = 0;
     unsigned index_count = 0, start_index = 0;
+    std::uint64_t vb = 0, layout = 0;   // slot-0 vertex buffer and input layout pointers (parts of the geometry key)
+    unsigned vb_offset = 0;
+    int base_vertex = 0;
 };
 struct Seen {  // one capture event of this frame
     std::uint64_t geometry = 0, source = 0, ib = 0;
     unsigned index_count = 0, start_index = 0, reason = 0;
+    std::uint64_t vb = 0, layout = 0;
+    unsigned vb_offset = 0;
+    int base_vertex = 0;
 };
+// churn_pointer breakdown: which key component moved (one re-key can move several; moved_other = none of these four,
+// so another vertex slot, a stride or an IB offset). arrived_missing: churned arrivals whose mesh was not built yet,
+// i.e. the frame the object is really gone from the image.
 struct Why {
     unsigned submit_other = 0, churn_occurrence = 0, churn_pointer = 0, churn_shape = 0, absent = 0;
+    unsigned moved_vb = 0, moved_offset = 0, moved_base = 0, moved_layout = 0, moved_other = 0;
+    unsigned arrived_missing = 0;
     unsigned capture[32] = {};
 };
 
 inline Why attribute(const std::vector<std::uint64_t>& dropped, const std::vector<std::uint64_t>& appeared,
                      const std::map<std::uint64_t, Ident>& previous, const std::vector<Seen>& capture_now,
-                     const std::map<std::uint64_t, unsigned>& submit_other_now) {
+                     const std::map<std::uint64_t, unsigned>& submit_other_now,
+                     const std::set<std::uint64_t>* missing_now = nullptr) {
     Why why;
+    const auto arrived = [&](std::uint64_t a) {
+        if (missing_now && missing_now->count(a)) ++why.arrived_missing;
+    };
     std::map<std::uint64_t, const Seen*> by_geometry;
     for (const auto& e : capture_now)
         if (e.geometry) by_geometry.emplace(e.geometry, &e);
@@ -124,7 +139,7 @@ inline Why attribute(const std::vector<std::uint64_t>& dropped, const std::vecto
             for (const auto a : arrivals) {
                 const auto s = by_geometry.find(a);
                 if (s != by_geometry.end() && s->second->source == p->second.source) {
-                    ++why.churn_occurrence; arrivals.erase(a); matched = true; break;
+                    ++why.churn_occurrence; arrived(a); arrivals.erase(a); matched = true; break;
                 }
             }
         if (!matched) unexplained.push_back(k);
@@ -142,7 +157,15 @@ inline Why attribute(const std::vector<std::uint64_t>& dropped, const std::vecto
                     const Seen& e = *s->second;
                     if (e.index_count == p->second.index_count && e.start_index == p->second.start_index &&
                         (!same_ib || e.ib == p->second.ib)) {
-                        ++bucket; arrivals.erase(a); matched = true; break;
+                        ++bucket;
+                        if (same_ib) {
+                            const Ident& o = p->second;
+                            const bool v = e.vb != o.vb, f = e.vb_offset != o.vb_offset,
+                                       b = e.base_vertex != o.base_vertex, l = e.layout != o.layout;
+                            why.moved_vb += v; why.moved_offset += f; why.moved_base += b; why.moved_layout += l;
+                            why.moved_other += !(v || f || b || l);
+                        }
+                        arrived(a); arrivals.erase(a); matched = true; break;
                     }
                 }
             if (!matched) rest.push_back(k);

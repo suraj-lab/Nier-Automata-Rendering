@@ -52,3 +52,23 @@ Only `absent` has been exercised by a real (mock) draw; churn and capture bucket
 
 Full suite at a0539040: 70/70, 229 s wall with `gates.py --all --run --jobs 8` (receipt
 `analysis/runtime/gates/last.json`, source unchanged).
+
+## live-why (a0539040), 2026-11-01 01:46, restored and verified
+
+661 presence events, 22,828 dropped keys; attribution ledger closed in all 661 (`known == dropped`, no capture
+overflow, no `present=0`). Buckets: absent 78%, churn_pointer 20% (4,672 keys), churn_shape 1%, churn_occurrence
+0.3%, capture_pass 0.2%, submit_other 0. Capture- and renderer-side losses are ruled out. One dropout in five is
+the same draw (same IB and index range) under a new geometry key, which Remix must build as a new mesh.
+Only 7 events had a fully still camera (180 in live-motion); the longest stretch without a dropout event was 1.8 s
+and the median per-event camera motion was 0.51 units / 0.65 deg, so this run does not test the still-camera blink.
+Open: which key component changes under churn (VB pointer, VB offset, base vertex, layout), and whether the new
+key arrives `mesh_missing` (the presence set counts mesh_missing as present, hiding that frame).
+
+## Churn breakdown (b0d37c38)
+
+`presence_why` adds `moved_vb moved_offset moved_base moved_layout moved_other` for each churn_pointer re-key (which
+geometry-key component changed: slot-0 VB pointer, its offset, base vertex, input layout; `other` = none of these)
+and `arrived_missing` (churned arrivals submitted before their mesh was built: the frame the object is really gone).
+Gates: `test_dropout_watch.py` (all buckets), `test_live_visibility.py` churn case (`MOCK_CHURN_EVERY=10`: swap to an
+identical VB copy, must read churn_pointer with moved_vb only; shown red with the VB component blanked). The mock
+builds before submit, so `arrived_missing` is only unit-tested. Full suite 70/70, 227 s wall.

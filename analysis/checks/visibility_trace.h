@@ -65,6 +65,10 @@ struct Event {
   unsigned error = 0;
   float position[3] = {};
   Reason reason = Reason::Data;
+  // Geometry-key components beyond ib/range, so a re-keyed draw can say what moved (dropout_watch::attribute).
+  std::uint64_t vb = 0, layout = 0;
+  unsigned vb_offset = 0;
+  int base_vertex = 0;
 };
 
 struct Batch {

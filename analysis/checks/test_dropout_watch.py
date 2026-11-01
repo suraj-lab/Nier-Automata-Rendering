@@ -119,7 +119,31 @@ int main() {
         auto bare = dropout_watch::attribute({50}, {}, {}, {}, {});
         assert(bare.absent == 1);
     }
-    std::puts("priming, single departures, return as arrival, synchronous event, threshold, camera motion, dropped fraction, attribution");
+
+    // Churn breakdown: for a same-IB/range re-key, which key component moved; and whether the new key was built.
+    {
+        using dropout_watch::Ident; using dropout_watch::Seen;
+        Ident base{100, 7, 300, 0}; base.vb = 50; base.vb_offset = 0; base.base_vertex = 0; base.layout = 9;
+        std::map<std::uint64_t, Ident> prev{{1, base}, {2, base}, {3, base}, {4, base}};
+        prev[2].start_index = 600;  prev[3].start_index = 900;  prev[4].start_index = 1200;
+        auto arrival = [&](std::uint64_t key, unsigned start) {
+            Seen s{key, 900 + key, 7, 300, start, 0}; s.vb = 50; s.vb_offset = 0; s.base_vertex = 0; s.layout = 9; return s;
+        };
+        Seen a = arrival(11, 0);    a.vb_offset = 4096;            // ring-buffer style: same buffer, new offset
+        Seen b = arrival(12, 600);  b.vb = 51;                     // buffer recreated or swapped
+        Seen c = arrival(13, 900);  c.base_vertex = 64; c.layout = 10;   // two components at once
+        Seen d = arrival(14, 1200);                                // none of the four: another slot or stride moved
+        std::set<std::uint64_t> missing{11, 13};                   // arrived before its mesh was built
+        auto why = dropout_watch::attribute({1, 2, 3, 4}, {11, 12, 13, 14}, prev, {a, b, c, d}, {}, &missing);
+        assert(why.churn_pointer == 4);
+        assert(why.moved_vb == 1 && why.moved_offset == 1 && why.moved_base == 1 && why.moved_layout == 1);
+        assert(why.moved_other == 1);
+        assert(why.arrived_missing == 2);
+        // Without the build-state set the count stays zero rather than guessing.
+        auto blind = dropout_watch::attribute({1}, {11}, prev, {a}, {});
+        assert(blind.churn_pointer == 1 && blind.arrived_missing == 0 && blind.moved_offset == 1);
+    }
+    std::puts("priming, single departures, return as arrival, synchronous event, threshold, camera motion, dropped fraction, attribution, churn breakdown");
 }
 '''
 
