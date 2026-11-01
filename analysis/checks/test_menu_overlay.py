@@ -38,8 +38,34 @@ def save_button_center():
     return int((x0 + x1) / 2), int((y0 + y1) / 2)
 
 
+_BUILD_RECEIPT = C.parent / 'runtime' / 'menu-dll' / 'validation.json'
+
+
+def _sources_changed_since(receipt):
+    """True when any file the proxy build reads differs from the one that produced the current receipt."""
+    import hashlib, json as _json
+    try:
+        recorded = _json.loads(receipt.read_text())
+    except (OSError, ValueError):
+        return True
+    snapshot = recorded.get('source_sha256')
+    if not isinstance(snapshot, dict):
+        return True
+    for name, digest in snapshot.items():
+        path = C.parent / name   # recorded relative to analysis/
+        if not path.exists() or hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+            return True
+    dll = receipt.parent / 'd3d11.dll'
+    return not dll.exists() or hashlib.sha256(dll.read_bytes()).hexdigest() != recorded.get('sha256')
+
+
 def build(work):
-    assert subprocess.run([sys.executable, str(C / 'build_menu_dll.py')], capture_output=True).returncode == 0, 'DLL build'
+    """Build the proxy once; every gate reuses it while the sources are unchanged (NIER_FORCE_BUILD=1 to override)."""
+    import os
+    if not os.environ.get('NIER_FORCE_BUILD') and not _sources_changed_since(_BUILD_RECEIPT):
+        pass  # receipt matches the tree, so the built DLL below is current
+    else:
+        assert subprocess.run([sys.executable, str(C / 'build_menu_dll.py')], capture_output=True).returncode == 0, 'DLL build'
     gpp = ['x86_64-w64-mingw32-g++', '-std=c++17', '-O2', '-Wall', '-Wextra', '-Werror', '-static', '-static-libgcc',
            '-static-libstdc++']
     subprocess.run([*gpp, '-shared', str(C / 'menu_overlay_stub_dlaa.cpp'), '-o', str(work / 'd3d11_dlaa.dll')], check=True)

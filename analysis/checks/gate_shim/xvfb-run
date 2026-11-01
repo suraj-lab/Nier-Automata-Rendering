@@ -1,0 +1,9 @@
+#!/bin/bash
+# Used only under gates.py: replace xvfb-run's racy -a (parallel starts pick the same display, then share it)
+# with the display number gates.py assigned to this gate.
+args=(); swapped=0
+for a in "$@"; do
+  if [[ $swapped == 0 && "$a" == "-a" && -n "$NIER_GATE_DISPLAY" ]]; then args+=(-n "$NIER_GATE_DISPLAY"); swapped=1
+  else args+=("$a"); fi
+done
+exec /usr/bin/xvfb-run "${args[@]}"

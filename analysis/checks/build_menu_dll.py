@@ -55,7 +55,12 @@ def main():
     raw = subprocess.run(['x86_64-w64-mingw32-objdump', '-p', str(dll)], capture_output=True, text=True, check=True).stdout
     imports = sorted(set(re.findall(r'DLL Name: (\S+)', raw)))
     forbidden = [i for i in imports if i.lower().startswith(('d3d11', 'dxgi', 'd3dcompiler', 'xinput', 'd3d9'))]
-    result = {'passed': exports.returncode == 0 and not forbidden, 'dll': str(dll.relative_to(A.parent)),
+    # Source snapshot: lets a gate reuse this DLL while nothing it was built from has changed (test_menu_overlay.build).
+    snapshot = {}
+    for src in list(C.glob('*.h')) + list(C.glob('*.cpp')) + [PREVIEW / 'panel.cpp']:
+        snapshot[str(src.relative_to(A))] = hashlib.sha256(src.read_bytes()).hexdigest()
+    result = {'passed': exports.returncode == 0 and not forbidden, 'source_sha256': snapshot,
+              'dll': str(dll.relative_to(A.parent)),
               'sha256': hashlib.sha256(dll.read_bytes()).hexdigest(),
               'imports': imports, 'forbidden_imports': forbidden,
               'export_check': exports.stdout.strip().splitlines(), 'installed': False}
