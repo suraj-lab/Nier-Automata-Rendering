@@ -346,7 +346,9 @@ inline void Tracer::run(const std::string& disassembly) {
         // Role patterns, evaluated with the provenance before this write.
         Register reg;
         if (op == "mad" && n == 3 && has_values(lits[2]) && is_metal_f0(*lits[2])) {
-            if (parse_register(srcs[0], reg) && reg.swizzle.size() == 1) {
+            // One lane: r7.y (Wine's disassembler) or r7.yyyy (Microsoft's, the one the game process uses).
+            if (parse_register(srcs[0], reg) && !reg.swizzle.empty() &&
+                reg.swizzle.find_first_not_of(reg.swizzle[0]) == std::string::npos) {
                 found.metal.insert(sources(srcs[0], "x"));
                 found.albedo.insert(sources(srcs[1], "xyz"));
             }

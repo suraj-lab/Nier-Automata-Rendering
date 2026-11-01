@@ -27,6 +27,9 @@ import test_pbr_trace as synth  # noqa: E402
 
 HEADER = Path(sys.argv[sys.argv.index('--candidate') + 1]) if '--candidate' in sys.argv else C / 'material_roles.h'
 CORPUS = C.parent / 'runtime' / 'pbr-re' / 'all_lit'
+# The same 605 shader blobs (live run pbr-diag1) disassembled by Microsoft's D3DDisassemble on the laptop and by Wine's
+# here: roles must not depend on the disassembler (the game process uses Microsoft's).
+PAIRED = C.parent / 'runtime' / 'pbr-re' / 'paired_diag1'
 ROLES = ('albedo', 'metal', 'gloss', 'normal', 'detail_normal')
 HARNESS = r'''
 #include "material_roles.h"
@@ -67,9 +70,17 @@ def main():
     if len(files) < 3000:
         fail(f'corpus missing: {len(files)} .asm files in {CORPUS} (expected 3080; disassemble the lit shaders first)')
     work = Path(tempfile.mkdtemp(prefix='material-roles-'))
-    for name, text in (('synth_lit', synth.LIT), ('synth_effect', synth.EFFECT)):
+    ms = sorted((PAIRED / 'ms').glob('*.asm'))
+    if len(ms) < 600:
+        fail(f'paired corpus missing: {len(ms)} .asm in {PAIRED / "ms"} (Microsoft disassembly of pbr-diag1)')
+    for path in ms:
+        wine = PAIRED / 'wine' / path.name
+        a, b = expected(path.read_text(errors='replace')), expected(wine.read_text(errors='replace'))
+        if a != b:
+            fail(f'{path.name}: roles depend on the disassembler: Microsoft {a} vs Wine {b}')
+    for name, text in (('synth_lit', synth.LIT), ('synth_lit_ms', synth.LIT_MS), ('synth_effect', synth.EFFECT)):
         (work / f'{name}.asm').write_text(text)
-    inputs = [work / 'synth_lit.asm', work / 'synth_effect.asm'] + files
+    inputs = [work / 'synth_lit.asm', work / 'synth_lit_ms.asm', work / 'synth_effect.asm'] + files + ms
     (work / 'h.cpp').write_text(HARNESS)
     # The harness includes "material_roles.h": a candidate under another name is copied in under that name.
     (work / 'material_roles.h').write_text(HEADER.read_text())

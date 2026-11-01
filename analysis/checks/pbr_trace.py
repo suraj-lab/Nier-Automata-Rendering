@@ -142,7 +142,7 @@ def trace(asm):
         lits = [literal(s) for s in srcs]
         if op == 'mad' and len(srcs) == 3 and lits[2] and any(abs(v - 0.03) < 1e-6 or abs(v - 0.08) < 1e-6 for v in lits[2][:3]):
             m_src = REG.match(srcs[0])
-            if m_src and len(m_src.group(5)) == 1:
+            if m_src and len(set(m_src.group(5))) == 1:  # r7.y (Wine) or r7.yyyy (Microsoft): one lane
                 found['metal'].add(lane_source(srcs[0], 'x'))
                 found['albedo'].add(sources(srcs[1], 'xyz'))
         if op == 'max' and len(srcs) == 2 and lits[1] and abs(lits[1][0] - 1.00000005e-03) < 1e-9:

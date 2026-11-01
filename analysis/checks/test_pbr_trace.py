@@ -36,6 +36,32 @@ mul r13.y, r7.z, r7.z
 max r13.z, r13.y, l(1.00000005e-03)
 ret
 """
+# The same shader as Microsoft's D3DDisassemble prints it (the disassembler the game process uses on Windows): scalar
+# swizzles replicated (r7.yyyy) and literals in fixed notation (0.030000). pbr-diag1 (2026-11-01): the tracer, tuned on
+# Wine's output, found no albedo or metal in any live shader because of the replicated swizzle.
+LIT_MS = """ps_5_0
+dcl_resource_texture2d (float,float,float,float) t0
+sample_indexable(texture2d)(float,float,float,float) r1.xyzw, v1.xyxx, t0.xyzw, s0
+lt r2.x, r1.w, l(0.800000)
+discard_nz r2.x
+sample_indexable(texture2d)(float,float,float,float) r7.xyzw, v1.xyxx, t2.zxyw, s2
+ne r0.x, l(0.000000), cb1[0].y
+if_nz r0.x
+  mov r7.y, cb1[5].y
+endif
+sample_indexable(texture2d)(float,float,float,float) r0.xyz, v1.xyxx, t3.xyzw, s3
+add r0.xyz, r0.xyzx, l(-0.500000, -0.500000, -0.500000, 0.000000)
+sample_indexable(texture2d)(float,float,float,float) r6.zw, v1.xyxx, t4.zwxy, s4
+mad r6.zw, r6.zzzw, l(0.000000, 0.000000, 2.000000, 2.000000), l(0.000000, 0.000000, -1.000000, -1.000000)
+sample_indexable(texture2d)(float,float,float,float) r9.x, v0.xyxx, t17.xyzw, s11
+mul r1.xyz, r1.xyzx, r9.xxxx
+add r7.zw, -r7.zzzy, l(0.000000, 0.000000, 1.000000, 1.000000)
+mad r11.xyz, r1.xyzx, cb4[0].xyzx, l(-0.030000, -0.030000, -0.030000, 0.000000)
+mad r11.xyz, r7.yyyy, r11.xyzx, l(0.030000, 0.030000, 0.030000, 0.000000)
+mul r13.y, r7.z, r7.z
+max r13.z, r13.y, l(0.001000)
+ret
+"""
 EFFECT = """ps_5_0
 sample_indexable(texture2d) r1.xy, v3.xyxx, t4.xyzw, s4
 sample_indexable(texture2d) r2.xyzw, r1.xyxx, t0.xyzw, s0
@@ -59,6 +85,9 @@ def main():
     got = pbr_trace.roles(LIT)
     assert got == WANT_SYNTH, f'synthetic lit shader: {got}'
     checks.append('synthetic lit shader')
+    got = pbr_trace.roles(LIT_MS)
+    assert got == WANT_SYNTH, f"the same shader in Microsoft's disassembly format: {got}"
+    checks.append("Microsoft disassembly format")
     assert pbr_trace.roles(EFFECT) == {}, f'an effects shader was given material roles: {pbr_trace.roles(EFFECT)}'
     checks.append('effects shader has no material roles')
     real = C.parent / 'runtime' / 'pbr-re'
