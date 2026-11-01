@@ -72,3 +72,18 @@ and `arrived_missing` (churned arrivals submitted before their mesh was built: t
 Gates: `test_dropout_watch.py` (all buckets), `test_live_visibility.py` churn case (`MOCK_CHURN_EVERY=10`: swap to an
 identical VB copy, must read churn_pointer with moved_vb only; shown red with the VB component blanked). The mock
 builds before submit, so `arrived_missing` is only unit-tested. Full suite 70/70, 227 s wall.
+
+## live-churn (9b81c477, PRESENCE_MIN=1), 2026-11-01 02:13, restored and verified
+
+1,414 presence events, ledger closed in all, no overflow. Three still-camera stretches (21 s, 18 s, 37 s);
+1,045 events with camera motion < 0.01 units and < 0.1 deg.
+- All events: absent 67%, churn_pointer 32% (4,726), churn_shape 1%, churn_occurrence 0.2%, submit_other 0.
+- Still camera: absent 61%, churn_pointer 38% (3,437).
+- churn_pointer place: same (< 1 cm) 100%, near 0, far 0: the same object in the same place, not a neighbour
+  sharing an index buffer.
+- Key component moved: VB pointer 0, VB offset 0, base vertex 0, layout 114, other 4,612 (98%). The moving
+  component is outside slot-0 VB/offset/base/layout: VB slots 1-3, a stride, or the IB offset/format (unlogged).
+- arrived_missing: 2,597 of 4,924 churned arrivals (52.7%); 1,831 with the camera still. Those frames submit the
+  object without a built mesh, so it is absent from the Remix image: a measured cause of still-camera blinking.
+Open: which remaining key component moves; what the still-camera `absent` 61% is (game not drawing, rejected before
+the key is computed, or re-keyed with another range).
