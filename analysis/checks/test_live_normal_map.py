@@ -30,7 +30,8 @@ import test_menu_overlay as tmo
 import test_nscn_scene as ts
 
 tr.ENV_KEYS = tuple(tr.ENV_KEYS) + ('NIER_REMIX_LIVE', 'NIER_REMIX_LIVE_TEX', 'MOCK_NORMAL_TEX',
-                                    'NIER_REMIX_LIVE_NORMAL', 'FAKE_REMIX_INSTANCE_LOG', 'MOCK_CAMERA')
+                                    'NIER_REMIX_LIVE_NORMAL', 'NIER_REMIX_LIVE_NORMAL_RAW', 'FAKE_REMIX_INSTANCE_LOG',
+                                    'MOCK_CAMERA')
 
 BC5 = bytes((i * 19 + 5) & 0xff for i in range(2 * 2 * 16))  # the mock's 8x8 BC5 normal map
 RGBA4 = bytes((i * 7 + 3) & 0xff for i in range(4 * 4 * 4))  # the mock's 4x4 albedo
@@ -63,6 +64,8 @@ def main():
                'NIER_REMIX': '1', 'NIER_REMIX_RUNTIME': tr.win(work / 'fake_remix.dll'),
                'NIER_REMIX_SCENE': tr.win(scene / 'scene.bin'), 'NIER_REMIX_LIVE': '1',
                'NIER_REMIX_LIVE_TEX': tr.win(tex), 'FAKE_REMIX_INSTANCE_LOG': '1'}
+        if name == 'on-raw':
+            env['NIER_REMIX_LIVE_NORMAL_RAW'] = '1'
         if flag is not None:
             env['NIER_REMIX_LIVE_NORMAL'] = flag
         _, result, log, fake = tr.run(work, name, env)
@@ -84,12 +87,28 @@ def main():
     tex_on, r_on, fake_on, mats_on = run('on', '1')
     files_on = sorted((dds(p) for p in tex_on.glob('*.dds')), key=lambda f: f['name'])
     assert len(files_on) == 2, [f['name'] for f in files_on]
-    albedo = [f for f in files_on if f['format'] in (28, 71)]
-    normal = [f for f in files_on if f['format'] == 83]  # DXGI_FORMAT_BC5_UNORM
+    # The normal is converted for Remix's unsigned-octahedral decode, so it is no longer the game's BC5 bytes: it is
+    # RGBA8. The albedo must still be the game's own slot-0 texture, byte for byte.
+    albedo = [f for f in files_on if f['format'] in (28, 71) and f['payload'] in (RGBA4, BC1)]
+    normal = [f for f in files_on if f['format'] == 28 and f['payload'] not in (RGBA4, BC1)]
     assert len(albedo) == 1 and len(normal) == 1, [(f['name'], f['format']) for f in files_on]
-    assert albedo[0]['payload'] in (RGBA4, BC1), 'the albedo must still be a slot-0 texture'
-    assert normal[0]['payload'] == BC5, (normal[0]['name'], normal[0]['payload'][:16].hex())
     assert (normal[0]['width'], normal[0]['height']) == (8, 8), normal[0]
+    assert len(normal[0]['payload']) == 8 * 8 * 4, len(normal[0]['payload'])
+    # Every texel must decode inside the outward hemisphere: |t.x|+|t.y| <= 1, i.e. z >= 0 before normalizing.
+    assert normal[0]['payload'][2] == 0 and normal[0]['payload'][3] == 255, 'converted texels carry 0/255 in B/A'
+    zs = []
+    for i in range(8 * 8):
+        r_, g_ = normal[0]['payload'][i * 4], normal[0]['payload'][i * 4 + 1]
+        a, b = r_ / 255.0 * 2 - 1, g_ / 255.0 * 2 - 1
+        tx, ty = (a + b) * 0.5, (a - b) * 0.5
+        zs.append(1.0 - abs(tx) - abs(ty))
+    assert min(zs) > -1e-6, ('sample outside the hemisphere', min(zs))
+    assert len(set(zs)) > 1, 'the whole normal map converted to one value'
+    # Raw mode still sends the game's bytes, which is what makes one live A/B possible without a rebuild.
+    tex_raw, _, fake_raw, mats_raw = run('on-raw', '1')
+    if os.environ.get('MOCK_NORMAL_RAW_OK') != '0':
+        raws = [dds(p) for p in tex_raw.glob('*.dds')]
+        assert any(f['format'] == 83 for f in raws), [(f['name'], f['format']) for f in raws]
     wanted = [line for line in mats_on if f"normal={normal[0]['name']}" in line]
     assert wanted, mats_on[:3]
     for line in wanted:
@@ -97,13 +116,13 @@ def main():
         assert f"path={normal[0]['name']}" not in line, f'the normal map was used as the albedo: {line}'
     # Captured once per resource: no run has more DDS files than distinct ids it asked for.
     assert len({line.split('hash=')[-1] for line in mats_on}) == 1, mats_on[:3]
-    results['on'] = 'Flag on: the slot-4 BC5 texture is captured and named as the material normal map.'
+    results['on'] = 'Flag on: slot-4 texture captured once, converted to octahedral RGBA8, named as the material normal.'
+    results['raw'] = 'NIER_REMIX_LIVE_NORMAL_RAW=1 still ships the game bytes (BC5), for the Y-handedness A/B.'
     results['cost'] = 'One extra readback + file per new normal resource; reuses the texture cache and budget.'
     print(json.dumps({'passed': True, 'work': str(work), 'checks': results,
                       'dds': [f['name'] for f in files_on],
-                      'limits': 'Software mock in Wine/llvmpipe with names from a real capture: proves plumbing and '
-                                'byte identity, not that NieR normal maps are in the orientation Remix expects '
-                                '(Y direction, channel order). That needs one live run and one look.'}, indent=2))
+                      'limits': 'Software mock in Wine/llvmpipe: proves plumbing, conversion shape and albedo '
+                                'identity, not how the normals look live. The Y direction still needs one live look.'}, indent=2))
 
 
 def outside():

@@ -28,6 +28,34 @@ struct Vertex {
     float texcoord[2];
     std::uint32_t color;
 };
+// Why a decode was refused. The distinction that matters live: a *transient* refusal (the game was writing the buffer
+// while we read it -> IndexBytesShort / VertexOutOfRange) must be retried, while a *structural* one (UnsupportedFormat,
+// NoPosition) will never succeed and is worth banning. live_capture used to ban both, so one bad frame removed an
+// object for the rest of the session.
+enum class Failure {
+    None, InvalidInput, BadIndexWidth, IndexBytesShort, SlotMissing, UnsupportedFormat, BadStride,
+    IndexBaseOutOfRange, VertexOutOfRange, NoPosition, BoneOutOfRange, Count
+};
+inline const char* failure_name(Failure f) {
+    switch (f) {
+        case Failure::None: return "none";
+        case Failure::InvalidInput: return "invalid_input";
+        case Failure::BadIndexWidth: return "bad_index_width";
+        case Failure::IndexBytesShort: return "index_bytes_short";
+        case Failure::SlotMissing: return "slot_missing";
+        case Failure::UnsupportedFormat: return "unsupported_format";
+        case Failure::BadStride: return "bad_stride";
+        case Failure::IndexBaseOutOfRange: return "index_base_out_of_range";
+        case Failure::VertexOutOfRange: return "vertex_out_of_range";
+        case Failure::NoPosition: return "no_position";
+        case Failure::BoneOutOfRange: return "bone_out_of_range";
+        default: return "unknown";
+    }
+}
+inline bool transient(Failure f) {
+    return f == Failure::IndexBytesShort || f == Failure::VertexOutOfRange || f == Failure::SlotMissing;
+}
+
 struct Output {
     std::vector<Vertex> vertices;      // one per distinct referenced vertex, first-reference order
     std::vector<std::uint32_t> indices; // the draw's index list remapped into `vertices`
@@ -71,19 +99,21 @@ inline float half(const unsigned char* p) {
 inline bool build(const Slot* slots, unsigned slot_count, const std::vector<Element>& elements,
                   const unsigned char* index_bytes, std::size_t index_bytes_size, unsigned index_width,
                   std::size_t first_index, std::uint32_t index_count, std::int32_t base_vertex,
-                  std::uint32_t bone_count, bool skinned, Output& out) {
+                  std::uint32_t bone_count, bool skinned, Output& out, Failure* why = nullptr) {
     out = Output{};
-    if (!slots || !slot_count || !index_bytes || !index_count || index_count % 3 != 0) return false;
-    if (index_width != 2 && index_width != 4) return false;
+    const auto refuse = [why](Failure f) { if (why) *why = f; return false; };
+    if (why) *why = Failure::None;
+    if (!slots || !slot_count || !index_bytes || !index_count || index_count % 3 != 0) return refuse(Failure::InvalidInput);
+    if (index_width != 2 && index_width != 4) return refuse(Failure::BadIndexWidth);
     if (first_index > index_bytes_size ||
         static_cast<std::size_t>(index_count) * index_width > index_bytes_size - first_index)
-        return false;
+        return refuse(Failure::IndexBytesShort);
     for (unsigned i = 0; i < slot_count; ++i)
-        if (!slots[i].bytes || !slots[i].stride) return false;
+        if (!slots[i].bytes || !slots[i].stride) return refuse(Failure::SlotMissing);
     for (const auto& e : elements) {
         const std::size_t size = detail::format_size(e.format);
-        if (!size || e.slot >= slot_count) return false;
-        if (e.offset > slots[e.slot].stride || size > slots[e.slot].stride - e.offset) return false;
+        if (!size || e.slot >= slot_count) return refuse(Failure::UnsupportedFormat);
+        if (e.offset > slots[e.slot].stride || size > slots[e.slot].stride - e.offset) return refuse(Failure::BadStride);
     }
 
     std::map<std::uint32_t, std::uint32_t> compact;  // original vertex number -> output index
@@ -94,7 +124,7 @@ inline bool build(const Slot* slots, unsigned slot_count, const std::vector<Elem
         if (index_width == 2) { std::uint16_t v; std::memcpy(&v, p, 2); raw = v; }
         else std::memcpy(&raw, p, 4);
         const std::int64_t numbered = static_cast<std::int64_t>(raw) + base_vertex;
-        if (numbered < 0 || numbered > 0xffffffffll) return false;
+        if (numbered < 0 || numbered > 0xffffffffll) return refuse(Failure::IndexBaseOutOfRange);
         const std::uint32_t original = static_cast<std::uint32_t>(numbered);
         const auto seen = compact.find(original);
         if (seen != compact.end()) { out.indices.push_back(seen->second); continue; }
@@ -107,7 +137,7 @@ inline bool build(const Slot* slots, unsigned slot_count, const std::vector<Elem
         for (unsigned slot = 0; slot < slot_count; ++slot) {
             if (static_cast<std::size_t>(slots[slot].offset) +
                 static_cast<std::size_t>(original) * slots[slot].stride + slots[slot].stride > slots[slot].size)
-                return false;
+                return refuse(Failure::VertexOutOfRange);
             const unsigned char* base = slots[slot].bytes + slots[slot].offset +
                                         static_cast<std::size_t>(original) * slots[slot].stride;
             for (const auto& e : elements) {
@@ -117,26 +147,38 @@ inline bool build(const Slot* slots, unsigned slot_count, const std::vector<Elem
                 if (!first) continue;  // TEXCOORD1 must not overwrite TEXCOORD0
                 const unsigned char* f = base + e.offset;
                 bool read = true;
-                if (e.semantic == "POSITION" && e.format == 6) {
-                    std::memcpy(vertex.position, f, sizeof vertex.position);
+                // One component reader for every format the game actually binds: float (2/6/16) and half (10/34).
+                // Live NieR binds float4 POSITION/TEXCOORD/COLOR, which this reader did not know; 3,983 draws were
+                // refused as "no position" and then banned for the session.
+                const auto comp = [f](int format, int component) -> float {
+                    if (format == 10 || format == 34) return detail::half(f + 2 * component);
+                    float v = 0.f;
+                    std::memcpy(&v, f + 4 * component, sizeof v);
+                    return v;
+                };
+                if (e.semantic == "POSITION" && (e.format == 6 || e.format == 2 || e.format == 10)) {
+                    for (int k = 0; k < 3; ++k) vertex.position[k] = comp(e.format, k);
                     positioned = true;
-                } else if (e.semantic == "NORMAL" && e.format == 6) {
-                    std::memcpy(vertex.normal, f, sizeof vertex.normal);
-                } else if (e.semantic == "NORMAL" && e.format == 10) {
-                    for (int k = 0; k < 3; ++k) vertex.normal[k] = detail::half(f + 2 * k);
-                } else if (e.semantic == "TEXCOORD" && e.format == 16) {
-                    std::memcpy(vertex.texcoord, f, sizeof vertex.texcoord);
-                } else if (e.semantic == "TEXCOORD" && e.format == 34) {
-                    for (int k = 0; k < 2; ++k) vertex.texcoord[k] = detail::half(f + 2 * k);
+                } else if (e.semantic == "NORMAL" && (e.format == 6 || e.format == 2 || e.format == 10)) {
+                    for (int k = 0; k < 3; ++k) vertex.normal[k] = comp(e.format, k);
+                } else if (e.semantic == "TEXCOORD" && (e.format == 16 || e.format == 34 || e.format == 2 || e.format == 10)) {
+                    for (int k = 0; k < 2; ++k) vertex.texcoord[k] = comp(e.format, k);
                 } else if (e.semantic == "COLOR" && (e.format == 28 || e.format == 30)) {
                     std::memcpy(&vertex.color, f, sizeof vertex.color);
+                } else if (e.semantic == "COLOR" && (e.format == 2 || e.format == 10)) {
+                    unsigned char rgba[4];
+                    for (int k = 0; k < 4; ++k) {
+                        const float v = comp(e.format, k);
+                        rgba[k] = static_cast<unsigned char>(v < 0.f ? 0.f : v > 1.f ? 255.f : v * 255.f + 0.5f);
+                    }
+                    std::memcpy(&vertex.color, rgba, sizeof vertex.color);
                 } else {
                     read = false;
                 }
                 if (read) seen_semantics.push_back(e.semantic);
             }
         }
-        if (!positioned) return false;
+        if (!positioned) return refuse(Failure::NoPosition);
 
         if (skinned) {
             std::uint32_t bones_local[4] = {0, 0, 0, 0};
@@ -151,7 +193,7 @@ inline bool build(const Slot* slots, unsigned slot_count, const std::vector<Elem
                     for (int k = 0; k < 4; ++k) weights_local[k] = base[e.offset + k] / 255.f;
             }
             for (int k = 0; k < 4; ++k)  // real captures contain garbage indices in zero-weight slots
-                if (weights_local[k] > 0.f && bones_local[k] >= bone_count) return false;
+                if (weights_local[k] > 0.f && bones_local[k] >= bone_count) return refuse(Failure::BoneOutOfRange);
             out.bones.insert(out.bones.end(), bones_local, bones_local + 4);
             out.weights.insert(out.weights.end(), weights_local, weights_local + 4);
         }

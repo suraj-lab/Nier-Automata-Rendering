@@ -4,7 +4,9 @@
 // read back once per frame and written as DDS with a DX10 header so BC-compressed data stays compressed.
 // No hooks: only PSGetShaderResources / CopySubresourceRegion / Map on the already-hooked context.
 #include <d3d11.h>
+#include "normal_octahedral.h"
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -59,6 +61,50 @@ struct Texture {
     std::vector<unsigned char> bytes;
 };
 struct Ref { UINT slot = 0; std::uint32_t id = 0; };
+
+// ---- NieR normals -> Remix octahedral -------------------------------------------------------------
+// The math lives in normal_octahedral.h (no D3D types, gated natively). Here only the DXGI mapping and the mip walk:
+// the game's whole chain is converted one level at a time so Remix keeps a real mip pyramid for the normal map.
+inline bool normal_source(DXGI_FORMAT f, normal_octahedral::Source& out) {
+    switch (f) {
+        case DXGI_FORMAT_BC1_UNORM: case DXGI_FORMAT_BC2_UNORM: case DXGI_FORMAT_BC3_UNORM:
+        case DXGI_FORMAT_BC1_UNORM_SRGB: case DXGI_FORMAT_BC2_UNORM_SRGB: case DXGI_FORMAT_BC3_UNORM_SRGB:
+            out = normal_octahedral::Source::Bc1; return true;
+        case DXGI_FORMAT_BC5_UNORM: out = normal_octahedral::Source::Bc5Unorm; return true;
+        case DXGI_FORMAT_BC5_SNORM: out = normal_octahedral::Source::Bc5Snorm; return true;
+        case DXGI_FORMAT_R8G8B8A8_UNORM: case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:
+            out = normal_octahedral::Source::Rgba8; return true;
+        case DXGI_FORMAT_B8G8R8A8_UNORM: case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB:
+            out = normal_octahedral::Source::Bgra8; return true;
+        default: return false;
+    }
+}
+
+// Converts in place to RGBA8 octahedral, preserving the level count. False (and `t` untouched) for a format this path
+// does not know, so an unexpected texture is left as the game wrote it rather than mangled.
+inline bool to_octahedral(Texture& t, bool flip_y) {
+    normal_octahedral::Source source;
+    if (!normal_source(t.format, source)) return false;
+    const FormatInfo fi = format_info(t.format);
+    const UINT levels = t.mip_levels ? t.mip_levels : 1;
+    std::vector<unsigned char> out;
+    std::size_t at = 0, src_at = 0;
+    for (UINT m = 0; m < levels; ++m) {
+        const UINT w = std::max(1u, t.width >> m), h = std::max(1u, t.height >> m);
+        const std::size_t src_level = static_cast<std::size_t>(level_geometry(fi, w, h).row_bytes) *
+                                      level_geometry(fi, w, h).rows;
+        const std::size_t need = static_cast<std::size_t>(w) * h * 4;
+        if (src_at + src_level > t.bytes.size()) return false;
+        out.resize(at + need, 255);
+        if (!normal_octahedral::convert_level(source, t.bytes.data() + src_at, src_level, w, h, flip_y, out.data() + at))
+            return false;
+        src_at += src_level;
+        at += need;
+    }
+    t.format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    t.bytes.swap(out);
+    return true;
+}
 
 // One frame's textures. Keys hold a reference so a pointer cannot be reused until clear().
 struct Cache {

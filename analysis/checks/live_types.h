@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 #include "light_convert.h"
+#include "visibility_trace.h"
 
 namespace texture_capture { struct Texture; }  // texture_capture.h; only owned here, so declared
 
@@ -40,10 +41,13 @@ struct Item {                          // one draw call this frame
     bool sky = false;                  // the game's sky dome: instance gets REMIXAPI_INSTANCE_CATEGORY_BIT_SKY
     unsigned first = 0, count = 1;     // range in Frame::transforms
     unsigned first_bone = 0, bone_count = 0;  // range in Frame::bones; 0 = not skinned
+    std::uint64_t trace_source = 0;     // diagnostic draw key before skinned occurrence remapping
+    unsigned trace_w = 0, trace_h = 0; // actual target for joining capture and submission diagnostics
 };
 // `pixels` set: captured but not yet on disk. The Remix worker writes it before the runtime loads `path`, so the game's
 // thread never waits on the file system (live 2026-10-31: 1.1 s game freezes exactly when new DDS files were created).
-struct TextureFile { std::uint32_t id = 0; std::wstring path; std::shared_ptr<const ::texture_capture::Texture> pixels; };
+struct TextureFile { std::uint32_t id = 0; std::wstring path; std::shared_ptr<const ::texture_capture::Texture> pixels;
+                    bool normal = false; };
 // One game light (point, PS slot 20, or spot, slot 22): see light_convert.h for the layouts and the Remix conversion.
 using Light = light_convert::Light;
 using Sun = light_convert::Sun;
@@ -59,6 +63,10 @@ struct UiDraw {
     std::uint32_t texture = 0;       // 0 = untextured
 };
 struct Frame {
+    visibility_trace::Batch visibility; // bounded plain records of every draw this frame (always collected)
+    // Per-frame histogram of what every draw produced, always on. A frame where objects stop being drawn is then
+    // explained by this line alone, without the change-row trace (which exhausted its budget in live-normal1).
+    unsigned capture_reasons[static_cast<unsigned>(visibility_trace::Reason::Count)] = {};
     std::vector<Item> items;
     std::vector<Light> lights;  // the game's point-light array for this frame, in bind order
     Sun sun;                    // verified scene PS CB2 sun, when has_sun

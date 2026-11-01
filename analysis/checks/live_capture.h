@@ -17,6 +17,8 @@
 #include <string>
 #include <vector>
 #include "live_types.h"
+#include "funnel.h"
+#include "layout_signature.h"
 #include "live_vertex_decode.h"
 #include "live_skinning.h"
 #include "input_layout_hook.h"
@@ -39,6 +41,8 @@ inline std::atomic<bool> permitted{false};    // capture allowed (host alive and
 inline std::atomic<bool> suspended{false};    // F10 original view: no per-frame capture, writes still mirrored
 inline std::atomic<bool> frame_open{false};   // between begin_frame and end_frame
 inline std::atomic<ID3D11DeviceContext*> active_context{nullptr};
+inline std::atomic<bool> visibility_trace_enabled{false}; // opt-in; recording only, never a visibility policy
+inline std::atomic<unsigned long long> visibility_trace_late{0}; // any frame-boundary race makes absence inference unsafe
 // One mapped pointer per resource between Map and Unmap: engines map several buffers at once.
 inline std::map<ID3D11Resource*, void*>& mapped() { static std::map<ID3D11Resource*, void*> m; return m; }
 
@@ -264,7 +268,17 @@ inline std::size_t read_budget_per_frame = std::size_t(64) << 20;
 // (or again after eviction). Live 2026-10-31: turning the camera toward new geometry built hundreds of meshes in one
 // frame, 114-304 ms. Past the budget a first-sight build waits for a later frame; a changed mesh is still rebuilt.
 inline unsigned long long build_budget_us = 0, build_us_this_frame = 0;
+// First-sight decoding is what the budget is meant to pace, so it is charged separately: rebuilds of a buffer the game
+// rewrote every frame are mandatory work and must not consume the allowance (live-normal1: they did, so after the first
+// few rebuilds every never-built mesh was deferred, and 24.5% of submitted instances had no mesh).
+inline unsigned long long first_sight_us_this_frame = 0;
 inline std::atomic<unsigned long long> build_deferred{0};
+inline std::atomic<unsigned long long> read_deferred{0};
+// Why decodes were refused, and how many times each geometry may be retried before it is given up on. A transient
+// refusal (the game was mid-write) must not remove an object for the session; a structural one must stop retrying.
+inline std::atomic<unsigned long long> decode_failure[static_cast<unsigned>(live_decode::Failure::Count)];
+inline std::map<std::uint64_t, unsigned> decode_retries;
+inline constexpr unsigned kDecodeRetries = 3;  // then give up, but only after 3 real attempts
 
 // Geometry -> the shadow identities it was built from, so a rewrite forces exactly one rebuild.
 inline std::map<std::uint64_t, std::uint64_t>& built_versions() { static std::map<std::uint64_t, std::uint64_t> m; return m; }
@@ -816,7 +830,7 @@ inline void STDMETHODCALLTYPE hooked_copy_region(ID3D11DeviceContext* self, ID3D
 enum class TextureResult { Captured, Unusable, Deferred };
 
 inline TextureResult write_texture(ID3D11Device* device, ID3D11DeviceContext* context, ID3D11Resource* resource,
-                                   std::uint32_t& id) {
+                                   std::uint32_t& id, bool normal_slot = false) {
     if (texture_dir.empty() || texture_bytes_written >= texture_disk_budget) return TextureResult::Unusable;
     const PhaseTimer timer(kPhaseTexture);
     if (textures_this_frame >= textures_per_frame) return TextureResult::Deferred;
@@ -839,7 +853,7 @@ inline TextureResult write_texture(ID3D11Device* device, ID3D11DeviceContext* co
             swprintf(name, 64, L"\\live_%u.dds", assigned);
             const std::wstring path = texture_dir + name;
             texture_bytes_written += pixels.bytes.size();
-            all_textures().push_back(TextureFile{assigned, path, std::make_shared<const texture_capture::Texture>(std::move(pixels))});
+            all_textures().push_back(TextureFile{assigned, path, std::make_shared<const texture_capture::Texture>(std::move(pixels)), normal_slot});
             id = assigned;
             ++next_texture_id;
             result = TextureResult::Captured;
@@ -882,6 +896,7 @@ inline void begin_frame(ID3D11DeviceContext* context, unsigned width = 0, unsign
         lights_read = false;
         read_bytes_this_frame = 0;
         build_us_this_frame = 0;
+        first_sight_us_this_frame = 0;
         target_sizes().clear();
         skinned_occurrences().clear();
         expire_entries();
@@ -979,11 +994,43 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
         !frame_open.load(std::memory_order_acquire)) return;
     if (!context || active_context.load(std::memory_order_acquire) != context) return;
     if (!instance_count) return;  // zero instances draws nothing
+    const bool tracing = visibility_trace_enabled.load(std::memory_order_relaxed);
+    // Only the trace append is locked; never extend the existing capture critical section for diagnostics.
+    struct TraceRecord {
+        std::uint64_t epoch = 0, publication = 0;
+        visibility_trace::Event event{};
+        explicit TraceRecord(bool enabled) {
+            if (!enabled) return;
+            std::lock_guard<std::recursive_mutex> lock(mutex());
+            if (!frame_open.load(std::memory_order_acquire)) {
+                visibility_trace_late.fetch_add(1, std::memory_order_relaxed);
+                return;
+            }
+            epoch = frame_number;
+            publication = ready_sequence.load(std::memory_order_relaxed);
+        }
+        ~TraceRecord() {
+            funnel::count(event.reason);  // one bucket per draw, always: this is the accounting line's source
+            if (!epoch) return;
+            std::lock_guard<std::recursive_mutex> lock(mutex());
+            if (epoch == frame_number && publication == ready_sequence.load(std::memory_order_relaxed)) {
+                building().visibility.add(event);
+                const unsigned r = static_cast<unsigned>(event.reason);
+                if (r < static_cast<unsigned>(visibility_trace::Reason::Count)) ++building().capture_reasons[r];
+            }
+            else visibility_trace_late.fetch_add(1, std::memory_order_relaxed);
+        }
+    } trace(true);  // always: the accounting below must not depend on the verbose trace flag
+    trace.event.index_count = index_count;
+    trace.event.start_index = start_index;
+    trace.event.instances = instance_count;
     // The HUD is drawn as short indexed quads (often 6 indices), so the world-geometry minimum cannot apply to it.
     // Both discriminators are cheap: the bound blend state and the bound render target.
     ID3D11RenderTargetView* early_rtv = nullptr;
     context->OMGetRenderTargets(1, &early_rtv, nullptr);
     const std::pair<unsigned, unsigned> early_target = target_size(early_rtv);
+    trace.event.target_w = early_target.first;
+    trace.event.target_h = early_target.second;
     if (early_rtv) early_rtv->Release();
     bool blended = false;
     {
@@ -1005,10 +1052,13 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     const std::pair<unsigned, unsigned> final_size{final_width, final_height};
     const bool ui_pass = hud_enabled && scene_target_enabled && scene_width && final_width && blended &&
                          early_target == final_size && std::pair<unsigned, unsigned>{scene_width, scene_height} != final_size;
-    if (!ui_pass && index_count < min_index_count) return;
+    if (!ui_pass && index_count < min_index_count) { trace.event.reason = visibility_trace::Reason::Small; return; }
     D3D11_PRIMITIVE_TOPOLOGY topology = D3D11_PRIMITIVE_TOPOLOGY_UNDEFINED;
     context->IAGetPrimitiveTopology(&topology);
-    if (topology != D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST) return;  // strips/lines/points are not triangle lists
+    if (topology != D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST) {
+        trace.event.reason = visibility_trace::Reason::Topology;
+        return; // strips/lines/points are not triangle lists
+    }
 
     ID3D11InputLayout* layout = nullptr;
     context->IAGetInputLayout(&layout);
@@ -1026,6 +1076,7 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     bool hole = false;  // a null slot below a bound one: never seen in NieR's captures; skip it before any read
     for (unsigned i = 0; i < vb_count; ++i) hole = hole || !vbs[i];
     if (!ib || !vb_count || hole || !have_layout || (ib_format != DXGI_FORMAT_R32_UINT && ib_format != DXGI_FORMAT_R16_UINT)) {
+        trace.event.reason = visibility_trace::Reason::Layout;
         release_all(vbs, 4, ib, layout);
         return;
     }
@@ -1052,6 +1103,9 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     key = hash_value(key ^ static_cast<std::uint64_t>(static_cast<std::uint32_t>(base_vertex)));
     key = hash_value(key ^ static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(layout)));
     std::uint64_t geometry = key;
+    trace.event.source = key;
+    trace.event.geometry = geometry;
+    trace.event.ib = ib_pointer;
 
     D3D11_VIEWPORT viewport{};
     UINT viewports = 1;
@@ -1069,6 +1123,7 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
         if (!blended) ++target_counts()[target];  // the HUD is blended: it must not vote for the scene target
         if (scene_target_enabled && scene_width && target != std::pair<unsigned, unsigned>{scene_width, scene_height} && !ui_pass) {
             ++building().skipped_pass;
+            trace.event.reason = visibility_trace::Reason::Pass;
             release_all(vbs, 4, ib, layout);
             return;
         }
@@ -1086,6 +1141,7 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
         if (!surface) {
             std::lock_guard<std::recursive_mutex> lock(mutex());
             ++building().skipped_prepass;
+            trace.event.reason = visibility_trace::Reason::Prepass;
             release_all(vbs, 4, ib, layout);
             return;
         }
@@ -1102,7 +1158,7 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     if (viewport_area > frame.max_viewport) frame.max_viewport = viewport_area;
     const float reference = std::max(frame.max_viewport, previous_max_viewport);
     if (reference > 0.f && viewport_area * 100.f < reference * 25.f) ++frame.small_viewport;
-    if (frame.items.size() >= max_draws) { ++frame.skipped; release_all(vbs, 4, ib, layout); device->Release(); return; }
+    if (frame.items.size() >= max_draws) { trace.event.reason = visibility_trace::Reason::Limit; ++frame.skipped; release_all(vbs, 4, ib, layout); device->Release(); return; }
     ++frame.draws;
     if (skinned) ++frame.skinned;
 
@@ -1113,8 +1169,8 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     const std::vector<unsigned char>* constants = cb11 ? buffer_bytes(device, context, cb11) : nullptr;
     const unsigned bone_count = skinned && constants
         ? static_cast<unsigned>(std::min<std::size_t>(256, constants->size() / 48)) : 0;
-    if (skinned && !bone_count) { ++frame.skipped; release_all(vbs, 4, ib, layout); device->Release(); return; }
-    if (!constants) { ++frame.skipped_untransformed; release_all(vbs, 4, ib, layout); device->Release(); return; }
+    if (skinned && !bone_count) { trace.event.reason = visibility_trace::Reason::Bones; ++frame.skipped; release_all(vbs, 4, ib, layout); device->Release(); return; }
+    if (!constants) { trace.event.reason = visibility_trace::Reason::Constants; ++frame.skipped_untransformed; release_all(vbs, 4, ib, layout); device->Release(); return; }
     // Baked characters sharing VB/IB can have different poses in the same frame; never alias their meshes. The key is
     // the draw plus its occurrence in this frame, not the pose: a pose-keyed mesh per animation frame filled the mesh
     // budget and evicted the static world (live 2026-10-29: 59917 built, 56915 evicted). The pose goes into the
@@ -1143,7 +1199,7 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     {
         // One capture path for both material inputs: the resource cache and the write budget are shared, so a normal map
         // that many draws bind is read back and written once.
-        const auto obtain = [&](ID3D11Resource* resource, std::uint32_t& id) {
+        const auto obtain = [&](ID3D11Resource* resource, std::uint32_t& id, bool normal_slot = false) {
             const auto known = texture_ids().find(resource);
             if (known != texture_ids().end()) {
                 known->second.used_frame = frame_number;
@@ -1151,7 +1207,7 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
                 return TextureResult::Captured;
             }
             std::uint32_t assigned = 0;
-            const TextureResult result = write_texture(device, context, resource, assigned);
+            const TextureResult result = write_texture(device, context, resource, assigned, normal_slot);
             if (result == TextureResult::Deferred) {
                 auto& waiters = waiting_materials();
                 if (waiters.size() > 65536) waiters.clear();  // bounded, like the other caches
@@ -1185,7 +1241,7 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
                 if (!texture && !texture_deferred &&  // first usable PS texture is the material albedo
                     obtain(resource, texture) == TextureResult::Deferred)
                     texture_deferred = true;  // the texture lands later; this geometry is uploaded without it for now
-                if (normal_textures && slot == 4) obtain(resource, normal);  // g_NormalTexture in the game's shaders
+                if (normal_textures && slot == 4) obtain(resource, normal, true);  // g_NormalTexture in the game's shaders
             }
             if (resource) resource->Release();
         }
@@ -1247,6 +1303,7 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     // vertices change every frame (text, bars, dialogue), so there is nothing worth caching.
     Pin pinned;  // from here on several buffer_bytes() results are held at once: nothing may be trimmed under them
     if (ui_pass) {
+        trace.event.reason = visibility_trace::Reason::Ui;
         const std::vector<unsigned char>* ib_bytes = buffer_bytes(device, context, ib);
         const std::vector<unsigned char>* vb_bytes[4] = {};
         bool readable = ib_bytes != nullptr;
@@ -1313,12 +1370,18 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     bool needs_read = !resident(ib);
     for (unsigned i = 0; i < vb_count; ++i) needs_read = needs_read || !resident(vbs[i]);
     const bool changed = previously != built_versions().end() && previously->second != version;
+    const bool first_sight = previously == built_versions().end() || unknown;
     // A deferred texture must not hold the geometry back: it is uploaded without a material for now, and the
     // texture's arrival invalidates it (waiting_materials) so the next draw rebuilds the mesh with the material.
-    const bool over_build_budget = build_budget_us && !changed && build_us_this_frame >= build_budget_us &&
-                                   (previously == built_versions().end() || unknown);
+    const bool over_build_budget = build_budget_us && !changed && first_sight_us_this_frame >= build_budget_us && first_sight;
     if (over_build_budget) build_deferred.fetch_add(1, std::memory_order_relaxed);
-    const bool deferred = over_build_budget || (!changed && needs_read && read_bytes_this_frame >= read_budget_per_frame);
+    const bool over_read_budget = !changed && needs_read && read_bytes_this_frame >= read_budget_per_frame;
+    if (over_read_budget) read_deferred.fetch_add(1, std::memory_order_relaxed);
+    const bool deferred = over_build_budget || over_read_budget;
+    // Every exit from here on names itself, so a draw that produced no upload is attributable instead of "accepted".
+    visibility_trace::Reason outcome = over_build_budget ? visibility_trace::Reason::DeferredBudget
+                                       : over_read_budget ? visibility_trace::Reason::DeferredRead
+                                                          : visibility_trace::Reason::Accepted;
     bool rebuild = !deferred && (unknown || previously == built_versions().end() || previously->second != version);
     std::uint64_t buffer_version = identity(ib);
     for (unsigned i = 0; i < vb_count; ++i) buffer_version = hash_value(buffer_version ^ identity(vbs[i]));
@@ -1341,6 +1404,7 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
         if (!readable && read_pending) {
             // Bytes in flight: not a rebuild yet. Nothing is counted or marked built, so the next draw retries.
             rebuild = false;
+            outcome = visibility_trace::Reason::ReadPending;
             read_waits.fetch_add(1, std::memory_order_relaxed);
         }
     }
@@ -1387,9 +1451,17 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
                                        e.slot_class == D3D11_INPUT_PER_INSTANCE_DATA});
         const std::size_t first_index = static_cast<std::size_t>(ib_offset) + static_cast<std::size_t>(start_index) * index_width;
         live_decode::Output decoded;
+        live_decode::Failure failure = live_decode::Failure::None;
         bool ok = live_decode::build(decode_slots, vb_count, decode_elements, ib_bytes->data(),
                                                       ib_bytes->size(), index_width, first_index, index_count,
-                                                      base_vertex, bone_count, skinned, decoded);
+                                                      base_vertex, bone_count, skinned, decoded, &failure);
+        if (!ok) {
+            // Structural refusals are the interesting ones; the layout is what names the draw family.
+            if (failure == live_decode::Failure::NoPosition) layout_signature::note(decode_elements);
+            const unsigned fi = static_cast<unsigned>(failure);
+            if (fi < static_cast<unsigned>(live_decode::Failure::Count))
+                decode_failure[fi].fetch_add(1, std::memory_order_relaxed);
+        }
         if (ok && skinned && !rigid) {
             if (rigid_bones().size() > 200000) rigid_bones().clear();  // bounded like built_versions; one re-check each
             const int bone = single_bone(decoded);
@@ -1472,9 +1544,11 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
             upload.weights = std::move(decoded.weights);
             if (built_versions().size() > 200000) { built_versions().clear(); content_hashes().clear(); sky_geometries().clear(); }  // bounded; one rebuild each
             built_versions()[geometry] = version;
+            decode_retries.erase(geometry);
             const std::size_t bytes = upload.vertices.size() * sizeof(Vertex) + upload.indices.size() * 4 +
                                       upload.weights.size() * 4 + upload.bones.size() * 4;
             if (pending_bytes + bytes > max_pending_bytes) {
+                outcome = visibility_trace::Reason::Dropped;
                 // The worker is not draining (stalled or failed). Do not mark the geometry built, so it is
                 // retried on a later frame instead of vanishing for the rest of the session.
                 ++dropped_uploads;
@@ -1486,12 +1560,18 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
             }
         } else {
             ++frame.skipped;
-            built_versions()[geometry] = version;  // do not retry a broken draw every frame
+            outcome = visibility_trace::Reason::DecodeFailed;
+            if (decode_retries.size() > 200000) decode_retries.clear();  // bounded like the other maps
+            const unsigned tries = ++decode_retries[geometry];
+            if (tries >= kDecodeRetries || !live_decode::transient(failure))
+                built_versions()[geometry] = version;  // give up: retrying a structural refusal every frame is waste
+            // Otherwise leave it unbuilt so the next draw retries it: a buffer caught mid-write decodes fine later.
         }
     }
 
     if (rebuild && readable) {
         build_us_this_frame += now_us() - build_started;
+        if (first_sight) first_sight_us_this_frame += now_us() - build_started;
         phase_us[kPhaseBuild] += now_us() - build_started;
     }
 
@@ -1507,11 +1587,18 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
 
     Item item;
     item.geometry = geometry;
+    trace.event.geometry = geometry;
+    trace.event.texture = texture;
+    if (tracing) {
+        item.trace_source = key;
+        item.trace_w = early_target.first;
+        item.trace_h = early_target.second;
+    }
     item.texture = texture;
     item.blended = blended;
     const auto sky_known = sky_geometries().find(geometry);
     item.sky = sky_known != sky_geometries().end() && sky_known->second;
-    if (item.sky && !sky_enabled) { ++frame.skipped_sky; release_all(vbs, 4, ib, layout); device->Release(); return; }
+    if (item.sky && !sky_enabled) { trace.event.reason = visibility_trace::Reason::Sky; ++frame.skipped_sky; release_all(vbs, 4, ib, layout); device->Release(); return; }
     if (item.sky) ++frame.sky;  // per draw, so the stats line shows the sky every frame, not only when it is built
     if (blended) ++frame.blended;
     if (!texture) ++frame.untextured;  // no material: distinguishes 'texture never written' from 'material not created'
@@ -1550,6 +1637,15 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
         }
     }
     frame.items.push_back(item);
+    if (outcome == visibility_trace::Reason::Accepted && !rebuild) outcome = visibility_trace::Reason::Unchanged;
+    trace.event.reason = outcome;
+    trace.event.instances = item.count;
+    trace.event.bones = item.bone_count;
+    trace.event.flags = (item.sky ? 1u : 0u) | (item.blended ? 2u : 0u);
+    if (tracing) {
+        const std::size_t base = static_cast<std::size_t>(item.first) * 12;
+        for (unsigned r = 0; r < 3; ++r) trace.event.position[r] = frame.transforms[base + 4 * r + 3];
+    }
     if (!frame.has_sun && !item.sky) {
         // First scene draw with a verified PS CB2 sun (rgb, unit surface-to-light, w=0); dummy bindings fail parse.
         ID3D11Buffer* cb2 = nullptr;

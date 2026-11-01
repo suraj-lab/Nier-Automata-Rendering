@@ -5,19 +5,47 @@
 #include <cstdint>
 #include <cstring>
 #include <map>
+#include <mutex>
 #include <string>
 #include <vector>
 #include <remix_c.h>
 #include "live_types.h"
+#include "funnel.h"
+#include "visibility_math.h"
 #include "nscn_scene.h"
 
 namespace live_scene {
 
 inline float light_scale = 1.f;  // NIER_REMIX_LIGHT_SCALE: tuned on the laptop probe first (REPROBE_LIGHT_SCALE)
+// NIER_REMIX_LIVE_NO_ALPHA_TEST=1: send every material with "always keep". A/B switch for the layer we cannot see:
+// our counters say drawn, the picture says gone, and an over-strict parsed threshold discards every texel.
+inline bool alpha_test_enabled = true;
+// Per-window coverage accounting: instances Remix's camera should see, and the ones it should not. Measured with the
+// same camera basis we hand SetupCamera, so this is the runtime's own view of the scene, not ours.
+struct CoverageTotals {
+    unsigned long long instances = 0, in_frustum = 0, offscreen = 0, behind = 0, unknown = 0, big = 0;
+    double best_fraction = 0.0;
+    std::uint64_t best_key = 0;
+    unsigned best_flags = 0;
+};
+inline bool coverage_enabled = true;
+inline std::mutex coverage_mutex;
+inline CoverageTotals coverage;
+
+inline CoverageTotals take_coverage() {
+    std::lock_guard<std::mutex> lock(coverage_mutex);
+    CoverageTotals out = coverage;
+    coverage = CoverageTotals{};
+    return out;
+}
 
 struct State {
     std::map<std::uint64_t, remixapi_MeshHandle> meshes;
     std::map<std::uint64_t, std::size_t> mesh_bytes;
+    // Local-space bounds per mesh: everything we need to ask "would Remix's camera see this?" without keeping vertices.
+    std::map<std::uint64_t, visibility_math::Bounds> mesh_bounds;
+    // This frame's screen fraction per geometry key, as Remix's camera sees it (empty when coverage is off).
+    std::map<std::uint64_t, double> fraction;
     std::map<std::uint64_t, std::uint64_t> last_used;
     std::map<std::uint64_t, remixapi_MaterialHandle> materials;  // texture id, plus alpha test above bit 32
     std::vector<std::wstring> texture_paths;  // indexed by (texture id - 1); Remix keeps each c_str()
@@ -93,7 +121,7 @@ inline remixapi_MaterialHandle material_for(const remixapi_Interface& api, State
                  : 3000000ull + texture;
     nscn::detail::make_material_info(info, ext, s.texture_paths[texture - 1].c_str(), hash, tested,
                                      has_normal ? s.texture_paths[normal - 1].c_str() : nullptr);
-    if (tested) { ext.alphaTestType = alpha_op; ext.alphaReferenceValue = alpha_ref; }
+    if (tested && alpha_test_enabled) { ext.alphaTestType = alpha_op; ext.alphaReferenceValue = alpha_ref; }
     remixapi_MaterialHandle handle = nullptr;
     if (api.CreateMaterial(&info, &handle) || !handle) return nullptr;
     s.materials.emplace(key, handle);
@@ -144,6 +172,9 @@ inline bool build_mesh(const remixapi_Interface& api, State& s, const live_captu
     info.surfaces_count = 1;
     remixapi_MeshHandle mesh = nullptr;
     if (api.CreateMesh(&info, &mesh) || !mesh) return false;
+    visibility_math::Bounds local;
+    for (const auto& v : upload.vertices) local.add(v.position);
+    s.mesh_bounds[upload.geometry] = local;
     const std::size_t bytes = vertices.size() * sizeof(remixapi_HardcodedVertex) + upload.indices.size() * sizeof(std::uint32_t);
     const auto previous = s.meshes.find(upload.geometry);
     if (previous != s.meshes.end()) {  // same key rebuilt after a buffer rewrite: replace, do not leak
@@ -294,15 +325,45 @@ inline bool ready(const live_capture::Frame& frame, const State& s) {
 }
 
 inline remixapi_ErrorCode submit(const remixapi_Interface& api, const live_capture::Frame& frame, State& s,
-                                 const float camera[14], float aspect) {
-    if (!ready(frame, s)) return REMIXAPI_ERROR_CODE_GENERAL_FAILURE;  // caller checks ready() first
-    if (const remixapi_ErrorCode r = nscn::setup_camera(api, camera, aspect)) return r;
+                                 const float camera[14], float aspect, visibility_trace::Batch* trace = nullptr,
+                                 float frame_width = 0.f, float frame_height = 0.f) {
+    // Built once per frame from the same array handed to SetupCamera, so coverage and rendering agree by construction.
+    const visibility_math::Cam cam_basis = visibility_math::camera_from(camera, aspect);
+    const bool measure_coverage = coverage_enabled && frame_width > 0.f && frame_height > 0.f;
+    s.fraction.clear();
+    if (!ready(frame, s)) {
+        if (trace) ++trace->dropped; // submission did not run: absence is unknown, not a vanished instance
+        return REMIXAPI_ERROR_CODE_GENERAL_FAILURE;
+    }
+    if (const remixapi_ErrorCode r = nscn::setup_camera(api, camera, aspect)) {
+        if (trace) ++trace->dropped;
+        return r;
+    }
     for (const auto& item : frame.items) {
+        visibility_trace::Event event{};
+        event.source = item.trace_source;
+        event.geometry = item.geometry;
+        event.target_w = item.trace_w;
+        event.target_h = item.trace_h;
+        event.texture = item.texture;
+        event.bones = item.bone_count;
+        event.flags = (item.sky ? 1u : 0u) | (item.blended ? 2u : 0u);
         const auto mesh = s.meshes.find(item.geometry);
-        if (mesh == s.meshes.end() || !mesh->second) continue;
+        if (mesh == s.meshes.end() || !mesh->second) {
+            event.reason = visibility_trace::Reason::MeshMissing;
+            event.instances = item.count;
+            funnel::count_instance(event.reason, item.count);
+            if (trace) trace->add(event);
+            continue;
+        }
         for (unsigned i = 0; i < item.count; ++i) {
             const std::size_t base = (static_cast<std::size_t>(item.first) + i) * 12;
-            if (base + 12 > frame.transforms.size()) break;
+            if (base + 12 > frame.transforms.size()) {
+                event.reason = visibility_trace::Reason::BadTransform;
+                event.instances = item.count - i;
+                if (trace) trace->add(event);
+                break;
+            }
             remixapi_InstanceInfoBoneTransformsEXT bones{};
             bones.sType = REMIXAPI_STRUCT_TYPE_INSTANCE_INFO_BONE_TRANSFORMS_EXT;
             bones.pNext = nullptr;
@@ -322,7 +383,46 @@ inline remixapi_ErrorCode submit(const remixapi_Interface& api, const live_captu
             if (item.sky) instance.categoryFlags |= REMIXAPI_INSTANCE_CATEGORY_BIT_SKY;
             for (unsigned r = 0; r < 3; ++r)
                 for (unsigned c = 0; c < 4; ++c) instance.transform.matrix[r][c] = frame.transforms[base + 4 * r + c];
-            if (const remixapi_ErrorCode r = api.DrawInstance(&instance)) return r;
+            if (measure_coverage) {
+                const auto b = s.mesh_bounds.find(item.geometry);
+                std::lock_guard<std::mutex> lock(coverage_mutex);
+                ++coverage.instances;
+                if (b == s.mesh_bounds.end() || !b->second.valid()) {
+                    ++coverage.unknown;  // no bounds (e.g. a skinned bind pose): coverage is not claimed for it
+                } else {
+                    unsigned on = 0, behind = 0;
+                    const double f = visibility_math::fraction_from_bounds(
+                        cam_basis, b->second, visibility_math::from_3x4(instance.transform.matrix[0]), frame_width,
+                        frame_height, &on, &behind);
+                    double& kept = s.fraction[item.geometry];
+                    if (f > kept) kept = f;
+                    if (on == 0) {
+                        if (behind) ++coverage.behind; else ++coverage.offscreen;
+                    } else {
+                        ++coverage.in_frustum;
+                        if (f > 0.05) ++coverage.big;
+                        if (f > coverage.best_fraction) {
+                            coverage.best_fraction = f;
+                            coverage.best_key = item.geometry;
+                            coverage.best_flags = (item.sky ? 1u : 0u) | (item.blended ? 2u : 0u);
+                        }
+                    }
+                }
+            }
+            const remixapi_ErrorCode result = api.DrawInstance(&instance);
+            funnel::count_instance(result ? visibility_trace::Reason::DrawFailed : visibility_trace::Reason::Drawn);
+            if (trace) {
+                event.reason = result ? visibility_trace::Reason::DrawFailed : visibility_trace::Reason::Drawn;
+                event.error = static_cast<unsigned>(result);
+                event.instances = 1;
+                if (item.bone_count && !bones.boneTransforms_count) event.flags |= 4u;
+                for (unsigned r = 0; r < 3; ++r) event.position[r] = instance.transform.matrix[r][3];
+                trace->add(event);
+            }
+            if (result) {
+                if (trace) ++trace->dropped; // later items were never attempted
+                return result;
+            }
         }
     }
     if (s.sun) api.DrawLightInstance(s.sun);
