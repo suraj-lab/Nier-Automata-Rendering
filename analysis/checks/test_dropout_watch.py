@@ -86,23 +86,23 @@ int main() {
     {
         using dropout_watch::Ident; using dropout_watch::Seen;
         std::map<std::uint64_t, Ident> prev{
-            {10, {100, 7, 300, 0}},    // drawn again under a new occurrence key (same source)
-            {11, {101, 8, 600, 30}},   // drawn again under a new key, same index buffer and range (pointer churn)
-            {12, {102, 9, 900, 0}},    // same range, but its index buffer was recreated (shape churn)
-            {13, {103, 5, 400, 0}},    // the game still drew it; we rejected it this frame (reason 1 = pass)
-            {14, {104, 5, 500, 0}},    // reached the renderer but failed there
-            {15, {105, 6, 700, 0}},    // nothing this frame refers to it at all
-            {16, {106, 4, 800, 0}},    // a second departure competing for the same arrival as key 17
-            {17, {107, 4, 800, 0}},
+            {10, Ident{100, 7, 300, 0, {}, {}}},    // drawn again under a new occurrence key (same source)
+            {11, Ident{101, 8, 600, 30, {}, {}}},   // drawn again under a new key, same index buffer and range (pointer churn)
+            {12, Ident{102, 9, 900, 0, {}, {}}},    // same range, but its index buffer was recreated (shape churn)
+            {13, Ident{103, 5, 400, 0, {}, {}}},    // the game still drew it; we rejected it this frame (reason 1 = pass)
+            {14, Ident{104, 5, 500, 0, {}, {}}},    // reached the renderer but failed there
+            {15, Ident{105, 6, 700, 0, {}, {}}},    // nothing this frame refers to it at all
+            {16, Ident{106, 4, 800, 0, {}, {}}},    // a second departure competing for the same arrival as key 17
+            {17, Ident{107, 4, 800, 0, {}, {}}},
         };
-        std::vector<Seen> cap{
-            {20, 100, 7, 300, 0, 23},   // key 20, source 100 (key 10's draw), unchanged
-            {21, 201, 8, 600, 30, 0},   // key 21, new source, same ib/range as key 11
-            {22, 202, 99, 900, 0, 0},   // key 22, new ib, same range as key 12
-            {13, 103, 5, 400, 0, 1},    // key 13 itself, rejected as pass
-            {14, 104, 5, 500, 0, 23},
-            {23, 207, 4, 800, 0, 0},    // one arrival for the two departures 16 and 17
-            {0, 0, 0, 100, 0, 3},       // an early reject without a key never matches anything
+        std::vector<Seen> cap{{}}; cap = std::vector<Seen>{
+            {20, 100, 7, 300, 0, 23, {}, {}},   // key 20, source 100 (key 10's draw), unchanged
+            {21, 201, 8, 600, 30, 0, {}, {}},   // key 21, new source, same ib/range as key 11
+            {22, 202, 99, 900, 0, 0, {}, {}},   // key 22, new ib, same range as key 12
+            {13, 103, 5, 400, 0, 1, {}, {}},    // key 13 itself, rejected as pass
+            {14, 104, 5, 500, 0, 23, {}, {}},
+            {23, 207, 4, 800, 0, 0, {}, {}},    // one arrival for the two departures 16 and 17
+            {0, 0, 0, 100, 0, 3, {}, {}},       // an early reject without a key never matches anything
         };
         std::map<std::uint64_t, unsigned> submit_other{{14, 17}};   // 17 = draw_failed
         auto why = dropout_watch::attribute({10, 11, 12, 13, 14, 15, 16, 17}, {20, 21, 22, 23}, prev, cap, submit_other);
@@ -123,15 +123,17 @@ int main() {
     // Churn breakdown: for a same-IB/range re-key, which key component moved; and whether the new key was built.
     {
         using dropout_watch::Ident; using dropout_watch::Seen;
-        Ident base{100, 7, 300, 0}; base.vb = 50; base.vb_offset = 0; base.base_vertex = 0; base.layout = 9;
+        Ident base{100, 7, 300, 0, {}}; base.key.vb[0] = 50; base.key.offset[0] = 0; base.key.base_vertex = 0; base.key.layout = 9;
         std::map<std::uint64_t, Ident> prev{{1, base}, {2, base}, {3, base}, {4, base}};
         prev[2].start_index = 600;  prev[3].start_index = 900;  prev[4].start_index = 1200;
         auto arrival = [&](std::uint64_t key, unsigned start) {
-            Seen s{key, 900 + key, 7, 300, start, 0}; s.vb = 50; s.vb_offset = 0; s.base_vertex = 0; s.layout = 9; return s;
+            Seen s{key, 900 + key, 7, 300, start, 0, {}, {}};
+            s.key.vb[0] = 50; s.key.offset[0] = 0; s.key.base_vertex = 0; s.key.layout = 9;
+            return s;
         };
-        Seen a = arrival(11, 0);    a.vb_offset = 4096;            // ring-buffer style: same buffer, new offset
-        Seen b = arrival(12, 600);  b.vb = 51;                     // buffer recreated or swapped
-        Seen c = arrival(13, 900);  c.base_vertex = 64; c.layout = 10;   // two components at once
+        Seen a = arrival(11, 0);    a.key.offset[0] = 4096;            // ring-buffer style: same buffer, new offset
+        Seen b = arrival(12, 600);  b.key.vb[0] = 51;                     // buffer recreated or swapped
+        Seen c = arrival(13, 900);  c.key.base_vertex = 64; c.key.layout = 10;   // two components at once
         Seen d = arrival(14, 1200);                                // none of the four: another slot or stride moved
         std::set<std::uint64_t> missing{11, 13};                   // arrived before its mesh was built
         auto why = dropout_watch::attribute({1, 2, 3, 4}, {11, 12, 13, 14}, prev, {a, b, c, d}, {}, &missing);
@@ -148,18 +150,51 @@ int main() {
     // arrival sits decides it. same <1 cm, near <1 unit (a moving object), far = a different object.
     {
         using dropout_watch::Ident; using dropout_watch::Seen;
-        Ident base{100, 7, 300, 0}; base.vb = 50;
+        Ident base{100, 7, 300, 0, {}}; base.key.vb[0] = 50;
         std::map<std::uint64_t, Ident> prev{{1, base}, {2, base}, {3, base}};
         prev[2].start_index = 600; prev[3].start_index = 900;
         prev[1].position[0] = 10.f; prev[2].position[0] = 10.f; prev[3].position[0] = 10.f;
-        Seen a{11, 911, 7, 300, 0, 0};   a.vb = 51; a.position[0] = 10.004f;              // same spot
-        Seen b{12, 912, 7, 300, 600, 0}; b.vb = 51; b.position[0] = 10.f; b.position[2] = 0.5f;  // moved a little
-        Seen c{13, 913, 7, 300, 900, 0}; c.vb = 51; c.position[0] = 40.f;               // another tile
+        Seen a{11, 911, 7, 300, 0, 0, {}, {}};   a.key.vb[0] = 51; a.position[0] = 10.004f;              // same spot
+        Seen b{12, 912, 7, 300, 600, 0, {}, {}}; b.key.vb[0] = 51; b.position[0] = 10.f; b.position[2] = 0.5f;  // moved a little
+        Seen c{13, 913, 7, 300, 900, 0, {}, {}}; c.key.vb[0] = 51; c.position[0] = 40.f;               // another tile
         auto why = dropout_watch::attribute({1, 2, 3}, {11, 12, 13}, prev, {a, b, c}, {});
         assert(why.churn_pointer == 3);
         assert(why.place_same == 1 && why.place_near == 1 && why.place_far == 1);
     }
-    std::puts("priming, single departures, return as arrival, synchronous event, threshold, camera motion, dropped fraction, attribution, churn breakdown, churn place");
+
+    // Key-component mask: name every part of the geometry key that differs between the departure and the arrival.
+    {
+        using dropout_watch::Key; using dropout_watch::Ident; using dropout_watch::Seen;
+        Key k;  // zeroed: vb slots 0-3, strides, offsets, ib, ib_format, ib_offset, layout, base_vertex
+        k.vb[0] = 50; k.stride[0] = 28; k.offset[0] = 0;
+        k.vb[1] = 60; k.stride[1] = 16; k.offset[1] = 4096;
+        k.ib = 70; k.ib_format = 42; k.ib_offset = 0; k.layout = 9; k.base_vertex = 0;
+        Ident prev{100, 70, 300, 0, {}}; prev.key = k;
+        Seen now{11, 911, 70, 300, 0, 0, {}, {}};
+        now.key = k;                                          // identical inputs: nothing has moved
+        auto m0 = dropout_watch::key_diff(prev.key, now.key);
+        assert(m0 == 0);                                     // identical: nothing moved
+        now.key.vb[1] = 61; now.key.offset[1] = 8192;
+        auto m1 = dropout_watch::key_diff(prev.key, now.key);
+        assert(dropout_watch::moved(m1, dropout_watch::Component::Vb1Ptr));
+        assert(dropout_watch::moved(m1, dropout_watch::Component::Vb1Offset));
+        assert(!dropout_watch::moved(m1, dropout_watch::Component::Vb1Stride));
+        assert(dropout_watch::component_count(m1) == 2);
+        auto names = dropout_watch::component_names(m1);
+        assert(names == "vb1_ptr vb1_offset");
+        // Slot 3 stride, index-buffer offset and format are separate components too.
+        now.key.stride[3] = 4; now.key.ib_offset = 12; now.key.ib_format = 41;
+        auto m2 = dropout_watch::key_diff(prev.key, now.key);
+        assert(dropout_watch::component_count(m2) == 5);
+        assert(dropout_watch::component_names(m2) == "vb1_ptr vb3_stride vb1_offset ib_offset ib_format");
+        // A churn_pointer match carries the mask and counts each component once.
+        prev.key.vb[1] = 60; prev.key.offset[1] = 4096; prev.key.stride[3] = 0; prev.key.ib_offset = 0; prev.key.ib_format = 42;
+        Seen a2{11, 911, 70, 300, 0, 0, {}}; a2.key = prev.key; a2.key.vb[1] = 61;
+        auto why = dropout_watch::attribute({1}, {11}, {{1, prev}}, {a2}, {});
+        assert(why.churn_pointer == 1 && why.moved_mask == dropout_watch::bit(dropout_watch::Component::Vb1Ptr));
+        assert(why.component[static_cast<unsigned>(dropout_watch::Component::Vb1Ptr)] == 1);
+    }
+    std::puts("priming, single departures, return as arrival, synchronous event, threshold, camera motion, dropped fraction, attribution, churn breakdown, churn place, key mask");
 }
 '''
 

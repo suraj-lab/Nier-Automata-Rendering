@@ -182,13 +182,19 @@ def wine(work):
     # Churn: the same draw re-bound to an identical copy of its vertex buffer every 10 frames. It must be named as
     # churn_pointer with the vertex buffer (and only it) moved, not as a loss.
     _, _, churn_log, _ = tr.run(work, 'churn', {**on, 'NIER_REMIX_LIVE_PRESENCE_MIN': '1', 'MOCK_CHURN_EVERY': '10'})
-    churn = [{k: int(v) for k, v in re.findall(r'([a-z_]+)=(\d+)', l)}
+    churn = [{**{k: int(v) for k, v in re.findall(r'([a-z_]+)=(\d+)', l)},
+              'key_moved': int(re.search(r'key_moved=0x([0-9a-f]+)', l).group(1), 16)}
              for l in churn_log.splitlines() if 'remix: presence_why ' in l]
     swaps = [f for f in churn if f.get('churn_pointer', 0) > 0]
     assert swaps, f'a re-bound vertex buffer was never attributed as churn_pointer: {churn[:4]}'
     assert all(f['moved_vb'] == f['churn_pointer'] and f['moved_offset'] == f['moved_base'] == f['moved_layout'] ==
                f['moved_other'] == 0 for f in swaps), swaps[:3]
     assert all('missing_now' in f and 'arrived_missing' in f for f in churn), churn[:2]
+    # The mask must name the component that moved: the swap changes the slot-0 vertex buffer pointer and nothing else.
+    keys = [re.search(r'key_names=(\S+)', l) for l in churn_log.splitlines() if 'remix: presence_why ' in l]
+    names = {m.group(1) for m in keys if m}
+    assert 'vb0_ptr' in names, f'the re-bound vertex buffer was not named in key_names: {sorted(names)[:5]}'
+    assert any(f['key_moved'] > 0 for f in churn if f.get('churn_pointer', 0) > 0), 'key_moved mask never set'
     # The swapped copy is the same object in the same place.
     assert all(f['place_same'] == f['churn_pointer'] and f['place_far'] == 0 for f in swaps), swaps[:3]
     print('churn sample:', swaps[:2], 'arrived_missing total', sum(f['arrived_missing'] for f in swaps))

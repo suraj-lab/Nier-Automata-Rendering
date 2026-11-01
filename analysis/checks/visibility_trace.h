@@ -65,9 +65,10 @@ struct Event {
   unsigned error = 0;
   float position[3] = {};
   Reason reason = Reason::Data;
-  // Geometry-key components beyond ib/range, so a re-keyed draw can say what moved (dropout_watch::attribute).
-  std::uint64_t vb = 0, layout = 0;
-  unsigned vb_offset = 0;
+  // Every input of the geometry key, so a re-keyed draw can say what moved (dropout_watch::key_diff). Kept as plain
+  // fields so this header stays standalone (test_visibility_trace compiles it alone).
+  std::uint64_t vb[4] = {}, layout = 0;
+  unsigned stride[4] = {}, vb_offset[4] = {}, ib_format = 0, ib_offset = 0;
   int base_vertex = 0;
 };
 

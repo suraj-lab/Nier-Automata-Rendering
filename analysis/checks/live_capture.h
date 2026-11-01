@@ -1106,10 +1106,15 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     trace.event.source = key;
     trace.event.geometry = geometry;
     trace.event.ib = ib_pointer;
-    trace.event.vb = static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(vbs[0]));
-    trace.event.vb_offset = offsets[0];
-    trace.event.base_vertex = base_vertex;
+    trace.event.ib_format = static_cast<unsigned>(ib_format);
+    trace.event.ib_offset = ib_offset;
     trace.event.layout = static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(layout));
+    trace.event.base_vertex = base_vertex;
+    for (unsigned i = 0; i < 4; ++i) {
+        trace.event.vb[i] = static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(vbs[i]));
+        trace.event.stride[i] = strides[i];
+        trace.event.vb_offset[i] = offsets[i];
+    }
 
     D3D11_VIEWPORT viewport{};
     UINT viewports = 1;

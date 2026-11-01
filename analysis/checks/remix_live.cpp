@@ -302,6 +302,18 @@ struct Worker {
     std::uint64_t trace_sequence = 0;
     unsigned trace_frames = 0;
 
+    // The trace event keeps the key inputs as plain fields (it must stay standalone); the watch wants them grouped.
+    static dropout_watch::Key to_key(const visibility_trace::Event& e) {
+        dropout_watch::Key k;
+        k.ib = e.ib;
+        k.ib_format = e.ib_format;
+        k.ib_offset = e.ib_offset;
+        k.layout = e.layout;
+        k.base_vertex = e.base_vertex;
+        for (unsigned i = 0; i < 4; ++i) { k.vb[i] = e.vb[i]; k.stride[i] = e.stride[i]; k.offset[i] = e.vb_offset[i]; }
+        return k;
+    }
+
     void report_visibility(const live_capture::Frame& frame, const visibility_trace::Batch& submitted, const char* work) {
         // Frame-to-frame presence: a key that leaves while nothing else changed is a fault, and a group leaving on one
         // frame is a mechanism. Logged for every sequence (not just under TRACE), because the change-row trace can
@@ -322,7 +334,7 @@ struct Worker {
             capture_now.reserve(frame.visibility.events.size());
             for (const auto& e : frame.visibility.events)
                 capture_now.push_back({e.geometry, e.source, e.ib, e.index_count, e.start_index,
-                                       static_cast<unsigned>(e.reason), e.vb, e.layout, e.vb_offset, e.base_vertex,
+                                       static_cast<unsigned>(e.reason), to_key(e),
                                        {e.position[0], e.position[1], e.position[2]}});
             const dropout_watch::Step w = present_watch.step(now);
             // Your test: did the camera move, and how visible was what left? Both measured against the previous frame.
@@ -370,20 +382,22 @@ struct Worker {
                 logger.load()("remix: presence_why seq=%llu dropped=%zu known=%zu capture_events=%zu submit_other=%u "
                               "churn_occurrence=%u churn_pointer=%u churn_shape=%u absent=%u capture_overflow=%u "
                               "moved_vb=%u moved_offset=%u moved_base=%u moved_layout=%u moved_other=%u "
-                              "arrived_missing=%u missing_now=%zu place_same=%u place_near=%u place_far=%u%s",
+                              "arrived_missing=%u missing_now=%zu place_same=%u place_near=%u place_far=%u "
+                              "key_moved=0x%x key_names=%s%s",
                               static_cast<unsigned long long>(frame.sequence), w.dropped.size(), known,
                               capture_now.size(), why.submit_other,
                               why.churn_occurrence, why.churn_pointer, why.churn_shape, why.absent,
                               frame.visibility.dropped, why.moved_vb, why.moved_offset, why.moved_base,
                               why.moved_layout, why.moved_other, why.arrived_missing, missing.size(),
-                              why.place_same, why.place_near, why.place_far, reasons);
+                              why.place_same, why.place_near, why.place_far, why.moved_mask,
+                              dropout_watch::component_names(why.moved_mask).empty()
+                                  ? "-" : dropout_watch::component_names(why.moved_mask).c_str(), reasons);
             }
             // Identity of every key submitted now, for next frame's attribution.
             previous_ident.clear();
             for (const auto& e : capture_now)
                 if (e.geometry && now.count(e.geometry))
-                    previous_ident[e.geometry] = {e.source, e.ib, e.index_count, e.start_index, e.vb, e.layout,
-                                                  e.vb_offset, e.base_vertex,
+                    previous_ident[e.geometry] = {e.source, e.ib, e.index_count, e.start_index, e.key,
                                                   {e.position[0], e.position[1], e.position[2]}};
         }
         if (!live_capture::visibility_trace_enabled.load(std::memory_order_relaxed) ||
