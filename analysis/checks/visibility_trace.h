@@ -17,6 +17,7 @@ enum class Reason : unsigned {
   // Why a draw the hook saw produced no upload. Without these the trace called every one "accepted" and the
   // capture side looked healthy while 24% of submitted instances had no mesh (live-budgetfix).
   DeferredBudget, DeferredRead, ReadPending, DecodeFailed, Dropped, Unchanged,
+  Effect,  // the game's effects shaders (particles, smoke, distortion): left out of the path-traced scene
   Count
 };
 
@@ -46,6 +47,7 @@ inline const char* reason_name(Reason r) {
     case Reason::DecodeFailed: return "decode_failed";
     case Reason::Dropped: return "dropped";
     case Reason::Unchanged: return "unchanged";
+    case Reason::Effect: return "effect";
     default: return "unknown";
   }
 }

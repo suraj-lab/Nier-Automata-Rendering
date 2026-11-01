@@ -38,10 +38,12 @@ inline void colour_texel(const unsigned char* block, unsigned x, unsigned y, boo
     if (!four && index == 3) rgba[3] = 0.f;
 }
 
-// One level (mip) of `source` -> w*h bytes of channel `channel` (0 = R .. 3 = A), inverted (255 - v) if asked.
+// One level (mip) of `source` -> w*h bytes of channel `channel` (0 = R .. 3 = A), inverted (255 - v) if asked, then
+// raised to at least `floor`. The floor is for roughness: "very smooth" authoring becomes a literal mirror in a path
+// tracer, where raster hid it under specular highlights (FO4-Remix clamps roughness to >= 0.15 for the same reason).
 // False when the source bytes are too short for the level, leaving `out` partly written.
 inline bool extract_level(Source source, const unsigned char* src, std::size_t src_bytes, unsigned w, unsigned h,
-                          unsigned channel, bool invert, unsigned char* out) {
+                          unsigned channel, bool invert, unsigned char* out, unsigned char floor = 0) {
     if (channel > 3 || !w || !h) return false;
     const unsigned bw = (w + 3) / 4, bh = (h + 3) / 4;
     const std::size_t block_bytes = source == Source::Bc1 ? 8 : 16;
@@ -62,7 +64,8 @@ inline bool extract_level(Source source, const unsigned char* src, std::size_t s
                             rgba[3] = normal_octahedral::bc4_texel(block, x, y, false);
                         }
                         const unsigned char v = to_byte(rgba[channel]);
-                        out[static_cast<std::size_t>(py) * w + px] = invert ? static_cast<unsigned char>(255 - v) : v;
+                        const unsigned char r = invert ? static_cast<unsigned char>(255 - v) : v;
+                        out[static_cast<std::size_t>(py) * w + px] = r < floor ? floor : r;
                     }
             }
         return true;
@@ -71,7 +74,8 @@ inline bool extract_level(Source source, const unsigned char* src, std::size_t s
     const unsigned at = source == Source::Bgra8 && channel < 3 ? 2 - channel : channel;  // BGRA: R is byte 2
     for (std::size_t i = 0; i < static_cast<std::size_t>(w) * h; ++i) {
         const unsigned char v = src[4 * i + at];
-        out[i] = invert ? static_cast<unsigned char>(255 - v) : v;
+        const unsigned char r = invert ? static_cast<unsigned char>(255 - v) : v;
+        out[i] = r < floor ? floor : r;
     }
     return true;
 }

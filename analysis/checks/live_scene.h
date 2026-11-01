@@ -103,17 +103,29 @@ inline void add_textures(State& s, const std::vector<live_capture::TextureFile>&
     }
 }
 
-// One material per (texture, normal map, alpha test). Opaque keeps the hash and settings the live path has always used;
-// an alpha-tested one carries the game shader's own comparison and reference (alpha_test.h).
+// One material per (texture, normal map, metallic, roughness, alpha test). Opaque keeps the hash and settings the live
+// path has always used; an alpha-tested one carries the game shader's own comparison and reference (alpha_test.h).
 inline remixapi_MaterialHandle material_for(const remixapi_Interface& api, State& s, std::uint32_t texture,
                                             int alpha_op = 7, std::uint8_t alpha_ref = 0,
-                                            std::uint32_t normal = 0) {
+                                            std::uint32_t normal = 0, std::uint32_t metallic = 0,
+                                            std::uint32_t roughness = 0) {
     if (!texture) return nullptr;
     const bool tested = alpha_op != 7;
     // shortcut: the normal id rides in bits 48-63, so two ids that differ only above 65535 would share a material; a
-    // session that captures more than 65535 textures needs a struct key instead.
-    const std::uint64_t key = texture | (tested ? (std::uint64_t(alpha_op) << 32 | std::uint64_t(alpha_ref) << 40) : 0) |
-                              (std::uint64_t(normal) << 48);
+    // session that captures more than 65535 textures needs a struct key instead. PBR ids are mixed in separately below.
+    std::uint64_t key = texture | (tested ? (std::uint64_t(alpha_op) << 32 | std::uint64_t(alpha_ref) << 40) : 0) |
+                        (std::uint64_t(normal) << 48);
+    const auto path_of = [&s](std::uint32_t id) -> const wchar_t* {
+        return id && id <= s.texture_paths.size() && !s.texture_paths[id - 1].empty() ? s.texture_paths[id - 1].c_str()
+                                                                                     : nullptr;
+    };
+    const wchar_t* metallic_path = path_of(metallic);
+    const wchar_t* roughness_path = path_of(roughness);
+    const bool pbr = metallic_path || roughness_path;
+    // A texture whose file has not landed yet is sent without it, under a key that says so: it becomes its own material
+    // when the file arrives (the arrival rebuilds the mesh, which asks again).
+    const std::uint64_t pbr_key = pbr ? (std::uint64_t(metallic_path ? metallic : 0) << 32 | (roughness_path ? roughness : 0)) : 0;
+    if (pbr) key = key * 0x9e3779b97f4a7c15ull ^ (pbr_key + 0x632be59bd9b4e019ull);
     const auto known = s.materials.find(key);
     if (known != s.materials.end()) return known->second;
     if (texture > s.texture_paths.size() || s.texture_paths[texture - 1].empty()) return nullptr;
@@ -125,13 +137,17 @@ inline remixapi_MaterialHandle material_for(const remixapi_Interface& api, State
     // Alpha-tested live materials: 6000000000 + texture<<16 + op<<8 + ref, clear of every other range.
     // With a normal map: 5000000000 + texture<<32 + normal<<16 + op<<8 + ref, so two draws that share an albedo but
     // differ in normal map (or alpha test) are distinct materials in the runtime, which knows them by hash alone.
-    const std::uint64_t hash = has_normal
+    std::uint64_t hash = has_normal
         ? 5000000000ull + (std::uint64_t(texture) << 32) + (std::uint64_t(normal) << 16) +
               (std::uint64_t(alpha_op) << 8) + alpha_ref
         : tested ? 6000000000ull + (std::uint64_t(texture) << 16) + (std::uint64_t(alpha_op) << 8) + alpha_ref
                  : 3000000ull + texture;
+    // With PBR textures: the top bit set (clear of every range above) and the ids mixed in, so each combination is its
+    // own material in the runtime, which knows materials by hash alone.
+    if (pbr) hash = (1ull << 63) | ((hash * 0x9e3779b97f4a7c15ull ^ (pbr_key * 0xbf58476d1ce4e5b9ull)) >> 1);
     nscn::detail::make_material_info(info, ext, s.texture_paths[texture - 1].c_str(), hash, tested,
-                                     has_normal ? s.texture_paths[normal - 1].c_str() : nullptr);
+                                     has_normal ? s.texture_paths[normal - 1].c_str() : nullptr, roughness_path,
+                                     metallic_path);
     if (tested && alpha_test_enabled) { ext.alphaTestType = alpha_op; ext.alphaReferenceValue = alpha_ref; }
     remixapi_MaterialHandle handle = nullptr;
     if (api.CreateMaterial(&info, &handle) || !handle) return nullptr;
@@ -156,7 +172,8 @@ inline bool build_mesh(const remixapi_Interface& api, State& s, const live_captu
     surface.vertices_count = vertices.size();
     surface.indices_values = upload.indices.data();
     surface.indices_count = upload.indices.size();
-    surface.material = material_for(api, s, upload.texture, upload.alpha_op, upload.alpha_ref, upload.normal);
+    surface.material = material_for(api, s, upload.texture, upload.alpha_op, upload.alpha_ref, upload.normal,
+                                    upload.metallic, upload.roughness);
     remixapi_MeshInfoSkinning skinning{};
     // Skinned (Phase 4): the upload already carries four unpacked indices and three weight floats per slot (plus a
     // 4-float tail), the extents the runtime reads (UPSTREAM_SKINNING_STRIDE.md), so the counts go through as they are.

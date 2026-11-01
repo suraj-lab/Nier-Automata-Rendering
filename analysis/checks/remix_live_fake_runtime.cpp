@@ -79,10 +79,19 @@ remixapi_ErrorCode REMIXAPI_CALL create_material(const remixapi_MaterialInfo* i,
             WideCharToMultiByte(CP_UTF8, 0, i->normalTexture, -1, normal, sizeof normal, nullptr, nullptr);
             if (const char* cut = std::strrchr(normal, '\\')) std::memmove(normal, cut + 1, std::strlen(cut + 1) + 1);
         }
-        note("CreateMaterial path=%s normal=%s presented=%u alpha=%d/%u hash=%llu", slash ? slash + 1 : path,
-             normal[0] ? normal : "-", frames,
+        const auto base_name = [](const wchar_t* w, char* out, int n) {
+            out[0] = 0;
+            if (!w) return;
+            WideCharToMultiByte(CP_UTF8, 0, w, -1, out, n, nullptr, nullptr);
+            if (const char* cut = std::strrchr(out, '\\')) std::memmove(out, cut + 1, std::strlen(cut + 1) + 1);
+        };
+        char rough[MAX_PATH * 3], metal[MAX_PATH * 3];
+        base_name(opaque_ext ? ext->roughnessTexture : nullptr, rough, sizeof rough);
+        base_name(opaque_ext ? ext->metallicTexture : nullptr, metal, sizeof metal);
+        note("CreateMaterial path=%s normal=%s presented=%u alpha=%d/%u hash=%llu roughness=%s metallic=%s",
+             slash ? slash + 1 : path, normal[0] ? normal : "-", frames,
              opaque_ext ? ext->alphaTestType : -1, opaque_ext ? unsigned(ext->alphaReferenceValue) : 0u,
-             static_cast<unsigned long long>(i->hash));
+             static_cast<unsigned long long>(i->hash), rough[0] ? rough : "-", metal[0] ? metal : "-");
     }
     *h = reinterpret_cast<remixapi_MaterialHandle>(handle++); return REMIXAPI_ERROR_CODE_SUCCESS;
 }

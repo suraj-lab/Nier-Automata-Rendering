@@ -67,7 +67,12 @@ int main() {
     assert(extract_level(Source::Rgba8, px, 8, 2, 1, 0, false, out) && out[0] == 10 && out[1] == 50);
     assert(extract_level(Source::Bgra8, px, 8, 2, 1, 0, false, out) && out[0] == 30 && out[1] == 70);
     assert(extract_level(Source::Bgra8, px, 8, 2, 1, 1, true, out) && out[0] == 235 && out[1] == 195);
-    std::puts("BC1 4/3-colour, BC3 alpha + forced 4-colour, inversion, edge blocks, short input, RGBA8/BGRA8");
+    // Roughness floor, applied after inversion: gloss 255 -> roughness 0 -> raised to the floor; others untouched.
+    bc1(b, 0xF800, 0x07E0, 0b11100100);
+    assert(extract_level(Source::Bc1, b, 8, 4, 4, 1, true, out, 38));
+    assert(out[0] == 255 && out[1] == 38 && out[2] == 170 && out[3] == 85);
+    assert(extract_level(Source::Rgba8, px, 8, 2, 1, 3, true, out, 200) && out[0] == 215 && out[1] == 200);
+    std::puts("BC1 4/3-colour, BC3 alpha + forced 4-colour, inversion, edge blocks, short input, RGBA8/BGRA8, floor");
     return 0;
 }
 '''

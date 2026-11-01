@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
-"""Live normal-map gate: a material gets the normal map its draw actually binds, at slot 4.
+"""Live material gate: each material input comes from the slot the draw's own pixel shader uses for it.
 
-The game's shaders name their inputs (605 shaders parsed from an F9 capture): slot 0 is `g_ColorTexture`,
-slot 4 is `g_NormalTexture` (153 shaders), slot 17 `g_AO_Texture`. Until now the live path sent albedo only and
-a `roughnessConstant` of 0.6 for everything, which under path tracing is a uniformly rough flat surface, so metal
-and cloth lost their shape. Geom is per-material, so the extra texture costs one readback per new resource, and
-`NIER_REMIX_LIVE_NORMAL` keeps it off until it has been looked at on screen.
+analysis/PBR_MAPPING.md: NieR's world shaders read albedo, a mask (R metal, G gloss), a normal map (slot 3 in the main
+variants) and a 2-channel *detail* normal (slot 4); the effects shaders call slot 4 g_NormalTexture. The live path used
+to send slot 4 as the normal map for every draw. Now material_roles.h reads the roles from the shader's disassembly.
 
-What this pins:
-  - flag off: no normal is sent, and the albedo capture is untouched (byte-identical DDS, one texture);
-  - flag on: the draw's slot-4 texture is captured as its own DDS (the mock's BC5 bytes, all 64 of them), the
-    material names it, and the albedo is still the slot-0 texture, not the normal map;
-  - the normal map is captured once per resource, not once per frame.
+What this pins (Wine mock, fake runtime):
+  - a shader with no traceable roles gets no normal map and no PBR textures, even with a BC5 bound at slot 4;
+  - a NieR-like shader (MOCK_PBR_PS) gets metallic = mask R and roughness = max(1 - mask G, floor) as R8 DDS files,
+    named by its material; the floor defaults to 0.15 (NIER_REMIX_LIVE_ROUGHNESS_FLOOR=0 removes it);
+  - with NIER_REMIX_LIVE_NORMAL=1 its normal map is the slot-3 texture (4x4, converted to octahedral), never the
+    slot-4 detail map (8x8 BC5); NIER_REMIX_LIVE_PBR=0 sends no metallic/roughness.
 """
 import json
 import os
@@ -31,7 +30,7 @@ import test_nscn_scene as ts
 
 tr.ENV_KEYS = tuple(tr.ENV_KEYS) + ('NIER_REMIX_LIVE', 'NIER_REMIX_LIVE_TEX', 'MOCK_NORMAL_TEX',
                                     'NIER_REMIX_LIVE_NORMAL', 'NIER_REMIX_LIVE_NORMAL_RAW', 'FAKE_REMIX_INSTANCE_LOG',
-                                    'MOCK_CAMERA')
+                                    'MOCK_CAMERA', 'MOCK_PBR_PS', 'NIER_REMIX_LIVE_PBR', 'NIER_REMIX_LIVE_ROUGHNESS_FLOOR')
 
 BC5 = bytes((i * 19 + 5) & 0xff for i in range(2 * 2 * 16))  # the mock's 8x8 BC5 normal map
 RGBA4 = bytes((i * 7 + 3) & 0xff for i in range(4 * 4 * 4))  # the mock's 4x4 albedo
@@ -57,72 +56,69 @@ def main():
     (scene / 'scene_textures').mkdir(parents=True)
     (scene / 'scene.bin').write_bytes(ts.scene_bytes(ts.CAMERA, ts.DRAWS, ts.TEXTURES, ts.TRIS))
 
-    def run(name, flag):
+    def run(name, extra):
         tex = work / f'tex-{name}'
         tex.mkdir()
         env = {'MOCK_NORMAL_TEX': '1', 'MOCK_CAMERA': 'live-skinned', 'MOCK_FRAME_MS': '60',
                'NIER_REMIX': '1', 'NIER_REMIX_RUNTIME': tr.win(work / 'fake_remix.dll'),
                'NIER_REMIX_SCENE': tr.win(scene / 'scene.bin'), 'NIER_REMIX_LIVE': '1',
-               'NIER_REMIX_LIVE_TEX': tr.win(tex), 'FAKE_REMIX_INSTANCE_LOG': '1'}
-        if name == 'on-raw':
-            env['NIER_REMIX_LIVE_NORMAL_RAW'] = '1'
-        if flag is not None:
-            env['NIER_REMIX_LIVE_NORMAL'] = flag
+               'NIER_REMIX_LIVE_TEX': tr.win(tex), 'FAKE_REMIX_INSTANCE_LOG': '1', **extra}
         _, result, log, fake = tr.run(work, name, env)
         assert fake and 'VIOLATION' not in fake, fake
         mats = [line for line in fake.splitlines() if line.startswith('CreateMaterial ')]
         assert mats, fake[-800:]
-        return tex, result, fake, mats
+        files = {f['name']: f for f in (dds(p) for p in sorted(tex.glob('*.dds')))}
+        return files, mats
+
+    def field(line, key):
+        return line.split(f'{key}=')[1].split()[0]
 
     results = {}
-    tex_off, r_off, fake_off, mats_off = run('off', None)
-    files_off = [dds(p) for p in sorted(tex_off.glob('*.dds'))]
-    assert len(files_off) == 1, [f['name'] for f in files_off]
-    assert all('normal=-' in line for line in mats_off), mats_off[:2]
-    # The world draw's albedo is the mock's slot-0 texture: 4x4 RGBA (pass 1) or 8x8 BC1 (pass 2), never the BC5 map.
-    assert files_off[0]['format'] in (28, 71) and files_off[0]['payload'] in (RGBA4, BC1), \
-        (files_off[0]['name'], files_off[0]['format'], len(files_off[0]['payload']))
-    results['off'] = 'Flag off: albedo only, unchanged bytes, no normal in the material.'
+    # 1. No traceable roles: albedo only, whatever slot 4 holds.
+    files, mats = run('plain', {'NIER_REMIX_LIVE_NORMAL': '1'})
+    assert len(files) == 1 and next(iter(files.values()))['payload'] in (RGBA4, BC1), list(files)
+    assert all(field(m, 'normal') == '-' and field(m, 'roughness') == '-' and field(m, 'metallic') == '-' for m in mats), mats[:2]
+    results['plain'] = 'untraced shader: albedo only; the BC5 at slot 4 is not taken as a normal map'
 
-    tex_on, r_on, fake_on, mats_on = run('on', '1')
-    files_on = sorted((dds(p) for p in tex_on.glob('*.dds')), key=lambda f: f['name'])
-    assert len(files_on) == 2, [f['name'] for f in files_on]
-    # The normal is converted for Remix's unsigned-octahedral decode, so it is no longer the game's BC5 bytes: it is
-    # RGBA8. The albedo must still be the game's own slot-0 texture, byte for byte.
-    albedo = [f for f in files_on if f['format'] in (28, 71) and f['payload'] in (RGBA4, BC1)]
-    normal = [f for f in files_on if f['format'] == 28 and f['payload'] not in (RGBA4, BC1)]
-    assert len(albedo) == 1 and len(normal) == 1, [(f['name'], f['format']) for f in files_on]
-    assert (normal[0]['width'], normal[0]['height']) == (8, 8), normal[0]
-    assert len(normal[0]['payload']) == 8 * 8 * 4, len(normal[0]['payload'])
-    # Every texel must decode inside the outward hemisphere: |t.x|+|t.y| <= 1, i.e. z >= 0 before normalizing.
-    assert normal[0]['payload'][2] == 0 and normal[0]['payload'][3] == 255, 'converted texels carry 0/255 in B/A'
-    zs = []
-    for i in range(8 * 8):
-        r_, g_ = normal[0]['payload'][i * 4], normal[0]['payload'][i * 4 + 1]
-        a, b = r_ / 255.0 * 2 - 1, g_ / 255.0 * 2 - 1
-        tx, ty = (a + b) * 0.5, (a - b) * 0.5
-        zs.append(1.0 - abs(tx) - abs(ty))
-    assert min(zs) > -1e-6, ('sample outside the hemisphere', min(zs))
-    assert len(set(zs)) > 1, 'the whole normal map converted to one value'
-    # Raw mode still sends the game's bytes, which is what makes one live A/B possible without a rebuild.
-    tex_raw, _, fake_raw, mats_raw = run('on-raw', '1')
-    if os.environ.get('MOCK_NORMAL_RAW_OK') != '0':
-        raws = [dds(p) for p in tex_raw.glob('*.dds')]
-        assert any(f['format'] == 83 for f in raws), [(f['name'], f['format']) for f in raws]
-    wanted = [line for line in mats_on if f"normal={normal[0]['name']}" in line]
-    assert wanted, mats_on[:3]
-    for line in wanted:
-        assert 'path=live_' in line and 'normal=live_' in line, line
-        assert f"path={normal[0]['name']}" not in line, f'the normal map was used as the albedo: {line}'
-    # Captured once per resource: no run has more DDS files than distinct ids it asked for.
-    assert len({line.split('hash=')[-1] for line in mats_on}) == 1, mats_on[:3]
-    results['on'] = 'Flag on: slot-4 texture captured once, converted to octahedral RGBA8, named as the material normal.'
-    results['raw'] = 'NIER_REMIX_LIVE_NORMAL_RAW=1 still ships the game bytes (BC5), for the Y-handedness A/B.'
-    results['cost'] = 'One extra readback + file per new normal resource; reuses the texture cache and budget.'
+    # 2. NieR-like shader, normals off: metallic and roughness from the mask, as R8, named by the material.
+    files, mats = run('pbr', {'MOCK_PBR_PS': '1'})
+    named = [m for m in mats if field(m, 'roughness') != '-']
+    assert named, f'no material got PBR textures (shader roles not traced?): {mats[:2]}'
+    for m in named:
+        rough, metal = files[field(m, 'roughness')], files[field(m, 'metallic')]
+        assert rough['format'] == 61 and metal['format'] == 61, (rough['format'], metal['format'])   # R8_UNORM
+        assert (rough['width'], rough['height']) == (4, 4), rough
+        assert rough['payload'][:16] == bytes([38] * 16), ('roughness = max(255 - 230, floor 38)', rough['payload'][:16])
+        assert metal['payload'][:16] == bytes([200] * 16), ('metallic = mask R', metal['payload'][:16])
+        assert field(m, 'normal') == '-', m
+        assert field(m, 'path') not in (field(m, 'roughness'), field(m, 'metallic')), m
+    results['pbr'] = 'mask R -> metallic R8 (200), 1 - mask G -> roughness R8 (25 -> floor 38), named by the material'
+
+    # 3. Normals on: the slot-3 map (4x4 RGBA8, converted), never the slot-4 detail map (8x8 BC5).
+    files, mats = run('pbr-normal', {'MOCK_PBR_PS': '1', 'NIER_REMIX_LIVE_NORMAL': '1'})
+    named = [m for m in mats if field(m, 'normal') != '-']
+    assert named, f'no normal map sent for a shader that decodes one: {mats[:2]}'
+    for m in named:
+        n = files[field(m, 'normal')]
+        assert (n['width'], n['height'], n['format']) == (4, 4, 28), ('normal must be the slot-3 4x4 map', n['name'], n['width'], n['format'])
+        assert n['payload'][2] == 0 and n['payload'][3] == 255, 'converted texels carry 0/255 in B/A'
+    assert not any((f['width'], f['height']) == (8, 8) and f['format'] in (28, 83) for f in files.values()), \
+        [(f['name'], f['width'], f['format']) for f in files.values()]
+    results['normal'] = 'normal map from slot 3 (octahedral RGBA8 4x4); the slot-4 detail BC5 is never captured'
+
+    # 4. No floor: roughness is exactly 255 - gloss.
+    files, mats = run('pbr-nofloor', {'MOCK_PBR_PS': '1', 'NIER_REMIX_LIVE_ROUGHNESS_FLOOR': '0'})
+    m = next(m for m in mats if field(m, 'roughness') != '-')
+    assert files[field(m, 'roughness')]['payload'][:16] == bytes([25] * 16), files[field(m, 'roughness')]['payload'][:16]
+    results['floor'] = 'NIER_REMIX_LIVE_ROUGHNESS_FLOOR=0 gives 255 - 230 = 25 exactly'
+
+    # 5. PBR off: constants only.
+    files, mats = run('pbr-disabled', {'MOCK_PBR_PS': '1', 'NIER_REMIX_LIVE_PBR': '0'})
+    assert all(field(m, 'roughness') == '-' and field(m, 'metallic') == '-' for m in mats), mats[:2]
+    results['disabled'] = 'NIER_REMIX_LIVE_PBR=0: no metallic/roughness textures'
     print(json.dumps({'passed': True, 'work': str(work), 'checks': results,
-                      'dds': [f['name'] for f in files_on],
-                      'limits': 'Software mock in Wine/llvmpipe: proves plumbing, conversion shape and albedo '
-                                'identity, not how the normals look live. The Y direction still needs one live look.'}, indent=2))
+                      'limits': 'Wine mock: proves the slot choice, channel extraction and plumbing, not how it looks live.'},
+                     indent=2))
 
 
 def outside():

@@ -28,6 +28,7 @@
 #include "texture_capture.h"
 #include "shader_capture.h"
 #include "alpha_test.h"
+#include "material_roles.h"
 
 namespace live_capture {
 
@@ -464,7 +465,10 @@ inline void forget(const std::vector<std::uint64_t>& keys) {
 }
 
 struct TextureEntry { std::uint32_t id = 0; std::uint64_t used_frame = 0; };  // id 0 = not capturable, do not retry
-inline std::map<ID3D11Resource*, TextureEntry>& texture_ids() { static std::map<ID3D11Resource*, TextureEntry> m; return m; }
+// Keyed by (resource, kind): one mask yields a metallic and a roughness texture. Kind 0 colour, 1 normal map,
+// 2 + 2 * channel + invert one mask channel.
+using TextureKey = std::pair<ID3D11Resource*, unsigned>;
+inline std::map<TextureKey, TextureEntry>& texture_ids() { static std::map<TextureKey, TextureEntry> m; return m; }
 inline std::uint32_t next_texture_id = 1;
 inline std::wstring texture_dir;
 inline std::vector<TextureFile>& all_textures() { static std::vector<TextureFile> t; return t; }
@@ -491,9 +495,14 @@ inline void publish_ui() {
     ui_draw_count.store(static_cast<unsigned>(ready.draws.size()), std::memory_order_release);
 }  // the slot-20 light array is frame-level data: read at most once per frame
 inline unsigned textures_per_frame = 4;  // NIER_REMIX_LIVE_TEX_PER_FRAME (0 = none this frame): each new texture is a GPU readback + a file write on this thread
-// NIER_REMIX_LIVE_NORMAL: also capture the texture at PS slot 4 as the material's normal map. The game's own shaders
-// name their inputs: slot 0 g_ColorTexture, slot 4 g_NormalTexture (153 of 605 shaders read it). Off until looked at.
+// NIER_REMIX_LIVE_NORMAL: also capture the material's normal map, at the slot the draw's own pixel shader decodes as one
+// (material_roles.h). It used to be slot 4 for every draw: that is g_NormalTexture of the effects shaders, and the
+// 2-channel *detail* normal of the world materials, whose normal map is slot 3 or 2 (analysis/PBR_MAPPING.md).
 inline bool normal_textures = false;
+// NIER_REMIX_LIVE_PBR (default on): metallic and roughness textures derived from the mask channels the shader reads.
+inline bool pbr_textures = true;
+// NIER_REMIX_LIVE_EFFECTS=1: keep the effects shaders' draws in the scene (default: left out).
+inline bool keep_effects = false;
 // NIER_REMIX_LIVE_GPU_SKIN (Phase 4): a blended skinned draw keeps ONE mesh in bind space and is moved by the frame's
 // CB11 palette, instead of baking every pose into a new mesh (live: pose was 82% of the rebuilds, 2026-10-30). Off by
 // default: the CPU bake stays the shipped path until the A/B on the laptop is green twice (analysis/PHASE4_PLAN.md).
@@ -563,7 +572,7 @@ inline void set_permitted(bool ok) {
         while (!shadows().empty()) erase_shadow(shadows().begin());  // the game's buffers are no longer pinned
         while (!pending_reads().empty()) drop_pending(pending_reads().begin());
         stale_snapshots().clear();
-        for (auto& entry : texture_ids()) entry.first->Release();
+        for (auto& entry : texture_ids()) entry.first.first->Release();
         texture_ids().clear();
         built_versions().clear();
         stale_sources().clear();
@@ -902,7 +911,7 @@ inline void STDMETHODCALLTYPE hooked_copy_region(ID3D11DeviceContext* self, ID3D
 enum class TextureResult { Captured, Unusable, Deferred };
 
 inline TextureResult write_texture(ID3D11Device* device, ID3D11DeviceContext* context, ID3D11Resource* resource,
-                                   std::uint32_t& id, bool normal_slot = false) {
+                                   std::uint32_t& id, bool normal_slot = false, int channel = -1, bool invert = false) {
     if (texture_dir.empty() || texture_bytes_written >= texture_disk_budget) return TextureResult::Unusable;
     const PhaseTimer timer(kPhaseTexture);
     if (textures_this_frame >= textures_per_frame) return TextureResult::Deferred;
@@ -925,7 +934,8 @@ inline TextureResult write_texture(ID3D11Device* device, ID3D11DeviceContext* co
             swprintf(name, 64, L"\\live_%u.dds", assigned);
             const std::wstring path = texture_dir + name;
             texture_bytes_written += pixels.bytes.size();
-            all_textures().push_back(TextureFile{assigned, path, std::make_shared<const texture_capture::Texture>(std::move(pixels)), normal_slot});
+            all_textures().push_back(TextureFile{assigned, path, std::make_shared<const texture_capture::Texture>(std::move(pixels)),
+                                                 normal_slot, channel, invert});
             id = assigned;
             ++next_texture_id;
             result = TextureResult::Captured;
@@ -1023,30 +1033,51 @@ inline DisassembleFn disassembler() {
     }();
     return fn;
 }
-inline std::map<ID3D11PixelShader*, alpha_test::Result>& alpha_tests() {
-    static std::map<ID3D11PixelShader*, alpha_test::Result> m;
+// What the game's own pixel shader says about a draw, read once per shader from its disassembly: the alpha test, which
+// texture channel is albedo / metal / gloss / normal (material_roles.h, analysis/PBR_MAPPING.md), and whether it is an
+// effects shader (declares the effect buffers t27 / t30: particles, smoke, distortion).
+struct PixelInfo { alpha_test::Result alpha; material_roles::Roles roles; bool effect = false; };
+inline std::map<ID3D11PixelShader*, PixelInfo>& pixel_infos() {
+    static std::map<ID3D11PixelShader*, PixelInfo> m;
     return m;
+}
+inline bool declares_effect_buffers(const std::string& text) {
+    std::size_t at = 0;
+    while ((at = text.find("dcl_resource_structured", at)) != std::string::npos) {
+        const std::size_t end = text.find('\n', at);
+        const std::string line = text.substr(at, end == std::string::npos ? std::string::npos : end - at);
+        if (line.find(" t27,") != std::string::npos || line.find(" t30,") != std::string::npos) return true;
+        at += 23;
+    }
+    return false;
 }
 // shortcut: keyed by shader pointer without a reference; a released shader's address reused by another would keep the
 // first one's answer. NieR creates its pixel shaders at load and keeps them; upgrade if live runs show otherwise.
-inline alpha_test::Result pixel_alpha_test(ID3D11DeviceContext* context) {
+inline PixelInfo pixel_info(ID3D11DeviceContext* context) {
     ID3D11PixelShader* ps = nullptr;
     context->PSGetShader(&ps, nullptr, nullptr);
     if (!ps) return {};
-    alpha_test::Result result;
-    const auto known = alpha_tests().find(ps);
-    if (known != alpha_tests().end()) {
+    PixelInfo result;
+    const auto known = pixel_infos().find(ps);
+    if (known != pixel_infos().end()) {
         result = known->second;
     } else {
         std::vector<unsigned char> bytecode;
         ID3DBlob* text = nullptr;
         if (shader_capture::lookup(ps, bytecode) && disassembler() &&
             SUCCEEDED(disassembler()(bytecode.data(), bytecode.size(), 0, nullptr, &text)) && text) {
-            result = alpha_test::parse(std::string(static_cast<const char*>(text->GetBufferPointer()), text->GetBufferSize()));
+            const std::string asm_text(static_cast<const char*>(text->GetBufferPointer()), text->GetBufferSize());
+            result.alpha = alpha_test::parse(asm_text);
+            try {
+                result.roles = material_roles::parse(asm_text);  // never expected to throw; a surprise means no roles
+            } catch (...) {
+                result.roles = {};
+            }
+            result.effect = declares_effect_buffers(asm_text);
         }
         if (text) text->Release();
-        if (alpha_tests().size() > 65536) alpha_tests().clear();  // bounded, like the other caches
-        alpha_tests()[ps] = result;
+        if (pixel_infos().size() > 65536) pixel_infos().clear();  // bounded, like the other caches
+        pixel_infos()[ps] = result;
     }
     ps->Release();
     return result;
@@ -1240,6 +1271,15 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
         }
     }
 
+    // The game's effects shaders (smoke, particles, distortion) reached Remix as solid cutout geometry; they stay out of
+    // the path-traced scene (user decision 2026-11-01). NIER_REMIX_LIVE_EFFECTS=1 keeps them for comparison.
+    const PixelInfo pixel = pixel_info(context);
+    if (pixel.effect && !keep_effects) {
+        trace.event.reason = visibility_trace::Reason::Effect;
+        release_all(vbs, 4, ib, layout);
+        return;
+    }
+
     ID3D11Device* device = nullptr;
     context->GetDevice(&device);
     if (!device) { release_all(vbs, 4, ib, layout); return; }
@@ -1287,20 +1327,25 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     bool rigid = rigid_bone >= 0;
 
     std::uint32_t texture = 0;
-    std::uint32_t normal = 0;
+    std::uint32_t normal = 0, metallic = 0, roughness = 0;
     bool texture_deferred = false;
     {
         // One capture path for both material inputs: the resource cache and the write budget are shared, so a normal map
         // that many draws bind is read back and written once.
-        const auto obtain = [&](ID3D11Resource* resource, std::uint32_t& id, bool normal_slot = false) {
-            const auto known = texture_ids().find(resource);
+        const auto obtain = [&](ID3D11Resource* resource, std::uint32_t& id, unsigned kind = 0) {
+            const TextureKey key{resource, kind};
+            const auto known = texture_ids().find(key);
             if (known != texture_ids().end()) {
                 known->second.used_frame = frame_number;
                 id = known->second.id;
                 return TextureResult::Captured;
             }
             std::uint32_t assigned = 0;
-            const TextureResult result = write_texture(device, context, resource, assigned, normal_slot);
+            // shortcut: metallic and roughness of one mask are read back separately (two readbacks of one texture);
+            // share one readback if texture time shows up in the frame budget.
+            const TextureResult result = write_texture(device, context, resource, assigned, kind == 1,
+                                                       kind >= 2 ? static_cast<int>((kind - 2) / 2) : -1,
+                                                       kind >= 2 && (kind - 2) % 2);
             if (result == TextureResult::Deferred) {
                 auto& waiters = waiting_materials();
                 if (waiters.size() > 65536) waiters.clear();  // bounded, like the other caches
@@ -1309,7 +1354,7 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
                 return result;
             }
             resource->AddRef();  // the key keeps the pointer from being reused while the entry exists
-            texture_ids()[resource] = TextureEntry{assigned, frame_number};
+            texture_ids()[key] = TextureEntry{assigned, frame_number};
             id = assigned;
             if (assigned) {  // the texture has landed: rebuild the meshes that were made without it
                 const auto waiter = waiting_materials().find(resource);
@@ -1326,24 +1371,35 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
         };
         ID3D11ShaderResourceView* views[16] = {};
         context->PSGetShaderResources(0, 16, views);
-        for (unsigned slot = 0; slot < 16; ++slot) {
-            if (!views[slot]) continue;
+        // Each material input from the slot the draw's own pixel shader uses for it (material_roles.h).
+        const material_roles::Roles& roles = pixel.roles;
+        const auto take = [&](int slot, std::uint32_t& id, unsigned kind) {
+            if (slot < 0 || slot >= 16 || !views[slot]) return TextureResult::Unusable;
             ID3D11Resource* resource = nullptr;
             views[slot]->GetResource(&resource);
-            if (resource) {
-                if (!texture && !texture_deferred &&  // first usable PS texture is the material albedo
-                    obtain(resource, texture) == TextureResult::Deferred)
+            if (!resource) return TextureResult::Unusable;
+            const TextureResult r = obtain(resource, id, kind);
+            resource->Release();
+            return r;
+        };
+        if (roles.albedo.slot >= 0) {
+            if (take(roles.albedo.slot, texture, 0) == TextureResult::Deferred) texture_deferred = true;
+        } else {
+            for (int slot = 0; slot < 16 && !texture && !texture_deferred; ++slot)  // untraced shader: first usable texture
+                if (take(slot, texture, 0) == TextureResult::Deferred)
                     texture_deferred = true;  // the texture lands later; this geometry is uploaded without it for now
-                if (normal_textures && slot == 4) obtain(resource, normal, true);  // g_NormalTexture in the game's shaders
-            }
-            if (resource) resource->Release();
         }
+        const auto lane = [](const std::string& c) { return c.empty() ? 0u : static_cast<unsigned>(std::string("xyzw").find(c[0])); };
+        if (normal_textures && roles.normal.slot >= 0) take(roles.normal.slot, normal, 1);
+        if (pbr_textures && roles.metal.slot >= 0) take(roles.metal.slot, metallic, 2 + 2 * lane(roles.metal.channels));
+        if (pbr_textures && roles.gloss.slot >= 0)
+            take(roles.gloss.slot, roughness, 2 + 2 * lane(roles.gloss.channels) + (roles.gloss.invert ? 1 : 0));
         for (unsigned slot = 0; slot < 16; ++slot)
             if (views[slot]) views[slot]->Release();  // GetShaderResources added one reference each
     }
 
     // Alpha test from the game's own pixel shader (foliage, grass cards, decals): NieR discards, it does not blend.
-    const alpha_test::Result alpha = pixel_alpha_test(context);
+    const alpha_test::Result alpha = pixel.alpha;
     if (alpha.discards) ++frame.alpha_tested;
 
     // The game's light arrays (tiled forward): point lights at PS slot 20 (48-byte elements), spot lights at slot 22
@@ -1645,6 +1701,8 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
             upload.geometry = geometry;
             upload.texture = texture;
             upload.normal = normal;
+            upload.metallic = metallic;
+            upload.roughness = roughness;
             upload.skinned = gpu_skinning && skinned && !rigid;  // bind space + per-frame palette, or baked above
             upload.blended = blended;
             upload.sky = sky_extent;

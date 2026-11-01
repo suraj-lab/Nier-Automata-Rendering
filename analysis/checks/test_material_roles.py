@@ -71,8 +71,10 @@ def main():
         (work / f'{name}.asm').write_text(text)
     inputs = [work / 'synth_lit.asm', work / 'synth_effect.asm'] + files
     (work / 'h.cpp').write_text(HARNESS)
+    # The harness includes "material_roles.h": a candidate under another name is copied in under that name.
+    (work / 'material_roles.h').write_text(HEADER.read_text())
     b = subprocess.run(['g++', '-std=c++17', '-O2', '-Wall', '-Wextra', '-Werror', '-fsanitize=address,undefined',
-                        '-I', str(HEADER.parent), str(work / 'h.cpp'), '-o', str(work / 'h')],
+                        '-I', str(work), str(work / 'h.cpp'), '-o', str(work / 'h')],
                        capture_output=True, text=True)
     if b.returncode:
         fail('compile:\n' + b.stderr)

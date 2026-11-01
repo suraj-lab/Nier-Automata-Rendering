@@ -108,7 +108,8 @@ inline std::wstring widen(const std::string& s) {
 
 inline void make_material_info(remixapi_MaterialInfo& info, remixapi_MaterialInfoOpaqueEXT& ext,
                                const wchar_t* path, std::uint64_t hash, bool cutout,
-                               const wchar_t* normal = nullptr) {
+                               const wchar_t* normal = nullptr, const wchar_t* roughness = nullptr,
+                               const wchar_t* metallic = nullptr) {
     info = {};
     ext = {};
     info.sType = REMIXAPI_STRUCT_TYPE_MATERIAL_INFO;
@@ -128,6 +129,9 @@ inline void make_material_info(remixapi_MaterialInfo& info, remixapi_MaterialInf
     ext.opacityConstant = 1.f;
     ext.roughnessConstant = 0.6f;
     ext.metallicConstant = 0.f;
+    // Remix reads both from R of their own textures, roughness as perceptual roughness (analysis/PBR_MAPPING.md).
+    ext.roughnessTexture = roughness;
+    ext.metallicTexture = metallic;
     // NVIDIA's remix.h defaults for an opaque surface: no blending, alpha test kAlways (7). blendType_hasvalue is
     // "blending enabled": it was 1 (type 2, reverse-alpha-emissive), so every surface was see-through by its texture
     // alpha. alphaTestType 0 is kNever.

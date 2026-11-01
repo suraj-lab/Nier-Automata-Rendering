@@ -329,9 +329,26 @@ int wmain(int argc, wchar_t** argv) {
         "Texture2D t : register(t0);\n"
         "float4 main(float4 p : SV_POSITION) : SV_TARGET { float4 c = t.Load(int3(0, 0, 0)); if (c.a < 0.5) discard; return c; }\n";
     const bool mesh_discards = std::getenv("MOCK_CUTOUT_PS") != nullptr;
+    // MOCK_PBR_PS: the scene's pixel shader reads its material the way NieR's lit shaders do (analysis/PBR_MAPPING.md):
+    // albedo t0, mask t2 (R metal, G gloss, A detail weight), normal map t3 (- 0.5), detail normal t4 (x2 - 1), F0 lerp
+    // from 0.03 by the metal channel and a GGX alpha (1 - gloss)^2 floored at 1e-3. Written with mad() because the game's
+    // compiler (FXC) fuses these into mad and Wine's does not: the tracer reads FXC's shape.
+    const char pbr_ps_src[] =
+        "Texture2D t0 : register(t0); Texture2D t2 : register(t2); Texture2D t3 : register(t3); Texture2D t4 : register(t4);\n"
+        "SamplerState s : register(s0);\n"
+        "cbuffer C : register(b0) { float4 tint; float4 light; };\n"
+        "float4 main(float4 p : SV_POSITION) : SV_TARGET {\n"
+        "  float2 uv = p.xy * 0.001;\n"
+        "  float4 albedo = t0.Sample(s, uv); float4 mask = t2.Sample(s, uv);\n"
+        "  float3 n = t3.Sample(s, uv).xyz - 0.5; float2 d = mad(t4.Sample(s, uv).xy, 2, -1); n.xy += d * mask.w;\n"
+        "  float3 F0 = mad(mask.x, albedo.rgb * tint.rgb - 0.03, 0.03);\n"
+        "  float r = 1 - mask.y; float a = max(r * r + light.w, 0.001);\n"
+        "  return float4(F0 * a + normalize(n) * light.xyz, albedo.a);\n"
+        "}\n";
+    const bool mesh_pbr = std::getenv("MOCK_PBR_PS") != nullptr;
     ID3DBlob* ps_blob = nullptr;
-    const char* mesh_ps_src = mesh_discards ? cutout_ps_src : ps_src;
-    const SIZE_T mesh_ps_len = mesh_discards ? sizeof cutout_ps_src - 1 : sizeof ps_src - 1;
+    const char* mesh_ps_src = mesh_pbr ? pbr_ps_src : mesh_discards ? cutout_ps_src : ps_src;
+    const SIZE_T mesh_ps_len = mesh_pbr ? sizeof pbr_ps_src - 1 : mesh_discards ? sizeof cutout_ps_src - 1 : sizeof ps_src - 1;
     if (!compile || FAILED(compile(mesh_ps_src, mesh_ps_len, "ps", nullptr, nullptr, "main", "ps_4_0", 0, 0, &ps_blob, nullptr)))
         { std::fprintf(out, "FAIL mesh ps\n"); return 3; }
     ID3D11PixelShader* mesh_ps = nullptr;
@@ -421,6 +438,16 @@ int wmain(int argc, wchar_t** argv) {
     for (unsigned i = 0; i < sizeof bc5; ++i) bc5[i] = static_cast<unsigned char>((i * 19 + 5) & 0xff);
     ID3D11ShaderResourceView* normal_srv = normal_tex ? make_srv(8, 8, DXGI_FORMAT_BC5_UNORM, bc5, 32, 0) : nullptr;
     if (normal_tex && !normal_srv) { std::fprintf(out, "FAIL normal texture\n"); return 3; }
+    // MOCK_PBR_PS textures: a 4x4 RGBA8 mask (metal 200, gloss 230, so roughness 25 before the floor) at t2 and a 4x4
+    // RGBA8 normal map at t3, beside the BC5 detail map at t4 (MOCK_NORMAL_TEX), which must NOT become the normal map.
+    unsigned char mask_px[4 * 4 * 4], nrm_px[4 * 4 * 4];
+    for (unsigned i = 0; i < 16; ++i) {
+        mask_px[4 * i] = 200; mask_px[4 * i + 1] = 230; mask_px[4 * i + 2] = 9; mask_px[4 * i + 3] = 255;
+        nrm_px[4 * i] = static_cast<unsigned char>(100 + 8 * i); nrm_px[4 * i + 1] = 140; nrm_px[4 * i + 2] = 240; nrm_px[4 * i + 3] = 255;
+    }
+    ID3D11ShaderResourceView* pbr_srvs[2] = {mesh_pbr ? make_srv(4, 4, DXGI_FORMAT_R8G8B8A8_UNORM, mask_px, 16, 0) : nullptr,
+                                             mesh_pbr ? make_srv(4, 4, DXGI_FORMAT_R8G8B8A8_UNORM, nrm_px, 16, 0) : nullptr};
+    if (mesh_pbr && (!pbr_srvs[0] || !pbr_srvs[1])) { std::fprintf(out, "FAIL pbr textures\n"); return 3; }
     ID3D11ShaderResourceView* mesh_srvs[4] = {
         make_srv(4, 4, DXGI_FORMAT_R8G8B8A8_UNORM, rgba, 16, 0),
         make_srv(16, 16, DXGI_FORMAT_R8G8B8A8_UNORM, nullptr, 0, D3D11_BIND_RENDER_TARGET),
@@ -1039,6 +1066,7 @@ int wmain(int argc, wchar_t** argv) {
                     ID3D11ShaderResourceView* nrm = normal_srv;
                     context->PSSetShaderResources(4, 1, &nrm);
                 }
+                if (mesh_pbr) context->PSSetShaderResources(2, 2, pbr_srvs);  // mask t2, normal map t3 (MOCK_PBR_PS)
                 context->IASetVertexBuffers(0, 1, &live_vb, &sstride, &soff);
                 context->IASetIndexBuffer(live_ib, DXGI_FORMAT_R32_UINT, 0);
                 context->DrawIndexed(192, 0, 0);
@@ -1217,6 +1245,7 @@ int wmain(int argc, wchar_t** argv) {
                     if (live_evict || live_late || live_hud) context->PSSetShaderResources(0, 1, &mesh_srvs[pass == 2 ? 2 : 0]);
                     // MOCK_NORMAL_TEX: slot 4 is the normal map on the world draw (the live path must not treat it as albedo).
                     if (normal_srv) context->PSSetShaderResources(4, 1, &normal_srv);
+                    if (mesh_pbr) context->PSSetShaderResources(2, 2, pbr_srvs);
                     else if (live_evict || live_late || live_hud) { ID3D11ShaderResourceView* none = nullptr; context->PSSetShaderResources(4, 1, &none); }
                     ID3D11Buffer* vb = pass == 2 ? live_vb2 : live_vb;
                     if (churn_vb && churn_every && pass != 2 && (frame / churn_every) % 2) vb = churn_vb;

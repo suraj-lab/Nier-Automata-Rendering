@@ -5,6 +5,7 @@
 // No hooks: only PSGetShaderResources / CopySubresourceRegion / Map on the already-hooked context.
 #include <d3d11.h>
 #include "normal_octahedral.h"
+#include "mask_channels.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -102,6 +103,44 @@ inline bool to_octahedral(Texture& t, bool flip_y) {
         at += need;
     }
     t.format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    t.bytes.swap(out);
+    return true;
+}
+
+// ---- NieR mask channel -> Remix metallic / roughness -----------------------------------------------
+// Remix reads each from R of its own texture (roughness as perceptual roughness), NieR packs both in one mask
+// (analysis/PBR_MAPPING.md). One channel per texture, every level, as R8_UNORM; false (and `t` untouched) for a format
+// the decoder does not know.
+inline bool mask_source(DXGI_FORMAT f, mask_channels::Source& out) {
+    switch (f) {
+        case DXGI_FORMAT_BC1_UNORM: case DXGI_FORMAT_BC1_UNORM_SRGB: out = mask_channels::Source::Bc1; return true;
+        case DXGI_FORMAT_BC3_UNORM: case DXGI_FORMAT_BC3_UNORM_SRGB: out = mask_channels::Source::Bc3; return true;
+        case DXGI_FORMAT_R8G8B8A8_UNORM: case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB: out = mask_channels::Source::Rgba8; return true;
+        case DXGI_FORMAT_B8G8R8A8_UNORM: case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB: out = mask_channels::Source::Bgra8; return true;
+        default: return false;
+    }
+}
+
+inline bool to_channel(Texture& t, unsigned channel, bool invert, unsigned char floor = 0) {
+    mask_channels::Source source;
+    if (!mask_source(t.format, source)) return false;
+    const FormatInfo fi = format_info(t.format);
+    const UINT levels = t.mip_levels ? t.mip_levels : 1;
+    std::vector<unsigned char> out;
+    std::size_t at = 0, src_at = 0;
+    for (UINT m = 0; m < levels; ++m) {
+        const UINT w = std::max(1u, t.width >> m), h = std::max(1u, t.height >> m);
+        const Level g = level_geometry(fi, w, h);
+        const std::size_t src_level = static_cast<std::size_t>(g.row_bytes) * g.rows;
+        if (src_at + src_level > t.bytes.size()) return false;
+        out.resize(at + static_cast<std::size_t>(w) * h);
+        if (!mask_channels::extract_level(source, t.bytes.data() + src_at, src_level, w, h, channel, invert, out.data() + at,
+                                          floor))
+            return false;
+        src_at += src_level;
+        at += static_cast<std::size_t>(w) * h;
+    }
+    t.format = DXGI_FORMAT_R8_UNORM;
     t.bytes.swap(out);
     return true;
 }

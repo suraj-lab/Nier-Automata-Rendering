@@ -27,7 +27,9 @@ struct Upload {
     std::vector<std::uint32_t> bones;  // 4 per vertex, only when skinned
     std::vector<float> weights;        // 4 per vertex, only when skinned
     std::uint32_t texture = 0;         // 0 = no material
-    std::uint32_t normal = 0;          // 0 = none; slot-4 normal map
+    std::uint32_t normal = 0;          // 0 = none; the shader's normal map (material_roles.h)
+    std::uint32_t metallic = 0;        // 0 = none; R = the mask's metal channel
+    std::uint32_t roughness = 0;       // 0 = none; R = 1 - the mask's gloss channel
     bool skinned = false;
     bool blended = false;              // classic alpha blend (src alpha / inv src alpha): foliage, hair, grilles
     bool sky = false;                  // background shell / sky dome: submitted with the SKY category, not as world
@@ -47,7 +49,8 @@ struct Item {                          // one draw call this frame
 // `pixels` set: captured but not yet on disk. The Remix worker writes it before the runtime loads `path`, so the game's
 // thread never waits on the file system (live 2026-10-31: 1.1 s game freezes exactly when new DDS files were created).
 struct TextureFile { std::uint32_t id = 0; std::wstring path; std::shared_ptr<const ::texture_capture::Texture> pixels;
-                    bool normal = false; };
+                    bool normal = false;
+                    int channel = -1; bool invert = false; };  // channel >= 0: one mask channel as R8 (metallic/roughness)
 // One game light (point, PS slot 20, or spot, slot 22): see light_convert.h for the layouts and the Remix conversion.
 using Light = light_convert::Light;
 using Sun = light_convert::Sun;

@@ -50,6 +50,9 @@ unsigned long long stats_every = 300;  // NIER_REMIX_LIVE_STATS_EVERY
 // if the captured camera jumps on exactly those frames, a pass other than the main view supplied it.
 bool camera_log = false;
 bool normal_octahedral = false, normal_flip_y = false;
+bool mask_convert_failed = false;  // logged once
+// NIER_REMIX_LIVE_ROUGHNESS_FLOOR (0..1, default 0.15): lowest roughness sent, so near-mirror gloss stays a surface.
+unsigned char roughness_floor = 38;
 unsigned long long hold_toggle_us = 0;  // NIER_REMIX_LIVE_HOLD_TOGGLE_S
 unsigned long long drive_min_instances = 100;  // submitted instances that mean a world is loaded (drive start)
 std::size_t presence_min = 8;  // keys that must move on one frame for a presence line (NIER_REMIX_LIVE_PRESENCE_MIN)  // NIER_REMIX_LIVE_NORMAL: convert vs raw, and Y handedness
@@ -172,6 +175,12 @@ State configure() {
         live_capture::sky_enabled = env(L"NIER_REMIX_LIVE_NO_SKY") != L"1";
         // NIER_REMIX_LIVE_NORMAL=1: capture the draw's slot-4 g_NormalTexture as the material's normal map too.
         live_capture::normal_textures = env(L"NIER_REMIX_LIVE_NORMAL") == L"1";
+        live_capture::pbr_textures = env(L"NIER_REMIX_LIVE_PBR") != L"0";
+        if (const std::wstring f = env(L"NIER_REMIX_LIVE_ROUGHNESS_FLOOR"); !f.empty()) {
+            const double v = std::wcstod(f.c_str(), nullptr);
+            roughness_floor = static_cast<unsigned char>(v <= 0 ? 0 : v >= 1 ? 255 : v * 255.0 + 0.5);
+        }
+        live_capture::keep_effects = env(L"NIER_REMIX_LIVE_EFFECTS") == L"1";
         // NieR stores tangent-space X,Y with no Z, while Remix decodes unsigned octahedral; converting on the worker keeps
         // the game thread's work unchanged. RAW keeps the old bytes for an A/B, FLIP_Y settles the handedness on screen.
         normal_octahedral = live_capture::normal_textures && env(L"NIER_REMIX_LIVE_NORMAL_RAW") != L"1";
@@ -626,6 +635,23 @@ struct Worker {
                 if (!file.pixels) continue;
                 if (tex_write_delay_ms) Sleep(tex_write_delay_ms);  // test switch: a slow disk must not stall the game
                 std::shared_ptr<const texture_capture::Texture> pixels = file.pixels;
+                if (file.channel >= 0) {
+                    // One mask channel as R8 for Remix's metallic / roughness; a mask format the decoder does not know is
+                    // not written at all, so the material falls back to its constants instead of reading colour as metal.
+                    auto converted = std::make_shared<texture_capture::Texture>(*pixels);
+                    // The floor only for roughness (the inverted gloss channel); metalness keeps its values.
+                    if (!texture_capture::to_channel(*converted, static_cast<unsigned>(file.channel), file.invert,
+                                                     file.invert ? roughness_floor : 0)) {
+                        if (!mask_convert_failed) {
+                            mask_convert_failed = true;
+                            logger.load()("remix: live mask texture format %u not converted; constants used",
+                                          static_cast<unsigned>(pixels->format));
+                        }
+                        file.pixels.reset();
+                        continue;
+                    }
+                    pixels = converted;
+                }
                 if (file.normal && normal_octahedral) {
                     // Converted per texture, on this thread: the game's mip chain is preserved level by level.
                     auto converted = std::make_shared<texture_capture::Texture>(*pixels);
