@@ -174,6 +174,9 @@ $a=New-ScheduledTaskAction -Execute 'cmd.exe' -Argument ('/c "'+$cmd+'"')
 $pr=New-ScheduledTaskPrincipal -UserId (whoami) -LogonType Interactive -RunLevel Limited
 $settings=New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 10)
 Register-ScheduledTask -TaskName NieRPort -Action $a -Principal $pr -Settings $settings -Force | Out-Null
+# Power source and plan: Remix fps in one view varied 11-18 between runs with nothing else in the logs differing.
+$power={{ $b=Get-CimInstance Win32_Battery -ErrorAction SilentlyContinue | Select-Object -First 1; $s=(powercfg /getactivescheme) -join ' '; [ordered]@{{battery_status=if ($b) {{ [int]$b.BatteryStatus }} else {{ -1 }}; charge=if ($b) {{ [int]$b.EstimatedChargeRemaining }} else {{ -1 }}; scheme=$s}} }}
+$powerStart=& $power
 $start=Get-Date; Start-ScheduledTask NieRPort; Start-Sleep 5
 $taskResult=(Get-ScheduledTaskInfo NieRPort).LastTaskResult
 Unregister-ScheduledTask NieRPort -Confirm:$false
@@ -181,6 +184,7 @@ Start-Sleep {20 if steam else 0}  # Steam needs a moment to hand the launch to t
 $seen=@(); $t=[Diagnostics.Stopwatch]::StartNew()
 while ($t.Elapsed.TotalSeconds -lt {seconds}) {{ $p=Get-Process NieRAutomata -ErrorAction SilentlyContinue; if ($p) {{ $seen+=$p.Id }}; Start-Sleep 2 }}
 $alive=Get-Process NieRAutomata -ErrorAction SilentlyContinue
+$powerEnd=& $power
 $ids=@($seen | Sort-Object -Unique)
 if ($alive) {{ $alive | Stop-Process -Force; Start-Sleep 3 }}
 if (Test-Path -LiteralPath "$ec.off") {{ Rename-Item -LiteralPath "$ec.off" -NewName 'ec_hooks.dll' }}
@@ -189,7 +193,7 @@ if (Test-Path -LiteralPath $rlog) {{ Copy-Item -LiteralPath $rlog -Destination '
 $text=if (Test-Path -LiteralPath $log) {{ $b=[IO.File]::ReadAllBytes($log); [Text.Encoding]::UTF8.GetString($b, $before, $b.Length-$before) }} else {{ '' }}
 $dumps=@(Get-ChildItem -LiteralPath (Join-Path $env:LOCALAPPDATA 'CrashDumps') -Filter '*.dmp' -ErrorAction SilentlyContinue | Where-Object {{ $_.LastWriteTime -gt $start }} | ForEach-Object {{ $_.Name + ' ' + $_.Length }})
 $wer=@($dumps)  # bounded: the previous Get-WinEvent query scanned the whole Application log and cost minutes per run
-[ordered]@{{label='{label}'; remix=${str(remix).lower()}; draw_probe=${str(draw_probe).lower()}; rehook=${str(rehook).lower()}; runtime='{runtime or ""}'; pids=$ids; task_result=$taskResult; alive_at_end=[bool]$alive; log=$text; crash=@($wer)}} | ConvertTo-Json -Depth 3 -Compress''', timeout=seconds + 240))
+[ordered]@{{label='{label}'; remix=${str(remix).lower()}; draw_probe=${str(draw_probe).lower()}; rehook=${str(rehook).lower()}; runtime='{runtime or ""}'; pids=$ids; task_result=$taskResult; alive_at_end=[bool]$alive; power_start=$powerStart; power_end=$powerEnd; log=$text; crash=@($wer)}} | ConvertTo-Json -Depth 3 -Compress''', timeout=seconds + 240))
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / f'{label}-{stamp}.json').write_text(json.dumps(receipt, indent=2) + '\n')
     if remix:  # the runtime's own log: DLSS/RR/FG state and the effective RTX options live only there

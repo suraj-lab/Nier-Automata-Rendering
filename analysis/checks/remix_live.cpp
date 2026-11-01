@@ -50,6 +50,7 @@ unsigned long long stats_every = 300;  // NIER_REMIX_LIVE_STATS_EVERY
 // if the captured camera jumps on exactly those frames, a pass other than the main view supplied it.
 bool camera_log = false;
 bool normal_octahedral = false, normal_flip_y = false;
+unsigned long long hold_toggle_us = 0;  // NIER_REMIX_LIVE_HOLD_TOGGLE_S
 unsigned long long drive_min_instances = 100;  // submitted instances that mean a world is loaded (drive start)
 std::size_t presence_min = 8;  // keys that must move on one frame for a presence line (NIER_REMIX_LIVE_PRESENCE_MIN)  // NIER_REMIX_LIVE_NORMAL: convert vs raw, and Y handedness
 
@@ -213,6 +214,10 @@ State configure() {
         // NIER_REMIX_LIVE_NO_ALPHA_TEST=1: the renderer-side A/B, since the capture side is measured healthy.
         live_scene::alpha_test_enabled = env(L"NIER_REMIX_LIVE_NO_ALPHA_TEST") != L"1";
         live_scene::hold_enabled = env(L"NIER_REMIX_LIVE_HOLD") != L"0";
+        // Test switch: flip the hold every N seconds, so its cost is measured in one view under one machine state
+        // (between runs, Remix fps in the same view varied 11-18 with and without the hold).
+        if (const std::wstring s = env(L"NIER_REMIX_LIVE_HOLD_TOGGLE_S"); !s.empty())
+            hold_toggle_us = 1000000ull * std::min<unsigned long long>(_wcstoui64(s.c_str(), nullptr, 10), 3600);
         live_capture::visibility_trace_enabled.store(env(L"NIER_REMIX_LIVE_TRACE") == L"1", std::memory_order_release);
         if (const std::wstring n = env(L"NIER_REMIX_LIVE_STATS_EVERY"); !n.empty())
             if (const unsigned long long v = _wcstoui64(n.c_str(), nullptr, 10); v >= 2) stats_every = std::min<unsigned long long>(v, 100000);  // % 1 never == 1
@@ -412,7 +417,7 @@ struct Worker {
                               "capture accepted=%u unchanged=%u pass=%u prepass=%u small=%u read_pending=%u "
                               "deferred_budget=%u decode_failed=%u | queue inst=%llu missing_inst=%llu first=%llu "
                               "first_us=%llu budget_us=%llu game_frames=%llu phase=%d | gaps returned=%u gap1=%llu gap2=%llu gap3=%llu "
-                              "gap4_8=%llu gap9_30=%llu gone=%llu held=%llu",
+                              "gap4_8=%llu gap9_30=%llu gone=%llu held=%llu hold=%d",
                               static_cast<unsigned long long>(frame.sequence), w.present, w.dropped.size(),
                               w.appeared.size(), cam_motion.moved, cam_motion.turned_deg, cam_motion.valid ? 1 : 0,
                               dropped_frac, keys + (keys[0] ? 1 : 0),
@@ -429,7 +434,7 @@ struct Worker {
                               live_capture::first_sight_us_total.load(), live_capture::budget_us_last.load(),
                               live_capture::game_frames_total.load(), input_drive::current().phase,
                               gaps.returned_now, gaps.bucket[0], gaps.bucket[1], gaps.bucket[2], gaps.bucket[3],
-                              gaps.bucket[4], gaps.bucket[5], live.frame_held);
+                              gaps.bucket[4], gaps.bucket[5], live.frame_held, live_scene::hold_enabled ? 1 : 0);
                 (void)name;
                 const dropout_watch::Why why =
                     dropout_watch::attribute(w.dropped, w.appeared, previous_ident, capture_now, submit_other, &missing);
@@ -698,6 +703,7 @@ struct Worker {
                 }
                 stage("submit");
                 const unsigned long long s0 = live_capture::now_us();
+                if (hold_toggle_us) live_scene::hold_enabled = (input_drive::now_us() / hold_toggle_us) % 2 == 0;
                 if (const remixapi_ErrorCode r = live_scene::submit(api, frame, live, scene.camera, aspect, trace,
                                                                 static_cast<float>(width), static_cast<float>(height))) {
                     report_visibility(frame, submitted, "submit_failed"); fail("live submit", r); return false;

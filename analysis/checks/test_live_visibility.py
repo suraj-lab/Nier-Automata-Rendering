@@ -20,7 +20,7 @@ OUT = A / 'runtime/live-visibility'
 tr.ENV_KEYS = tuple(tr.ENV_KEYS) + ('NIER_REMIX_LIVE', 'NIER_REMIX_LIVE_TEX', 'NIER_REMIX_LIVE_BUDGET',
                                   'NIER_REMIX_LIVE_TRACE', 'FAKE_REMIX_INSTANCE_LOG', 'NIER_REMIX_LIVE_PRESENCE_MIN',
                                   'NIER_REMIX_LIVE_DRIVE', 'MOCK_CHURN_EVERY', 'MOCK_CHURN_SLOT2', 'NIER_REMIX_LIVE_HOLD',
-                                  'NIER_REMIX_LIVE_DRIVE_MIN_INSTANCES')
+                                  'NIER_REMIX_LIVE_DRIVE_MIN_INSTANCES', 'NIER_REMIX_LIVE_HOLD_TOGGLE_S')
 NATIVE = tls.HARNESS.replace('int main() {', 'int original_scene_gate() {') + r'''
 #include <cassert>
 static remixapi_ErrorCode REMIXAPI_CALL reject_instance(const remixapi_InstanceInfo*) {
@@ -121,6 +121,13 @@ def wine(work):
     assert longest <= 2, f'an item was held for {longest} frames in a row: {held[:60]}'  # 2: two keys may leave on adjacent frames
     _, _, unheld_log, _ = tr.run(work, 'hold-off', {**on, 'NIER_REMIX_LIVE_PRESENCE_MIN': '0'})
     assert all(int(m.group(1)) == 0 for m in re.finditer(r'held=(\d+)', unheld_log)), 'held with NIER_REMIX_LIVE_HOLD=0'
+    assert all(m.group(1) == '0' for m in re.finditer(r' hold=(\d)', unheld_log)), 'hold state misreported when off'
+    assert all(m.group(1) == '1' for m in re.finditer(r' hold=(\d)', hold_log)), 'hold state misreported when on'
+    # Toggle (test switch): the hold must really alternate within one run, and be reported per frame.
+    _, _, toggle_log, _ = tr.run(work, 'hold-toggle', {**on, 'NIER_REMIX_LIVE_HOLD': '1', 'NIER_REMIX_LIVE_PRESENCE_MIN': '0',
+                                                       'NIER_REMIX_LIVE_HOLD_TOGGLE_S': '1'})
+    states = [m.group(1) for m in re.finditer(r' hold=(\d)', toggle_log)]
+    assert '0' in states and '1' in states, f'NIER_REMIX_LIVE_HOLD_TOGGLE_S did not alternate the hold: {sorted(set(states))}'
     print('hold: frames with a held item', sum(1 for h in held if h), 'longest run', longest)
     _, _, off_log, off_fake = tr.run(work, 'trace-off', on)
     assert 'remix: visibility ' not in off_log and 'VIOLATION' not in off_fake
