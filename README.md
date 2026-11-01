@@ -8,13 +8,14 @@ lights, and NieR's own HUD on top. Albedo-only materials and 1–4 fps for now. 
 
 ## Scope and status
 
-> **2026-10-30 — stale table:** this table predates the live desktop image (2026-10-29) and the Windows port
-> (2026-10-30). `PROGRESS.md`'s top checkpoint is the authority; a row that disagrees with it is stale. Desktop game
-> runs are paused by the operator, so the only runnable test platform is now the laptop (`analysis/LAPTOP_PORT.md`).
+> **2026-11-01 — the live-Remix row is current; the other rows date from 2026-10-28.** Desktop game runs are paused by
+> the operator, so the only runnable test platform is the laptop (`analysis/LAPTOP_PORT.md`). `PROGRESS.md`'s top
+> checkpoint remains the authority for state; the two 2026-11-01 notes linked from the live-Remix row are the authority
+> for the frame-time and material findings.
 
-Status refreshed 2026-10-28. Intent, scope and the desktop/laptop split: [VISION.md](VISION.md).
-[PROGRESS.md](PROGRESS.md) is the authoritative resume record (installed hashes, rollback chain, verified facts,
-next steps); its top "Checkpoint" section is the place to start.
+Status refreshed 2026-11-01 for the live-Remix row, 2026-10-28 for the rest. Intent, scope and the desktop/laptop split:
+[VISION.md](VISION.md). [PROGRESS.md](PROGRESS.md) is the authoritative resume record (installed hashes, rollback chain,
+verified facts, next steps); its top "Checkpoint" section is the place to start.
 
 | Area | Status |
 | --- | --- |
@@ -23,7 +24,7 @@ next steps); its top "Checkpoint" section is the place to start.
 | Startup settings | `NIER_RENDER.ini` selects Native / Custom75 for the next launch; honest startup status. |
 | In-game menu | **Installed, live-tested:** Insert panel, save-for-next-launch, mouse/camera blocked while open. |
 | RTX Remix | **Textured** path-traced stills from one F9 capture (190 albedo textures, 2.74M triangles). Not live in the game. |
-| Remix live in NieR | **Running inside NieR** (2026-10-28, user-confirmed): `NIER_REMIX=1` makes the proxy host the Remix runtime and replace the game image with the path-traced F9 camp scene at 3440x1440 (static scene; off by default). Not playable yet: 7.3 fps Remix / 14 fps game, GPU-bound. `NIER_REMIX_CHEAP_GAME=1` now works live: 1720x720 game inputs, real FSR4.1.1, 3440x1440 visible Remix output, steady 31.8–32.1 fps Remix (historical comparison, not controlled A/B). Next: finish the smoke test, lower Remix render size, async readback; then quality and the live draw stream. See PROGRESS.md (first checkpoint), [VISION.md](VISION.md), [LIVE_IN_GAME_PLAN.md](analysis/LIVE_IN_GAME_PLAN.md). |
+| Remix live in NieR | **Live draw stream on the laptop** (2026-11-01): the game's own draws are translated to Remix every frame at 2880x1800 — CPU-skinned 2B, the camp, foliage back, and skinned-pose churn gone (`pose=0` in all 55 measured report windows). AC median **13.1** Remix fps; per frame `readback` **58.4 ms** (waiting for the path tracer) and `convert` **3.5 ms**. The tail slowdown is **our ingest of streamed content — not path tracing and not mesh churn** ([attribution](analysis/evidence/remix-current/2026-11-01/frametime1-attribution.md)). Open visual faults: green/blue character and pod overlays, pale sky sheets, flat dunes, chrome-looking far terrain. Cause measured: **83% of shaders reach Remix with `roughnessConstant 0.6` / `metallicConstant 0`** because no metal or gloss texture is traced ([coverage](analysis/evidence/remix-current/2026-11-01/material-roles-coverage.md)). Next: metalness, plus two env-only A/Bs for the last frame-time ambiguity. The earlier desktop `NIER_REMIX=1` static-scene mode is historical (see PROGRESS.md). |
 | Visual stack | LodMod + WAX texture injection; 289 textures active. Special K quarantined. |
 | DLSS 5 NR | Parked: blocked on a legitimately obtained `nvngx_dlssnr.dll`. |
 | Frame generation | `lsfg-vk` excluded by decision. Desktop: native FSR FG would need a DX12 present takeover (proxy owns Present and already has colour/depth/MVs) — unbuilt. Laptop: DL frame generation available. Native 60 FPS cap kept (research in `analysis/FAR_*.md`). |
