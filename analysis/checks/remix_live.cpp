@@ -24,6 +24,7 @@
 #include <set>
 #include "hud_replay.h"
 #include "hud_shader.h"
+#include "frame_copy.h"
 
 namespace remix_live {
 namespace {
@@ -884,14 +885,8 @@ struct Worker {
         if (FAILED(readback->LockRect(&locked, nullptr, D3DLOCK_READONLY))) { fail("LockRect"); return false; }
         const unsigned long long t_locked = live_capture::now_us();  // GetRenderTargetData waits for Remix's frame
         back.pixels.resize(static_cast<std::size_t>(width) * height * 4);
-        const bool swap = rgba(format);  // source is A8R8G8B8 = bytes B,G,R,A
-        for (UINT y = 0; y < height; ++y) {
-            const unsigned char* s = static_cast<const unsigned char*>(locked.pBits) + static_cast<std::size_t>(y) * locked.Pitch;
-            unsigned char* d = &back.pixels[static_cast<std::size_t>(y) * width * 4];
-            for (UINT x = 0; x < width; ++x, s += 4, d += 4) {
-                d[0] = swap ? s[2] : s[0]; d[1] = s[1]; d[2] = swap ? s[0] : s[2]; d[3] = 255;
-            }
-        }
+        frame_copy::bgra(static_cast<const unsigned char*>(locked.pBits), locked.Pitch,
+                         back.pixels.data(), width, height, rgba(format));
         readback->UnlockRect();
         back.width = width; back.height = height; back.format = format; back.seq = ++seq;
         if (live_capture::visibility_trace_enabled.load(std::memory_order_relaxed) && trace_frames <= 8192)
