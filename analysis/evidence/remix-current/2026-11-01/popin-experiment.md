@@ -150,3 +150,15 @@ bytes the draw reads (its index slice and the referenced vertex range of each sl
 gone. Gate: async-shared-other (an unindexed vertex changes every frame) 142 rebuilds with whole-buffer hashing,
 4 with range hashing. Not yet measured live. Views differ between these runs (250-460 instances per frame), so
 Remix fps is not compared here.
+
+### popin-range-b4000 (DLL 46ffadff)
+
+- Rebuild skip on the bytes each draw reads works live: buffer rebuilds 305 → **62/s** (149/s skipped), identical
+  decodes back to ~1 per frame. Still camera holds: 0.06 missing per frame, 6.9% of frames with a visible drop, no
+  stuck keys; later turns 2, 0, 0 instance·s of holes.
+- **Open regression, not attributed.** Same view (phase 1, before any turn, 155 instances, game at 58 fps in every
+  run): Remix 18.4 fps on `4c2c4a18` (popin-gaps) against 11.4 and 11.6 fps on `2b569a36` and `46ffadff`. The Remix
+  frame is `readback` (waiting for the path-traced image). Uploads are not the cause: in phase 1 the newer builds
+  create 0 meshes/s (18.6/s before) and hold 44 MB of meshes (125 MB before). Differences in that view: 160 meshes
+  against 154 (the formerly never-built objects, and ~1 held instance per frame). Next: A/B `NIER_REMIX_LIVE_HOLD=0` on
+  the same build; if fps stays low, the objects that now get built are the cost (path-tracing them, not building them).
