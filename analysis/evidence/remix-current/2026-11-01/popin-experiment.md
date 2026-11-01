@@ -94,3 +94,41 @@ and passes with the new one. Also fixed: `MOCK_CHURN_EVERY` leaked into later ru
 - Cost: moved secondary streams are now read and rebuilt (2.2× version rebuilds, 2.2× bytes read). Frame rate still
   rose, because the runtime no longer creates a new mesh per re-key. Reading only the moved stream, and skipping the
   rebuild when the decoded content is unchanged before the read, is the follow-up if reads become the limit.
+
+## Still camera: never-built objects and one-frame skips (DLL 01324318), popin-gaps-b4000 → popin-hold2-b4000
+
+Instruments (`4c2c4a18`): return gaps per dropped key (1, 2, 3, 4-8, 9-30 frames, gone) and a `stuck` line for any key
+submitted without a mesh for 30 frames. popin-gaps-b4000 (still phases): 28% of departures were back on the next Remix
+frame, 67% gone for more than 30. Four keys were stuck in `read_pending` all run, all sharing one vertex buffer
+(vb1 `9c221e8af0`, stride 8) that the game rewrites every frame.
+
+Cause: a read that lands after the game rewrote the buffer is a stale snapshot, and it was handed to the first draw
+that polled it and dropped at the end of the frame, with a new copy issued. On the GPU every copy lands between frames,
+so the same first draw won every time and the later draws sharing the buffer never got bytes. The mock hid it: its
+read latency counted polls, which let the second draw win on alternate frames. Fixes: `NIER_REMIX_LIVE_READ_LATENCY`
+counts frames since the copy; a landed snapshot serves every draw until a newer copy lands (bounded, dropped with the
+buffer's shadow). Gate: `test_live_read_counters.py` async-shared, red without the fix (`remix: stuck ...
+capture=read_pending`, the live signature).
+
+Hold (`live_scene.h`, `NIER_REMIX_LIVE_HOLD=0` disables): an item last frame had and this frame lacks is drawn once
+more with last frame's transforms; the stored copy only holds items the game drew, so nothing is held twice.
+Reason: one Remix frame shows one game frame of ~5, so a one-game-frame skip stays on screen ~66 ms.
+
+Also: the drive script now starts at the first frame with >= 100 instances (popin-hold-b4000 lost 9 of 14 phases to a
+loading screen and is not used here).
+
+| still camera | popin-gaps-b4000 | popin-hold2-b4000 |
+|---|---|---|
+| stuck keys | 4 | **0** |
+| instances without a mesh, per frame | 4.45 | **0.03** |
+| frames with any visible drop | 36% | **5%** |
+| visible drops per frame (mean) | 2.73 | 1.85 (concentrated in those 5% of frames) |
+| held per frame | – | 5.66 |
+| buffer rebuilds/s | 60 | 380 |
+| Remix fps / worst game frame p90 | 14.9 / 78 ms | 10.8 / 108 ms |
+
+The cost row is the snapshot fix: objects on every-frame-rewritten buffers now rebuild every frame from snapshots
+(before, they waited in `read_pending`). Fixed in `2b569a36`: each snapshot is hashed once when it lands (8-byte
+steps), and a draw whose snapshot contents and resident buffer identities match its last build skips the decode
+(mock: 142 → 4 rebuilds, 138 skipped). The view differed between runs (first turn 11.5° vs 8° per frame,
+375 vs 250 instances), so fps is not a clean A/B.

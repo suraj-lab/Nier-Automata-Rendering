@@ -107,7 +107,13 @@ inline std::map<ID3D11Buffer*, PendingRead>& pending_reads() { static std::map<I
 // every draw until a newer copy lands: kept for one frame and one draw only, the first draw to poll a landed copy won
 // every frame and the others sharing the buffer, or needing two such buffers at once, were never built
 // (popin-gaps-b4000: four objects sharing a rewritten vb1 sat in read_pending for the whole run).
-inline std::map<ID3D11Buffer*, std::vector<unsigned char>>& stale_snapshots() { static std::map<ID3D11Buffer*, std::vector<unsigned char>> s; return s; }
+// `content` is hashed once when the copy lands, so every draw reading the snapshot can tell whether it changed.
+struct Snapshot { std::vector<unsigned char> bytes; std::uint64_t content = 0; };
+inline std::map<ID3D11Buffer*, Snapshot>& stale_snapshots() { static std::map<ID3D11Buffer*, Snapshot> s; return s; }
+// The snapshot contents a geometry was last built from: the same contents again need no decode (popin-hold2-b4000: 380
+// rebuilds/s, nearly all of identical bytes the game rewrites every frame, against 60/s before snapshots were shared).
+inline std::map<std::uint64_t, std::uint64_t>& stale_sources() { static std::map<std::uint64_t, std::uint64_t> s; return s; }
+inline std::atomic<unsigned long long> stale_skips{0};
 inline std::set<std::uint64_t>& stale_built() { static std::set<std::uint64_t> s; return s; }
 inline void drop_pending(std::map<ID3D11Buffer*, PendingRead>::iterator it) {
     it->second.staging->Release();
@@ -148,6 +154,23 @@ inline unsigned read_latency = 0;  // test switch: report "still drawing" until 
 inline std::atomic<unsigned long long> blocking_reads{0}, pending_polls{0}, read_waits{0};
 inline bool read_pending = false;  // set by buffer_bytes when it returned nothing because a read is in flight
 inline bool read_stale = false;    // set when it returned a snapshot older than the game's latest write
+// Everything buffer_bytes returned since read_stale was reset: a snapshot's content hash, or a resident mirror's
+// identity, so a skipped rebuild can never hide a change in a buffer that is not a snapshot.
+inline std::uint64_t stale_content = 0;
+
+// 8 bytes per step: snapshots are hashed whole when they land, and FNV byte by byte would cost ~1 ms per MB.
+inline std::uint64_t fast_hash(const unsigned char* p, std::size_t n) {
+    std::uint64_t h = 0x9e3779b97f4a7c15ull ^ n;
+    std::size_t i = 0;
+    for (; i + 8 <= n; i += 8) {
+        std::uint64_t w;
+        std::memcpy(&w, p + i, 8);
+        h = (h ^ w) * 0xff51afd7ed558ccdull;
+        h ^= h >> 32;
+    }
+    for (; i < n; ++i) h = (h ^ p[i]) * 0x100000001b3ull;
+    return h ^ (h >> 29);
+}
 // Above this, a write is not mirrored: reading a large write-combined mapping back costs more than the whole draw
 // stream (measured on the real game), so the bytes are dropped. A draw that needs them reads them through a staging
 // copy: budgeted for first sight, immediate when the content changed (a changed mesh must never keep its old shape,
@@ -519,6 +542,7 @@ inline void set_permitted(bool ok) {
         for (auto& entry : texture_ids()) entry.first->Release();
         texture_ids().clear();
         built_versions().clear();
+        stale_sources().clear();
     }
 }
 
@@ -625,7 +649,8 @@ inline const std::vector<unsigned char>* buffer_bytes(ID3D11Device* device, ID3D
                 read_us_total.fetch_add(now_us() - started, std::memory_order_relaxed);
                 if (const auto s = stale_snapshots().find(buffer); s != stale_snapshots().end()) {
                     read_stale = true;  // the last landed bytes, while a newer copy is in flight
-                    return &s->second;
+                    stale_content = (stale_content ^ s->second.content) * 0x100000001b3ull;
+                    return &s->second.bytes;
                 }
                 read_pending = true;
                 return nullptr;
@@ -649,9 +674,11 @@ inline const std::vector<unsigned char>* buffer_bytes(ID3D11Device* device, ID3D
                 issue();  // the copy for the game's newer bytes
                 read_stale = true;
                 if (stale_snapshots().size() > 4096) stale_snapshots().clear();  // bounded; a cleared one is read again
-                std::vector<unsigned char>& snapshot = stale_snapshots()[buffer];
-                snapshot.swap(bytes);
-                return &snapshot;
+                Snapshot& snapshot = stale_snapshots()[buffer];
+                snapshot.bytes.swap(bytes);
+                snapshot.content = fast_hash(snapshot.bytes.data(), snapshot.bytes.size());
+                stale_content = (stale_content ^ snapshot.content) * 0x100000001b3ull;
+                return &snapshot.bytes;
             }
         } else {
             read = read_into(device, context, buffer, desc, bytes);
@@ -670,6 +697,7 @@ inline const std::vector<unsigned char>* buffer_bytes(ID3D11Device* device, ID3D
     shadow->used = ++shadow_clock;
     shadow->used_frame = frame_number;
     trim_shadows();
+    stale_content = (stale_content ^ (shadow->incarnation * 1000003ull ^ shadow->generation)) * 0x100000001b3ull;
     return &shadow->bytes;
 }
 
@@ -1441,6 +1469,7 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     if (rebuild) {
         read_pending = false;
         read_stale = false;
+        stale_content = 0;
         ib_bytes = buffer_bytes(device, context, ib);
         readable = ib_bytes != nullptr;
         // Async: issue every read of this draw at once, so they land together instead of one per frame.
@@ -1455,6 +1484,22 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
             rebuild = false;
             outcome = visibility_trace::Reason::ReadPending;
             read_waits.fetch_add(1, std::memory_order_relaxed);
+        }
+        if (stale_used && previously != built_versions().end() && content_hashes().count(geometry)) {
+            // Built before from these very snapshot contents: the mesh on the GPU already is this geometry.
+            const auto source = stale_sources().find(geometry);
+            if (source != stale_sources().end() && source->second == stale_content) {
+                built_versions()[geometry] = version;
+                stale_built().erase(geometry);
+                rebuild = false;
+                stale_used = false;
+                outcome = visibility_trace::Reason::Unchanged;
+                stale_skips.fetch_add(1, std::memory_order_relaxed);
+            }
+        }
+        if (rebuild && stale_used) {
+            if (stale_sources().size() > 200000) stale_sources().clear();  // bounded like built_versions
+            stale_sources()[geometry] = stale_content;
         }
     }
     if (rebuild) {

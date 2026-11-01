@@ -776,7 +776,7 @@ struct Worker {
                                   live_capture::slow_phase_us[live_capture::kPhaseBuild].exchange(0) / 1000, shown_backwards.load());
                     logger.load()("remix: live reads=%llu first=%llu trimmed=%llu unmirrored=%llu const=%llu immutable=%llu "
                                   "default=%llu dynamic=%llu read_kb=%llu read_ms=%llu texture_ms=%llu skinned=%u created=%llu "
-                                  "blocking=%llu pending=%llu waits=%llu",
+                                  "blocking=%llu pending=%llu waits=%llu stale_skips=%llu",
                                   live_capture::read_reasons[0].load() + live_capture::read_reasons[1].load() + live_capture::read_reasons[2].load(),
                                   live_capture::read_reasons[0].load(), live_capture::read_reasons[1].load(), live_capture::read_reasons[2].load(),
                                   live_capture::read_kinds[0].load(), live_capture::read_kinds[1].load(),
@@ -784,7 +784,8 @@ struct Worker {
                                   live_capture::read_bytes_total.load() >> 10, live_capture::read_us_total.load() / 1000,
                                   live_capture::texture_us_total.load() / 1000, frame.skinned,
                                   live_capture::created_captures.load(), live_capture::blocking_reads.load(),
-                                  live_capture::pending_polls.load(), live_capture::read_waits.load());
+                                  live_capture::pending_polls.load(), live_capture::read_waits.load(),
+                                  live_capture::stale_skips.load());
                     logger.load()("remix: live draws=%u instances=%u meshes=%u built=%u evicted=%u identical=%u "
                                   "blended=%u untextured=%u textures=%u hud=%u small_viewport=%u scene=%ux%u skipped_pass=%u "
                                   "fallbacks=%u mesh_bytes=%llu dropped=%u lights=%u light_creates=%u sky=%u prepass=%u alpha_tested=%u light_state=0x%x",

@@ -214,7 +214,13 @@ def inside():
         both = [f for f, ms in per_frame.items() if len(ms) >= 2]
         assert len(meshes) >= 2, f'the second object sharing the rewritten buffer was never built: meshes {meshes}'
         assert len(both) >= 40, f'both objects drawn on only {len(both)} of 80 frames'
-        results['async-shared'] = f'meshes {len(meshes)}; both drawn on {len(both)} frames'
+        # The bytes are identical every frame: once built, the snapshot's contents must be recognised, not decoded again
+        # (popin-hold2-b4000: 380 rebuilds/s of unchanged bytes once snapshots were shared).
+        rb = [dict(re.findall(r'(\w+)=(\d+)', x)) for x in tr.remix_lines(log) if x.startswith('remix: live rebuilds ')]
+        rd = [dict(re.findall(r'(\w+)=(\d+)', x)) for x in tr.remix_lines(log) if x.startswith('remix: live reads=')]
+        skips, rebuilt = int(rd[-1]['stale_skips']), int(rb[-1]['buffer'])
+        assert skips >= 40 and rebuilt <= skips // 2, f'unchanged snapshots were decoded again: buffer rebuilds {rebuilt}, skips {skips}'
+        results['async-shared'] = f'meshes {len(meshes)}; both drawn on {len(both)} frames; rebuilds {rebuilt}, skipped {skips}'
 
         # 7. NIER_REMIX_LIVE_BUILD_BUDGET_US (live 2026-10-31 async2: worst game frames of 114-304 ms were our own draw hooks
         #    building hundreds of new meshes in one frame when the camera turned). A 1 us budget allows one new build per
