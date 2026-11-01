@@ -276,6 +276,9 @@ inline std::atomic<unsigned long long> submitted_instances{0}, submitted_missing
 // rewrote every frame are mandatory work and must not consume the allowance (live-normal1: they did, so after the first
 // few rebuilds every never-built mesh was deferred, and 24.5% of submitted instances had no mesh).
 inline unsigned long long first_sight_us_this_frame = 0;
+// Per-frame pop-in log (PRESENCE_MIN=0): cumulative first-sight build time and game frames, and the budget last applied,
+// so builds per ms (the backlog's service rate) and the budget it was given can be read off any two frames.
+inline std::atomic<unsigned long long> first_sight_us_total{0}, game_frames_total{0}, budget_us_last{0};
 inline std::atomic<unsigned long long> build_deferred{0};
 inline std::atomic<unsigned long long> read_deferred{0};
 // Why decodes were refused, and how many times each geometry may be retried before it is given up on. A transient
@@ -895,6 +898,7 @@ inline void begin_frame(ID3D11DeviceContext* context, unsigned width = 0, unsign
             frame_capture_us = 0;
             last_us = now;
             game_frames.fetch_add(1, std::memory_order_relaxed);
+            game_frames_total.fetch_add(1, std::memory_order_relaxed);
         }
         textures_this_frame = 0;
         lights_read = false;
@@ -1389,6 +1393,7 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     const unsigned long long budget_now = backlog_policy::budget(
         build_budget_us, submitted_instances.load(std::memory_order_relaxed),
         submitted_missing.load(std::memory_order_relaxed));
+    budget_us_last.store(budget_now, std::memory_order_relaxed);
     const bool over_build_budget = budget_now && !changed && first_sight_us_this_frame >= budget_now && first_sight;
     if (over_build_budget) build_deferred.fetch_add(1, std::memory_order_relaxed);
     const bool over_read_budget = !changed && needs_read && read_bytes_this_frame >= read_budget_per_frame;
@@ -1587,7 +1592,10 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
 
     if (rebuild && readable) {
         build_us_this_frame += now_us() - build_started;
-        if (first_sight) first_sight_us_this_frame += now_us() - build_started;
+        if (first_sight) {
+            first_sight_us_this_frame += now_us() - build_started;
+            first_sight_us_total.fetch_add(now_us() - build_started, std::memory_order_relaxed);
+        }
         phase_us[kPhaseBuild] += now_us() - build_started;
     }
 

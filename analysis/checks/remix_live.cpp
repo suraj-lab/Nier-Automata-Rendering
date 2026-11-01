@@ -19,6 +19,7 @@
 #include "draw_capture.h"
 #include "live_scene.h"
 #include "dropout_watch.h"
+#include "input_drive.h"
 #include <map>
 #include <set>
 #include "hud_replay.h"
@@ -195,10 +196,16 @@ State configure() {
         }
         // NIER_REMIX_LIVE_STATS_EVERY: Remix frames between stats lines (default 300; tests use a small value).
         camera_log = env(L"NIER_REMIX_LIVE_CAMERA_LOG") == L"1";
-        // NIER_REMIX_LIVE_PRESENCE_MIN: how many keys must leave (or arrive) on one frame to be logged.
+        // NIER_REMIX_LIVE_PRESENCE_MIN: how many keys must leave (or arrive) on one frame to be logged; 0 = every
+        // submitted frame (the per-frame pop-in log, analysis/checks/popin_data.py).
         if (const std::wstring n = env(L"NIER_REMIX_LIVE_PRESENCE_MIN"); !n.empty()) {
             const unsigned long long v = _wcstoui64(n.c_str(), nullptr, 10);
-            if (v >= 1) presence_min = static_cast<std::size_t>(v);
+            if (v >= 1 || n == L"0") presence_min = static_cast<std::size_t>(v);
+        }
+        // NIER_REMIX_LIVE_DRIVE: scripted turn/walk/still phases from the first live frame (input_drive.h).
+        if (const std::wstring d = env(L"NIER_REMIX_LIVE_DRIVE"); !d.empty()) {
+            input_drive::script = input_drive::parse(std::string(d.begin(), d.end()));  // ASCII script
+            if (input_drive::script.empty()) logger.load()("remix: drive script rejected: %ls", d.c_str());
         }
         // NIER_REMIX_LIVE_NO_ALPHA_TEST=1: the renderer-side A/B, since the capture side is measured healthy.
         live_scene::alpha_test_enabled = env(L"NIER_REMIX_LIVE_NO_ALPHA_TEST") != L"1";
@@ -380,7 +387,8 @@ struct Worker {
                 logger.load()("remix: presence seq=%llu present=%zu dropped=%zu appeared=%zu "
                               "cam_moved=%.3f cam_turned=%.2f cam_valid=%d dropped_frac=%.4f keys=%s | "
                               "capture accepted=%u unchanged=%u pass=%u prepass=%u small=%u read_pending=%u "
-                              "deferred_budget=%u decode_failed=%u",
+                              "deferred_budget=%u decode_failed=%u | queue inst=%llu missing_inst=%llu first=%llu "
+                              "first_us=%llu budget_us=%llu game_frames=%llu phase=%d",
                               static_cast<unsigned long long>(frame.sequence), w.present, w.dropped.size(),
                               w.appeared.size(), cam_motion.moved, cam_motion.turned_deg, cam_motion.valid ? 1 : 0,
                               dropped_frac, keys + (keys[0] ? 1 : 0),
@@ -391,7 +399,11 @@ struct Worker {
                               cap[static_cast<unsigned>(visibility_trace::Reason::Small)],
                               cap[static_cast<unsigned>(visibility_trace::Reason::ReadPending)],
                               cap[static_cast<unsigned>(visibility_trace::Reason::DeferredBudget)],
-                              cap[static_cast<unsigned>(visibility_trace::Reason::DecodeFailed)]);
+                              cap[static_cast<unsigned>(visibility_trace::Reason::DecodeFailed)],
+                              live.frame_instances, live.frame_missing,
+                              live_capture::rebuild_reasons[live_capture::kReasonFirst].load(),
+                              live_capture::first_sight_us_total.load(), live_capture::budget_us_last.load(),
+                              live_capture::game_frames_total.load(), input_drive::current().phase);
                 (void)name;
                 const dropout_watch::Why why =
                     dropout_watch::attribute(w.dropped, w.appeared, previous_ident, capture_now, submit_other, &missing);
@@ -647,6 +659,10 @@ struct Worker {
                     logger.load()("remix: live scene first frame draws=%u meshes=%u instances=%u textures=%u skinned=%u",
                                   frame.draws, live.built, static_cast<unsigned>(frame.transforms.size() / 12),
                                   static_cast<unsigned>(live.texture_paths.size()), frame.skinned);
+                    if (!input_drive::script.empty()) {
+                        input_drive::start_us.store(input_drive::now_us(), std::memory_order_release);
+                        logger.load()("remix: drive start phases=%zu", input_drive::script.size());
+                    }
                 }
                 if (!live_scene::ready(frame, live)) {  // nothing built yet: keep the previous image
                     held_trace("not_ready");
@@ -692,6 +708,12 @@ struct Worker {
                                                       " %s=%llu", live_decode::failure_name(static_cast<live_decode::Failure>(i)), n);
                         }
                         if (total) logger.load()("remix: decode_failures%s", why);
+                        if (input_drive::start_us.load())  // cumulative: which DirectInput calls the game makes
+                            logger.load()("remix: drive phase=%d mouse_state=%llu mouse_data=%llu key_state=%llu "
+                                          "key_data=%llu injected=%llu", input_drive::current().phase,
+                                          input_drive::mouse_state.load(), input_drive::mouse_data.load(),
+                                          input_drive::key_state.load(), input_drive::key_data.load(),
+                                          input_drive::injected.load());
                         // Which layouts produced the no-POSITION refusals: this names the draw family, once per window.
                         const auto layouts = layout_signature::take();
                         for (const auto& entry : layouts)

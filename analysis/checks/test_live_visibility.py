@@ -18,7 +18,8 @@ import test_nscn_scene as ts
 
 OUT = A / 'runtime/live-visibility'
 tr.ENV_KEYS = tuple(tr.ENV_KEYS) + ('NIER_REMIX_LIVE', 'NIER_REMIX_LIVE_TEX', 'NIER_REMIX_LIVE_BUDGET',
-                                  'NIER_REMIX_LIVE_TRACE', 'FAKE_REMIX_INSTANCE_LOG', 'NIER_REMIX_LIVE_PRESENCE_MIN')
+                                  'NIER_REMIX_LIVE_TRACE', 'FAKE_REMIX_INSTANCE_LOG', 'NIER_REMIX_LIVE_PRESENCE_MIN',
+                                  'NIER_REMIX_LIVE_DRIVE')
 NATIVE = tls.HARNESS.replace('int main() {', 'int original_scene_gate() {') + r'''
 #include <cassert>
 static remixapi_ErrorCode REMIXAPI_CALL reject_instance(const remixapi_InstanceInfo*) {
@@ -149,10 +150,28 @@ def wine(work):
 
     # Regression for two wasted live runs: the diagnostics must fire with the verbose trace OFF. Both times an
     # always-on counter was incremented inside the TRACE guard, so a live run answered nothing.
-    # threshold 1 so the mock's handful of meshes can exercise the watch at all
-    _, _, plain_log, plain_fake = tr.run(work, 'presence-off', {**on, 'NIER_REMIX_LIVE_PRESENCE_MIN': '1'})
+    # threshold 0 = every submitted frame (the per-frame pop-in log), so the mock's handful of meshes exercises it
+    _, _, plain_log, plain_fake = tr.run(work, 'presence-off', {**on, 'NIER_REMIX_LIVE_PRESENCE_MIN': '0',
+                                                                 'NIER_REMIX_LIVE_DRIVE': 'still:0.4,turn:0.4:40'})
     lines = [l for l in plain_log.splitlines() if 'remix: presence ' in l]
     assert lines, 'no presence line with the trace off: the watch is gated behind TRACE again'
+    # Per-frame log: no frame skipped, and the queue fields the pop-in fit needs are on every line.
+    seqs = [int(re.search(r' seq=(\d+)', l).group(1)) for l in lines]
+    assert len(seqs) > 5 and seqs == sorted(set(seqs)), seqs[:20]
+    queue = [{k: int(v) for k, v in re.findall(r'(inst|missing_inst|first|first_us|budget_us|game_frames|phase)=(-?\d+)',
+                                                l.split('| queue', 1)[-1])} for l in lines]
+    assert all(len(q) == 7 for q in queue), lines[:2]
+    assert any(q['inst'] > 0 for q in queue) and all(0 <= q['missing_inst'] <= q['inst'] for q in queue), queue[:3]
+    for key in ('first', 'first_us', 'game_frames'):  # cumulative: diffs give rates
+        assert [q[key] for q in queue] == sorted(q[key] for q in queue), (key, [q[key] for q in queue][:20])
+    assert queue[-1]['first'] > 0 and queue[-1]['game_frames'] > 0, queue[-1]
+    # Drive clock: starts at the first live frame, phases only advance, and the drive counters are reported.
+    assert 'remix: drive start phases=2' in plain_log, 'drive script not started at the first live frame'
+    phases = [q['phase'] for q in queue]
+    order = [p if p >= 0 else 99 for p in phases]
+    assert 0 in phases and order == sorted(order), phases
+    assert 'remix: drive phase=' in plain_log, 'drive counters missing from the stats window'
+    print('frame log:', len(lines), 'frames, phases', sorted(set(phases)), 'last', queue[-1])
     explained = 0
     for line in lines:
         f = dict(re.findall(r'([a-z_]+)=(\d+)', line))

@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <cstring>
 #include "vtable_hook.h"
+#include "input_drive.h"
 
 namespace input_capture {
 inline WNDPROC prev_wndproc = nullptr;
@@ -108,11 +109,47 @@ inline bool hook_set_cursor_pos() {
 // DirectInput: the device vtable lives in dinput8.dll and is shared by every device object of that
 // class, so hooking it through a throwaway mouse device also covers the game's existing device.
 // Only mouse-type devices are blanked; keyboard and gamepad still reach the game.
-inline bool is_mouse(void* device) {
+inline unsigned device_type(void* device) {
     DIDEVCAPS caps{}; caps.dwSize = sizeof caps;
     using GetCapsFn = HRESULT (STDMETHODCALLTYPE*)(void*, DIDEVCAPS*);
     const auto get_caps = reinterpret_cast<GetCapsFn>((*static_cast<void***>(device))[3]);  // GetCapabilities
-    return SUCCEEDED(get_caps(device, &caps)) && GET_DIDEVICE_TYPE(caps.dwDevType) == DI8DEVTYPE_MOUSE;
+    return SUCCEEDED(get_caps(device, &caps)) ? GET_DIDEVICE_TYPE(caps.dwDevType) : 0;
+}
+inline bool is_mouse(void* device) { return device_type(device) == DI8DEVTYPE_MOUSE; }
+
+// NIER_REMIX_LIVE_DRIVE (input_drive.h): add the scripted mouse delta / hold W on calls that succeeded, never while
+// the panel is open. shortcut: buffered keyboard (GetDeviceData) is counted, not driven; drive it if key_data > 0 and
+// key_state == 0 in a live run.
+inline void drive_state(void* self, DWORD size, void* data) {
+    const input_drive::Now n = input_drive::current();
+    if (n.phase < 0) return;
+    const unsigned type = device_type(self);
+    if (type == DI8DEVTYPE_MOUSE && size >= sizeof(DIMOUSESTATE)) {
+        input_drive::mouse_state.fetch_add(1, std::memory_order_relaxed);
+        if (n.dx) { static_cast<DIMOUSESTATE*>(data)->lX += n.dx; input_drive::injected.fetch_add(1, std::memory_order_relaxed); }
+    } else if (type == DI8DEVTYPE_KEYBOARD && size >= 256) {
+        input_drive::key_state.fetch_add(1, std::memory_order_relaxed);
+        if (n.walk) { static_cast<unsigned char*>(data)[DIK_W] = 0x80; input_drive::injected.fetch_add(1, std::memory_order_relaxed); }
+    }
+}
+
+inline void drive_data(void* self, DWORD object_size, DIDEVICEOBJECTDATA* events, DWORD* count, DWORD capacity) {
+    const input_drive::Now n = input_drive::current();
+    if (n.phase < 0) return;
+    const unsigned type = device_type(self);
+    if (type == DI8DEVTYPE_KEYBOARD) { input_drive::key_data.fetch_add(1, std::memory_order_relaxed); return; }
+    if (type != DI8DEVTYPE_MOUSE) return;
+    input_drive::mouse_data.fetch_add(1, std::memory_order_relaxed);
+    if (!n.dx || !events || object_size < sizeof(DIDEVICEOBJECTDATA) || *count >= capacity) return;
+    auto* e = reinterpret_cast<DIDEVICEOBJECTDATA*>(reinterpret_cast<unsigned char*>(events) + *count * object_size);
+    std::memset(e, 0, object_size);
+    e->dwOfs = DIMOFS_X;
+    e->dwData = static_cast<DWORD>(n.dx);  // relative axis: the signed delta in a DWORD
+    e->dwTimeStamp = GetTickCount();
+    e->dwSequence = *count ? reinterpret_cast<DIDEVICEOBJECTDATA*>(reinterpret_cast<unsigned char*>(events) +
+                                                                   (*count - 1) * object_size)->dwSequence : 0;
+    ++*count;
+    input_drive::injected.fetch_add(1, std::memory_order_relaxed);
 }
 
 template <int N> struct DiHook {  // one instance per hooked vtable (A and W may differ)
@@ -121,13 +158,17 @@ template <int N> struct DiHook {  // one instance per hooked vtable (A and W may
         using Fn = HRESULT (STDMETHODCALLTYPE*)(void*, DWORD, void*);
         const HRESULT hr = reinterpret_cast<Fn>(next_state.load(std::memory_order_acquire))(self, size, data);
         if (enabled && data && is_mouse(self)) std::memset(data, 0, size);  // no deltas, no buttons
+        else if (!enabled && data && SUCCEEDED(hr) && input_drive::start_us.load(std::memory_order_relaxed)) drive_state(self, size, data);
         return hr;
     }
     static HRESULT STDMETHODCALLTYPE get_data(void* self, DWORD object_size, DIDEVICEOBJECTDATA* events,
                                               DWORD* in_out, DWORD flags) {
         using Fn = HRESULT (STDMETHODCALLTYPE*)(void*, DWORD, DIDEVICEOBJECTDATA*, DWORD*, DWORD);
+        const DWORD capacity = in_out ? *in_out : 0;
         const HRESULT hr = reinterpret_cast<Fn>(next_data.load(std::memory_order_acquire))(self, object_size, events, in_out, flags);
         if (enabled && in_out && is_mouse(self)) *in_out = 0;  // buffer drained by the real call; report no events
+        else if (!enabled && in_out && SUCCEEDED(hr) && !(flags & DIGDD_PEEK) && input_drive::start_us.load(std::memory_order_relaxed))
+            drive_data(self, object_size, events, in_out, capacity);
         return hr;
     }
 };
