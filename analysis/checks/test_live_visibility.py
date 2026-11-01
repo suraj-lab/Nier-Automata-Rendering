@@ -189,6 +189,8 @@ def wine(work):
     assert all(f['moved_vb'] == f['churn_pointer'] and f['moved_offset'] == f['moved_base'] == f['moved_layout'] ==
                f['moved_other'] == 0 for f in swaps), swaps[:3]
     assert all('missing_now' in f and 'arrived_missing' in f for f in churn), churn[:2]
+    # The swapped copy is the same object in the same place.
+    assert all(f['place_same'] == f['churn_pointer'] and f['place_far'] == 0 for f in swaps), swaps[:3]
     print('churn sample:', swaps[:2], 'arrived_missing total', sum(f['arrived_missing'] for f in swaps))
     _, _, log, _ = tr.run(work, 'trace-passes', {**on, 'NIER_REMIX_LIVE_TRACE': '1',
                                                'MOCK_CAMERA': 'live-passes', 'MOCK_PREPASS': '1'})

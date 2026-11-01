@@ -38,7 +38,9 @@ ARGS = {'test_camera_decode.py': ['camera_decode.h'], 'test_camera_decode_hidden
         'test_nscn_scene.py': ['nscn_scene.h'], 'test_nscn_scene_hidden.py': ['nscn_scene.h'],
         'test_remix_scale.py': ['render_settings.h']}
 EXCLUSIVE = {'test_setter_proxy_integration.py'}   # rebuilds the shared DLL in place: nothing may copy it meanwhile
-INFRA_RETRY = ('Xvfb failed to start',)            # a display that could not start; not a test result
+# Infrastructure failures under parallel load, retried once (a real regression fails twice and is still reported):
+# a display that could not start, and Wine's software D3D11 device creation failing (seen once at --jobs 8).
+INFRA_RETRY = ('Xvfb failed to start', 'FAIL device')
 SHIM = C / 'gate_shim'                             # xvfb-run wrapper: -a becomes the display assigned below
 DISPLAYS = queue.Queue()                           # one X display per running gate, never shared
 
@@ -122,6 +124,13 @@ def run_gate(gate):
             DISPLAYS.put(display)
         log.write_bytes(output)
         text = output.decode(errors='replace')
+        if code:  # the mock writes its own failure reason beside the gate's work dir, not to the gate's output
+            work = A / lane_key(gate).removeprefix('analysis/')
+            wall_start = time.time() - (time.monotonic() - started)
+            if work.is_dir():
+                for result in work.rglob('mock-result.txt'):
+                    if result.stat().st_mtime >= wall_start:
+                        text += result.read_text(errors='replace')
         if code == 0 or attempt == 2 or not any(m in text for m in INFRA_RETRY):
             return {'gate': gate, 'ok': code == 0, 'exit': code, 'seconds': round(time.monotonic() - started, 1),
                     'attempts': attempt, 'tail': '' if code == 0 else text[-600:]}
@@ -168,7 +177,7 @@ def main():
     def report(r):
         results.append(r)
         flag = 'pass' if r['ok'] else 'FAIL'
-        print(f'  {r["gate"]:42} {flag} {r["seconds"]:>6.1f}s{"  (retried: Xvfb)" if r["attempts"] > 1 else ""}',
+        print(f'  {r["gate"]:42} {flag} {r["seconds"]:>6.1f}s{"  (retried once: infrastructure)" if r["attempts"] > 1 else ""}',
               flush=True)
 
     free_displays(max(1, a.jobs))

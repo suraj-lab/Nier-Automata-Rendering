@@ -143,7 +143,23 @@ int main() {
         auto blind = dropout_watch::attribute({1}, {11}, prev, {a}, {});
         assert(blind.churn_pointer == 1 && blind.arrived_missing == 0 && blind.moved_offset == 1);
     }
-    std::puts("priming, single departures, return as arrival, synchronous event, threshold, camera motion, dropped fraction, attribution, churn breakdown");
+
+    // Same IB and range is not proof of the same object (engines share index buffers between tiles): where the
+    // arrival sits decides it. same <1 cm, near <1 unit (a moving object), far = a different object.
+    {
+        using dropout_watch::Ident; using dropout_watch::Seen;
+        Ident base{100, 7, 300, 0}; base.vb = 50;
+        std::map<std::uint64_t, Ident> prev{{1, base}, {2, base}, {3, base}};
+        prev[2].start_index = 600; prev[3].start_index = 900;
+        prev[1].position[0] = 10.f; prev[2].position[0] = 10.f; prev[3].position[0] = 10.f;
+        Seen a{11, 911, 7, 300, 0, 0};   a.vb = 51; a.position[0] = 10.004f;              // same spot
+        Seen b{12, 912, 7, 300, 600, 0}; b.vb = 51; b.position[0] = 10.f; b.position[2] = 0.5f;  // moved a little
+        Seen c{13, 913, 7, 300, 900, 0}; c.vb = 51; c.position[0] = 40.f;               // another tile
+        auto why = dropout_watch::attribute({1, 2, 3}, {11, 12, 13}, prev, {a, b, c}, {});
+        assert(why.churn_pointer == 3);
+        assert(why.place_same == 1 && why.place_near == 1 && why.place_far == 1);
+    }
+    std::puts("priming, single departures, return as arrival, synchronous event, threshold, camera motion, dropped fraction, attribution, churn breakdown, churn place");
 }
 '''
 

@@ -96,6 +96,7 @@ struct Ident {
     std::uint64_t vb = 0, layout = 0;   // slot-0 vertex buffer and input layout pointers (parts of the geometry key)
     unsigned vb_offset = 0;
     int base_vertex = 0;
+    float position[3] = {};             // world translation of the instance
 };
 struct Seen {  // one capture event of this frame
     std::uint64_t geometry = 0, source = 0, ib = 0;
@@ -103,6 +104,7 @@ struct Seen {  // one capture event of this frame
     std::uint64_t vb = 0, layout = 0;
     unsigned vb_offset = 0;
     int base_vertex = 0;
+    float position[3] = {};
 };
 // churn_pointer breakdown: which key component moved (one re-key can move several; moved_other = none of these four,
 // so another vertex slot, a stride or an IB offset). arrived_missing: churned arrivals whose mesh was not built yet,
@@ -111,6 +113,7 @@ struct Why {
     unsigned submit_other = 0, churn_occurrence = 0, churn_pointer = 0, churn_shape = 0, absent = 0;
     unsigned moved_vb = 0, moved_offset = 0, moved_base = 0, moved_layout = 0, moved_other = 0;
     unsigned arrived_missing = 0;
+    unsigned place_same = 0, place_near = 0, place_far = 0;  // churn_pointer arrival vs departure, world distance
     unsigned capture[32] = {};
 };
 
@@ -164,6 +167,10 @@ inline Why attribute(const std::vector<std::uint64_t>& dropped, const std::vecto
                                        b = e.base_vertex != o.base_vertex, l = e.layout != o.layout;
                             why.moved_vb += v; why.moved_offset += f; why.moved_base += b; why.moved_layout += l;
                             why.moved_other += !(v || f || b || l);
+                            const float dx = e.position[0] - o.position[0], dy = e.position[1] - o.position[1],
+                                        dz = e.position[2] - o.position[2];
+                            const float d2 = dx * dx + dy * dy + dz * dz;
+                            if (d2 < 1e-4f) ++why.place_same; else if (d2 < 1.f) ++why.place_near; else ++why.place_far;
                         }
                         arrived(a); arrivals.erase(a); matched = true; break;
                     }
