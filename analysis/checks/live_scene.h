@@ -337,6 +337,7 @@ inline void merge_carry(State& s, const std::map<std::uint64_t, std::uint64_t>& 
 // A usable mesh: its own, or the mesh of the key it replaced (a planned stand-in that still exists).
 inline bool drawable(const State& s, std::uint64_t geometry) {
     if (const auto m = s.meshes.find(geometry); m != s.meshes.end() && m->second) return true;
+    if (s.carry.empty()) return false;      // no planning yet: nothing to stand in
     const auto c = s.carry.find(geometry);
     if (c == s.carry.end()) return false;
     const auto stand_in = s.meshes.find(c->second);
@@ -378,7 +379,9 @@ inline remixapi_ErrorCode submit(const remixapi_Interface& api, const live_captu
         auto mesh = s.meshes.find(item.geometry);
         bool carried = false;
         if (mesh == s.meshes.end() || !mesh->second) {
-            if (const auto c = s.carry.find(item.geometry); c != s.carry.end()) {
+            // Never for a skinned draw: this frame's bone palette would be applied to the predecessor's bind pose, which
+            // is a wrong pose rather than a missing one. Unmeasured either way, so the safe side wins.
+            if (const auto c = item.bone_count ? s.carry.end() : s.carry.find(item.geometry); c != s.carry.end()) {
                 const auto stand_in = s.meshes.find(c->second);
                 if (stand_in != s.meshes.end() && stand_in->second) {
                     mesh = stand_in;

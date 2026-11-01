@@ -281,6 +281,20 @@ int main() {
             live_scene::update(api, {make_upload(88, 10)}, {}, live_capture::Frame{}, s, nscn::Options{});
             live_scene::merge_carry(s, {});          // 88 is built now: its pair is stale
             check("built carry dropped", s.carry.count(88) == 0);
+            // A skinned draw is never carried: the old mesh with the new palette would be a wrong pose.
+            live_capture::Frame skinned_churn;
+            live_capture::Item sc;
+            sc.geometry = 97; sc.first = 0; sc.count = 1; sc.first_bone = 0; sc.bone_count = 2;
+            skinned_churn.items.push_back(sc);
+            skinned_churn.transforms.insert(skinned_churn.transforms.end(), at, at + 12);
+            skinned_churn.bones.insert(skinned_churn.bones.end(), at, at + 12);
+            skinned_churn.bones.insert(skinned_churn.bones.end(), at, at + 12);
+            s.carry.clear();
+            s.carry[97] = 11;
+            s.carried = 0;
+            instances.clear();
+            live_scene::submit(api, skinned_churn, s, camera, 1.7f);
+            check("skinned draw was carried", instances.empty() && s.carried == 0);
             s.carry.clear();
         }
 

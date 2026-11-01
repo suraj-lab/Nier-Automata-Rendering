@@ -91,6 +91,13 @@ is the cheap bridge until then — and the `key_names` field tells us which comp
    Remix does exactly this and never keys on resources. Worth it even after the stand-in: it also stops the wasted
    reads and builds that churn causes.
 
+## 3b. Final state of the tree tonight
+
+- Build `2a53894a`, full suite **71/71 in 229.7 s** (`gates.py --all --run --jobs 8`), source unchanged.
+- Last commit: skinned draws are never carried (this frame's palette on the predecessor's bind pose would be a wrong
+  pose, not a missing one); shown red by removing the guard.
+- Nothing installed on the laptop, nothing pushed; `main` is 14 commits ahead of `origin`.
+
 ## 4. Additional points of investigation (not yet scheduled)
 
 - **Skinned meshes and the stand-in.** A skinned object's transform is bones, not the instance matrix. Carrying a
