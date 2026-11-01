@@ -248,6 +248,33 @@ int main() {
         check("wrong instance count", last_instances == 2);
         check("transforms not copied", instances.size() == 2 && instances[0].first == 5.f && instances[1].second == 9.f);
 
+        // A re-keyed object whose own mesh is not built yet is drawn with its predecessor's mesh for that frame,
+        // but only when the pair was planned as the same object in the same place.
+        {
+            live_capture::Frame churn;
+            live_capture::Item n; n.geometry = 99; n.first = 0; n.count = 1; churn.items.push_back(n);
+            float at[12] = {1, 0, 0, 5, 0, 1, 0, 6, 0, 0, 1, 7};
+            churn.transforms.insert(churn.transforms.end(), at, at + 12);
+            s.carry.clear();
+            s.carried = 0;
+            instances.clear();
+            live_scene::submit(api, churn, s, camera, 1.7f);
+            check("unplanned missing mesh was drawn", instances.empty() && s.carried == 0);
+            live_scene::update(api, {make_upload(11, 10)}, {}, live_capture::Frame{}, s, nscn::Options{});
+            check("stand-in mesh was not built", s.meshes.count(11) == 1);
+            s.carry[99] = 11;   // 99 replaced 11, whose mesh exists
+            instances.clear();
+            live_scene::submit(api, churn, s, camera, 1.7f);
+            check("stand-in mesh not drawn", instances.size() == 1 && s.carried == 1);
+            check("stand-in transform ignored", instances.size() == 1 && instances[0].first == 5.f);
+            s.carry[99] = 77;   // a predecessor whose mesh was evicted is no help
+            s.carried = 0;
+            instances.clear();
+            live_scene::submit(api, churn, s, camera, 1.7f);
+            check("missing stand-in was drawn", instances.empty() && s.carried == 0);
+            s.carry.clear();
+        }
+
         // A skinned item carries the palette it was given.
         live_capture::Frame skinned;
         live_capture::Item k; k.geometry = 11; k.first = 0; k.count = 1; k.first_bone = 0; k.bone_count = 2;

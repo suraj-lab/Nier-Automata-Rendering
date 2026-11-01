@@ -165,10 +165,15 @@ struct Why {
 inline Why attribute(const std::vector<std::uint64_t>& dropped, const std::vector<std::uint64_t>& appeared,
                      const std::map<std::uint64_t, Ident>& previous, const std::vector<Seen>& capture_now,
                      const std::map<std::uint64_t, unsigned>& submit_other_now,
-                     const std::set<std::uint64_t>* missing_now = nullptr) {
+                     const std::set<std::uint64_t>* missing_now = nullptr,
+                     std::map<std::uint64_t, std::uint64_t>* carry = nullptr, bool assume_unbuilt = false) {
     Why why;
-    const auto arrived = [&](std::uint64_t a) {
+    // stand_in_ok: the arrival is provably the same object in the same place, so its predecessor's mesh may be drawn
+    // for one frame instead of nothing. A neighbour sharing a buffer must never lend its geometry.
+    const auto arrived = [&](std::uint64_t a, std::uint64_t from, bool stand_in_ok) {
+        const bool unbuilt = assume_unbuilt || (missing_now && missing_now->count(a));
         if (missing_now && missing_now->count(a)) ++why.arrived_missing;
+        if (carry && stand_in_ok && unbuilt) (*carry)[a] = from;   // the scene decides if it is still missing
     };
     std::map<std::uint64_t, const Seen*> by_geometry;
     for (const auto& e : capture_now)
@@ -187,7 +192,11 @@ inline Why attribute(const std::vector<std::uint64_t>& dropped, const std::vecto
             for (const auto a : arrivals) {
                 const auto s = by_geometry.find(a);
                 if (s != by_geometry.end() && s->second->source == p->second.source) {
-                    ++why.churn_occurrence; arrived(a); arrivals.erase(a); matched = true; break;
+                    ++why.churn_occurrence;
+                    arrived(a, k, true);  // same draw: the identity is exact, so a stand-in is allowed
+                    arrivals.erase(a);
+                    matched = true;
+                    break;
                 }
             }
         if (!matched) unexplained.push_back(k);
@@ -198,6 +207,7 @@ inline Why attribute(const std::vector<std::uint64_t>& dropped, const std::vecto
         for (const auto k : unexplained) {
             const auto p = previous.find(k);
             bool matched = false;
+            bool same_place = false;   // set by the match below; shapes without geometry (churn_shape) stay false
             if (p != previous.end())
                 for (const auto a : arrivals) {
                     const auto s = by_geometry.find(a);
@@ -219,9 +229,10 @@ inline Why attribute(const std::vector<std::uint64_t>& dropped, const std::vecto
                             const float dx = e.position[0] - o.position[0], dy = e.position[1] - o.position[1],
                                         dz = e.position[2] - o.position[2];
                             const float d2 = dx * dx + dy * dy + dz * dz;
-                            if (d2 < 1e-4f) ++why.place_same; else if (d2 < 1.f) ++why.place_near; else ++why.place_far;
+                            same_place = d2 < 1e-4f;
+                            if (same_place) ++why.place_same; else if (d2 < 1.f) ++why.place_near; else ++why.place_far;
                         }
-                        arrived(a); arrivals.erase(a); matched = true; break;
+                        arrived(a, k, same_place); arrivals.erase(a); matched = true; break;
                     }
                 }
             if (!matched) rest.push_back(k);

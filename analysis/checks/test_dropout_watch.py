@@ -194,7 +194,39 @@ int main() {
         assert(why.churn_pointer == 1 && why.moved_mask == dropout_watch::bit(dropout_watch::Component::Vb1Ptr));
         assert(why.component[static_cast<unsigned>(dropout_watch::Component::Vb1Ptr)] == 1);
     }
-    std::puts("priming, single departures, return as arrival, synchronous event, threshold, camera motion, dropped fraction, attribution, churn breakdown, churn place, key mask");
+
+    // Carry: a re-keyed object whose new mesh is not built yet can be drawn with its predecessor's mesh for that frame.
+    {
+        using dropout_watch::Ident; using dropout_watch::Seen; using dropout_watch::Key;
+        Key k; k.vb[0] = 50; k.ib = 70; k.ib_format = 42; k.layout = 9;
+        Ident prev{100, 70, 300, 0, {}, {}}; prev.key = k; prev.position[0] = 5.f;
+        Seen arrival{11, 999, 70, 300, 0, 0, {}, {}}; arrival.key = k; arrival.key.vb[0] = 51;  // re-keyed copy
+        arrival.position[0] = 5.f;                                                            // same place
+        std::set<std::uint64_t> missing{11};   // its mesh is not built yet
+        std::map<std::uint64_t, std::uint64_t> carry;
+        auto why = dropout_watch::attribute({1}, {11}, {{1, prev}}, {arrival}, {}, &missing, &carry);
+        assert(why.churn_pointer == 1 && carry.size() == 1 && carry[11] == 1);
+        carry.clear();  // built in time: no stand-in needed
+        dropout_watch::attribute({1}, {11}, {{1, prev}}, {arrival}, {}, nullptr, &carry);
+        assert(carry.empty());
+        carry.clear();  // another object far away is not a stand-in for this one
+        arrival.position[0] = 40.f;
+        dropout_watch::attribute({1}, {11}, {{1, prev}}, {arrival}, {}, &missing, &carry);
+        assert(carry.empty());
+    }
+
+    // Planning: carry may be planned before anything is built, without claiming a mesh was missing.
+    {
+        using dropout_watch::Ident; using dropout_watch::Seen; using dropout_watch::Key;
+        Key k; k.vb[0] = 50; k.ib = 70;
+        Ident prev{100, 70, 300, 0, {}, {}}; prev.key = k; prev.position[0] = 2.f;
+        Seen a{11, 999, 70, 300, 0, 0, {}, {}}; a.key = k; a.key.vb[0] = 51; a.position[0] = 2.f;
+        std::map<std::uint64_t, std::uint64_t> carry;
+        auto why = dropout_watch::attribute({1}, {11}, {{1, prev}}, {a}, {}, nullptr, &carry, true);
+        assert(carry.size() == 1 && carry[11] == 1);
+        assert(why.arrived_missing == 0);   // planning must not claim anything about build state
+    }
+    std::puts("priming, single departures, return as arrival, synchronous event, threshold, camera motion, dropped fraction, attribution, churn breakdown, churn place, key mask, carry, carry planning");
 }
 '''
 

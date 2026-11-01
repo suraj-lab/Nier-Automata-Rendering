@@ -52,6 +52,10 @@ struct State {
     std::vector<live_capture::Upload> backlog;  // uploads deferred to later iterations, so one frame cannot stall
     std::vector<std::uint64_t> evicted_keys;     // reported to the capture side, which then uploads them again
     std::map<std::uint64_t, unsigned> refused;   // meshes the runtime refused: retried a few times, then left out
+    // Stand-in meshes for re-keyed objects whose own mesh is not built yet: new key -> the key it replaced, when the
+    // two are provably the same object in the same place (dropout_watch). One frame of the old geometry beats a hole.
+    std::map<std::uint64_t, std::uint64_t> carry;
+    std::uint64_t carried = 0;   // instances drawn with a stand-in mesh, reported per stats window
     remixapi_LightHandle sun = nullptr, sky = nullptr;
     live_capture::Sun sun_value;  // what `sun` was created with, when sun_captured
     bool sun_captured = false;
@@ -318,9 +322,18 @@ inline bool update(const remixapi_Interface& api, std::vector<live_capture::Uplo
 // A frame needs at least one ray-traced (non-sky) instance: Remix hides SKY instances from ray tracing, and a frame
 // with zero ray-traced surfaces crashes it (0-byte "Surface Material Buffer", divide by zero; NieR's title screen,
 // 2026-10-29). Such a frame is held back and the previous image stays up.
+// A usable mesh: its own, or the mesh of the key it replaced (a planned stand-in that still exists).
+inline bool drawable(const State& s, std::uint64_t geometry) {
+    if (const auto m = s.meshes.find(geometry); m != s.meshes.end() && m->second) return true;
+    const auto c = s.carry.find(geometry);
+    if (c == s.carry.end()) return false;
+    const auto stand_in = s.meshes.find(c->second);
+    return stand_in != s.meshes.end() && stand_in->second;
+}
+
 inline bool ready(const live_capture::Frame& frame, const State& s) {
     for (const auto& item : frame.items)
-        if (item.count && !item.sky && s.meshes.count(item.geometry)) return true;
+        if (item.count && !item.sky && drawable(s, item.geometry)) return true;
     return false;
 }
 
@@ -348,7 +361,18 @@ inline remixapi_ErrorCode submit(const remixapi_Interface& api, const live_captu
         event.texture = item.texture;
         event.bones = item.bone_count;
         event.flags = (item.sky ? 1u : 0u) | (item.blended ? 2u : 0u);
-        const auto mesh = s.meshes.find(item.geometry);
+        auto mesh = s.meshes.find(item.geometry);
+        bool carried = false;
+        if (mesh == s.meshes.end() || !mesh->second) {
+            if (const auto c = s.carry.find(item.geometry); c != s.carry.end()) {
+                const auto stand_in = s.meshes.find(c->second);
+                if (stand_in != s.meshes.end() && stand_in->second) {
+                    mesh = stand_in;
+                    carried = true;
+                    event.flags |= 4u;   // carried: drawn with the mesh of the key this one replaced
+                }
+            }
+        }
         if (mesh == s.meshes.end() || !mesh->second) {
             event.reason = visibility_trace::Reason::MeshMissing;
             event.instances = item.count;
@@ -410,6 +434,7 @@ inline remixapi_ErrorCode submit(const remixapi_Interface& api, const live_captu
                 }
             }
             const remixapi_ErrorCode result = api.DrawInstance(&instance);
+            if (carried && !result) ++s.carried;   // drawn, but with the predecessor's mesh this frame
             funnel::count_instance(result ? visibility_trace::Reason::DrawFailed : visibility_trace::Reason::Drawn);
             if (trace) {
                 event.reason = result ? visibility_trace::Reason::DrawFailed : visibility_trace::Reason::Drawn;

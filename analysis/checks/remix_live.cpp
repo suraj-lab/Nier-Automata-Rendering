@@ -314,6 +314,30 @@ struct Worker {
         return k;
     }
 
+    // Before building anything: which re-keyed objects are the same object in the same place as one that just left?
+    // The scene only uses a pair when the new key's mesh is genuinely missing at submit time.
+    void plan_carry(const live_capture::Frame& frame) {
+        std::map<std::uint64_t, dropout_watch::Ident> previous = previous_ident;
+        std::vector<dropout_watch::Seen> capture_now;
+        capture_now.reserve(frame.visibility.events.size());
+        std::set<std::uint64_t> now;
+        for (const auto& e : frame.visibility.events) {
+            capture_now.push_back({e.geometry, e.source, e.ib, e.index_count, e.start_index,
+                                   static_cast<unsigned>(e.reason), to_key(e),
+                                   {e.position[0], e.position[1], e.position[2]}});
+            if (e.geometry) now.insert(e.geometry);
+        }
+        std::vector<std::uint64_t> dropped, appeared;
+        for (const auto& kv : previous)
+            if (!now.count(kv.first)) dropped.push_back(kv.first);
+        for (const auto k : now)
+            if (!previous.count(k)) appeared.push_back(k);
+        std::map<std::uint64_t, std::uint64_t> carry;
+        if (!dropped.empty() && !appeared.empty())
+            dropout_watch::attribute(dropped, appeared, previous, capture_now, {}, nullptr, &carry, true);
+        live.carry = carry;
+    }
+
     void report_visibility(const live_capture::Frame& frame, const visibility_trace::Batch& submitted, const char* work) {
         // Frame-to-frame presence: a key that leaves while nothing else changed is a fault, and a group leaving on one
         // frame is a mechanism. Logged for every sequence (not just under TRACE), because the change-row trace can
@@ -382,13 +406,13 @@ struct Worker {
                 logger.load()("remix: presence_why seq=%llu dropped=%zu known=%zu capture_events=%zu submit_other=%u "
                               "churn_occurrence=%u churn_pointer=%u churn_shape=%u absent=%u capture_overflow=%u "
                               "moved_vb=%u moved_offset=%u moved_base=%u moved_layout=%u moved_other=%u "
-                              "arrived_missing=%u missing_now=%zu place_same=%u place_near=%u place_far=%u "
+                              "carried=%llu arrived_missing=%u missing_now=%zu place_same=%u place_near=%u place_far=%u "
                               "key_moved=0x%x key_names=%s%s",
                               static_cast<unsigned long long>(frame.sequence), w.dropped.size(), known,
                               capture_now.size(), why.submit_other,
                               why.churn_occurrence, why.churn_pointer, why.churn_shape, why.absent,
                               frame.visibility.dropped, why.moved_vb, why.moved_offset, why.moved_base,
-                              why.moved_layout, why.moved_other, why.arrived_missing, missing.size(),
+                              why.moved_layout, why.moved_other, live.carried, why.arrived_missing, missing.size(),
                               why.place_same, why.place_near, why.place_far, why.moved_mask,
                               dropout_watch::component_names(why.moved_mask).empty()
                                   ? "-" : dropout_watch::component_names(why.moved_mask).c_str(), reasons);
@@ -543,6 +567,7 @@ struct Worker {
                 ++submitted.dropped; // no submission attempted: never infer that a retained instance vanished
                 report_visibility(frame, submitted, why);
             };
+            plan_carry(frame);
             std::vector<live_capture::Upload> uploads = live_capture::take_uploads();
             std::vector<live_capture::TextureFile> textures = live_capture::take_textures();
             for (live_capture::TextureFile& file : textures) {
