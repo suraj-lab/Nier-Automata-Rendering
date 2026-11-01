@@ -130,6 +130,7 @@ static live_capture::Upload make_upload(std::uint64_t key, std::size_t vertices,
 }
 
 int main() {
+    live_scene::hold_enabled = false;  // the cases below count instances per frame; the hold case turns it on
     auto api = make_api();
     int failures = 0;
     const auto check = [&](const char* what, bool ok) {
@@ -247,6 +248,31 @@ int main() {
         live_scene::submit(api, frame, s, camera, 1.7f);
         check("wrong instance count", last_instances == 2);
         check("transforms not copied", instances.size() == 2 && instances[0].first == 5.f && instances[1].second == 9.f);
+
+        // Hold: the game skips B for one frame. B is drawn once more where it was, flagged; never a second time.
+        {
+            live_scene::hold_enabled = true;
+            live_scene::submit(api, frame, s, camera, 1.7f);          // primes the held copy with A and B
+            live_capture::Frame only_a;
+            only_a.items.push_back(a);
+            only_a.transforms.insert(only_a.transforms.end(), world, world + 12);
+            last_instances = 0; instances.clear();
+            visibility_trace::Batch held_trace;
+            live_scene::submit(api, only_a, s, camera, 1.7f, &held_trace);
+            check("skipped item not held for one frame", last_instances == 2 && s.frame_held == 1 &&
+                  instances.size() == 2 && instances[1].first == 8.f && instances[1].second == 9.f);
+            bool flagged = false;
+            for (const auto& e : held_trace.events) flagged = flagged || (e.geometry == 12 && (e.flags & 8u));
+            check("held instance not flagged", flagged);
+            last_instances = 0; instances.clear();
+            live_scene::submit(api, only_a, s, camera, 1.7f);
+            check("item held twice", last_instances == 1 && s.frame_held == 0);
+            live_scene::hold_enabled = false;                         // off: a skipped item is simply not drawn
+            live_scene::submit(api, frame, s, camera, 1.7f);
+            last_instances = 0;
+            live_scene::submit(api, only_a, s, camera, 1.7f);
+            check("held while disabled", last_instances == 1);
+        }
 
         // A re-keyed object whose own mesh is not built yet is drawn with its predecessor's mesh for that frame,
         // but only when the pair was planned as the same object in the same place.

@@ -27,7 +27,7 @@ import test_nscn_scene as ts
 tr.ENV_KEYS = tuple(tr.ENV_KEYS) + ('NIER_REMIX_LIVE_CAMERA_LOG', 'NIER_REMIX_LIVE', 'NIER_REMIX_LIVE_TEX', 'NIER_REMIX_LIVE_STATS_EVERY',
                                      'NIER_REMIX_LIVE_MAX_WRITE_KB', 'NIER_REMIX_LIVE_SHADOW_KB', 'NIER_REMIX_LIVE_BUDGET_KB',
                                      'NIER_REMIX_LIVE_ASYNC_READS', 'NIER_REMIX_LIVE_READ_LATENCY',
-                                     'MOCK_LATE_IMMUTABLE', 'MOCK_LIVE_REWRITE_SAME', 'FAKE_REMIX_INSTANCE_LOG',
+                                     'MOCK_LATE_IMMUTABLE', 'MOCK_LIVE_REWRITE_SAME', 'MOCK_SHARED_REWRITE', 'NIER_REMIX_LIVE_PRESENCE_MIN', 'FAKE_REMIX_INSTANCE_LOG',
                                      'NIER_REMIX_LIVE_BUILD_BUDGET_US', 'NIER_REMIX_LIVE_TEX_WRITE_DELAY_MS',
                                      'NIER_REMIX_TEST_FRAME_MS')  # tr.run clears only these: a case's switch must not leak
 KEYS = ('reads', 'first', 'trimmed', 'unmirrored', 'const', 'immutable', 'default', 'dynamic', 'read_kb', 'read_ms',
@@ -188,6 +188,33 @@ def inside():
                     for m in [re.match(r'DrawInstance presented=(\d+)', x)] if m}
         assert len(a_frames) >= 60, f'instances missing on {80 - len(a_frames)} of 80 frames: {sorted(a_frames)[:10]}'
         results['async-rewrite'] = f'{v}; drawn on {len(a_frames)} frames'
+
+        # 6b. Two objects share that every-frame-rewritten buffer (popin-gaps-b4000: four objects sharing one rewritten
+        #     slot-2 buffer sat in read_pending for the whole run). A landed read is already stale, so its bytes are a
+        #     per-frame snapshot: only the first draw used it, and every later draw found the re-issued copy in flight.
+        r, log = run('async-shared', {'NIER_REMIX_LIVE_MAX_WRITE_KB': '0', 'NIER_REMIX_LIVE_ASYNC_READS': '1',
+                                      'NIER_REMIX_LIVE_READ_LATENCY': '1', 'MOCK_LIVE_REWRITE_SAME': '1',
+                                      'MOCK_SHARED_REWRITE': '1', 'FAKE_REMIX_INSTANCE_LOG': '1',
+                                      'NIER_REMIX_LIVE_PRESENCE_MIN': '0'})
+        stuck = [x for x in tr.remix_lines(log) if x.startswith('remix: stuck ')]
+        assert not stuck, f'an object sharing the rewritten buffer was never built: {stuck[:2]}'
+        queue = [dict(re.findall(r'(missing_inst)=(\d+)', x)) for x in tr.remix_lines(log) if x.startswith('remix: presence ')]
+        late = [int(q['missing_inst']) for q in queue[10:] if q]
+        run_len = longest = 0
+        for m in late:  # a rebuild after the mock's content change may miss a frame; a starved object misses all of them
+            run_len = run_len + 1 if m else 0
+            longest = max(longest, run_len)
+        assert late and longest <= 2, f'instances without a mesh for {longest} frames in a row: {late[:40]}'
+        per_frame = {}
+        for x in r['fake'].splitlines():
+            m = re.match(r'DrawInstance presented=(\d+) mesh=(\d+)', x)
+            if m:
+                per_frame.setdefault(int(m.group(1)), set()).add(m.group(2))
+        meshes = set().union(*per_frame.values()) if per_frame else set()
+        both = [f for f, ms in per_frame.items() if len(ms) >= 2]
+        assert len(meshes) >= 2, f'the second object sharing the rewritten buffer was never built: meshes {meshes}'
+        assert len(both) >= 40, f'both objects drawn on only {len(both)} of 80 frames'
+        results['async-shared'] = f'meshes {len(meshes)}; both drawn on {len(both)} frames'
 
         # 7. NIER_REMIX_LIVE_BUILD_BUDGET_US (live 2026-10-31 async2: worst game frames of 114-304 ms were our own draw hooks
         #    building hundreds of new meshes in one frame when the camera turned). A 1 us budget allows one new build per

@@ -101,9 +101,12 @@ struct PendingRead {
     unsigned polls = 0;
 };
 inline std::map<ID3D11Buffer*, PendingRead>& pending_reads() { static std::map<ID3D11Buffer*, PendingRead> p; return p; }
-// A copy that lands after the game wrote the buffer again is a consistent snapshot of the older bytes: it is used for
-// the draw that needed it but never stored as the mirror, and the geometry is rebuilt again from a fresh copy. A buffer
-// rewritten every frame then trails by a frame or two instead of never landing (live 2026-10-31: lights=0, frozen meshes).
+// A copy that lands after the game wrote the buffer again is a consistent snapshot of the older bytes: never stored as
+// the mirror, and geometry built from it is rebuilt again from a newer copy. A buffer rewritten every frame then trails
+// by a frame or two instead of never landing (live 2026-10-31: lights=0, frozen meshes). The snapshot stays usable by
+// every draw until a newer copy lands: kept for one frame and one draw only, the first draw to poll a landed copy won
+// every frame and the others sharing the buffer, or needing two such buffers at once, were never built
+// (popin-gaps-b4000: four objects sharing a rewritten vb1 sat in read_pending for the whole run).
 inline std::map<ID3D11Buffer*, std::vector<unsigned char>>& stale_snapshots() { static std::map<ID3D11Buffer*, std::vector<unsigned char>> s; return s; }
 inline std::set<std::uint64_t>& stale_built() { static std::set<std::uint64_t> s; return s; }
 inline void drop_pending(std::map<ID3D11Buffer*, PendingRead>::iterator it) {
@@ -141,7 +144,7 @@ inline unsigned fail_vb_reads = 0;                         // test switch only
 // in steps. The copy is issued on the draw that needs it and polled with DO_NOT_WAIT on later draws; until it lands the
 // draw is not rebuilt (an existing mesh stays, a new one appears a frame or two late). Off until the live A/B.
 inline bool async_reads = false;
-inline unsigned read_latency = 0;  // test switch: report "still drawing" this many polls before really trying
+inline unsigned read_latency = 0;  // test switch: report "still drawing" until this many frames after the copy
 inline std::atomic<unsigned long long> blocking_reads{0}, pending_polls{0}, read_waits{0};
 inline bool read_pending = false;  // set by buffer_bytes when it returned nothing because a read is in flight
 inline bool read_stale = false;    // set when it returned a snapshot older than the game's latest write
@@ -462,6 +465,7 @@ inline std::uint64_t hash_mix(std::uint64_t h, const void* data, std::size_t n) 
 inline std::uint64_t hash_value(std::uint64_t value) { return hash_mix(1469598103934665603ull, &value, sizeof value); }
 
 inline void erase_shadow(std::map<ID3D11Buffer*, Shadow>::iterator it) {
+    stale_snapshots().erase(it->first);  // the shadow's reference kept the pointer from being reused; now it may be
     shadow_bytes -= it->second.bytes.size();
     it->first->Release();
     shadows().erase(it);
@@ -511,6 +515,7 @@ inline void set_permitted(bool ok) {
         mapped().clear();
         while (!shadows().empty()) erase_shadow(shadows().begin());  // the game's buffers are no longer pinned
         while (!pending_reads().empty()) drop_pending(pending_reads().begin());
+        stale_snapshots().clear();
         for (auto& entry : texture_ids()) entry.first->Release();
         texture_ids().clear();
         built_versions().clear();
@@ -611,12 +616,17 @@ inline const std::vector<unsigned char>* buffer_bytes(ID3D11Device* device, ID3D
             if (it == pending_reads().end()) it = issue();
             if (it == pending_reads().end()) return nullptr;
             D3D11_MAPPED_SUBRESOURCE map{};
-            const HRESULT hr = it->second.polls++ < read_latency
+            ++it->second.polls;
+            const HRESULT hr = frame_number < it->second.issued + read_latency
                                    ? DXGI_ERROR_WAS_STILL_DRAWING
                                    : context->Map(it->second.staging, 0, D3D11_MAP_READ, D3D11_MAP_FLAG_DO_NOT_WAIT, &map);
             if (hr == DXGI_ERROR_WAS_STILL_DRAWING) {
                 pending_polls.fetch_add(1, std::memory_order_relaxed);
                 read_us_total.fetch_add(now_us() - started, std::memory_order_relaxed);
+                if (const auto s = stale_snapshots().find(buffer); s != stale_snapshots().end()) {
+                    read_stale = true;  // the last landed bytes, while a newer copy is in flight
+                    return &s->second;
+                }
                 read_pending = true;
                 return nullptr;
             }
@@ -628,6 +638,7 @@ inline const std::vector<unsigned char>* buffer_bytes(ID3D11Device* device, ID3D
             context->Unmap(it->second.staging, 0);
             const bool stale = it->second.identity != identity(buffer);
             drop_pending(it);
+            if (read && !stale) stale_snapshots().erase(buffer);  // the fresh bytes become the mirror below
             if (read && stale) {
                 read_us_total.fetch_add(now_us() - started, std::memory_order_relaxed);
                 read_reasons[!shadow ? 0u : shadow->written ? 2u : 1u].fetch_add(1, std::memory_order_relaxed);
@@ -637,6 +648,7 @@ inline const std::vector<unsigned char>* buffer_bytes(ID3D11Device* device, ID3D
                 read_bytes_this_frame += bytes.size();
                 issue();  // the copy for the game's newer bytes
                 read_stale = true;
+                if (stale_snapshots().size() > 4096) stale_snapshots().clear();  // bounded; a cleared one is read again
                 std::vector<unsigned char>& snapshot = stale_snapshots()[buffer];
                 snapshot.swap(bytes);
                 return &snapshot;
@@ -890,7 +902,6 @@ inline void begin_frame(ID3D11DeviceContext* context, unsigned width = 0, unsign
         building().scene_h = scene_height;
         if (width && height) { final_width = width; final_height = height; }
         ++frame_number;
-        stale_snapshots().clear();  // only valid for the draw that read them
         {
             static unsigned long long last_us = 0;
             const unsigned long long now = now_us();

@@ -209,6 +209,7 @@ State configure() {
         }
         // NIER_REMIX_LIVE_NO_ALPHA_TEST=1: the renderer-side A/B, since the capture side is measured healthy.
         live_scene::alpha_test_enabled = env(L"NIER_REMIX_LIVE_NO_ALPHA_TEST") != L"1";
+        live_scene::hold_enabled = env(L"NIER_REMIX_LIVE_HOLD") != L"0";
         live_capture::visibility_trace_enabled.store(env(L"NIER_REMIX_LIVE_TRACE") == L"1", std::memory_order_release);
         if (const std::wstring n = env(L"NIER_REMIX_LIVE_STATS_EVERY"); !n.empty())
             if (const unsigned long long v = _wcstoui64(n.c_str(), nullptr, 10); v >= 2) stats_every = std::min<unsigned long long>(v, 100000);  // % 1 never == 1
@@ -301,6 +302,8 @@ struct Worker {
     bool paused = false;
     visibility_trace::Tracker capture_trace, submit_trace;
     dropout_watch::Watch present_watch;   // which geometry was submitted last frame
+    dropout_watch::Gaps gaps;              // how long dropped keys stay away
+    dropout_watch::Stuck stuck;            // keys submitted without a mesh for 30 frames: never built
     std::map<std::uint64_t, double> previous_fraction;  // last frame's screen fraction per key
     std::map<std::uint64_t, dropout_watch::Ident> previous_ident;  // last frame's draw identity per submitted key
     float previous_camera[14] = {};
@@ -368,6 +371,23 @@ struct Worker {
                                        static_cast<unsigned>(e.reason), to_key(e),
                                        {e.position[0], e.position[1], e.position[2]}});
             const dropout_watch::Step w = present_watch.step(now);
+            gaps.step(w.dropped, w.appeared);
+            for (const auto k : stuck.step(missing)) {
+                const dropout_watch::Seen* seen = nullptr;
+                for (const auto& s : capture_now) if (s.geometry == k) { seen = &s; break; }
+                if (!seen) { logger.load()("remix: stuck key=%llx frames=30 capture=none", static_cast<unsigned long long>(k)); continue; }
+                const auto& c = seen->key;
+                logger.load()("remix: stuck key=%llx frames=30 capture=%s indices=%u start=%u ib=%llx ib_format=%u "
+                              "vb=%llx,%llx,%llx,%llx strides=%u,%u,%u,%u offsets=%u,%u,%u,%u layout=%llx base=%d pos=%.2f,%.2f,%.2f",
+                              static_cast<unsigned long long>(k),
+                              visibility_trace::reason_name(static_cast<visibility_trace::Reason>(seen->reason)),
+                              seen->index_count, seen->start_index, static_cast<unsigned long long>(c.ib), c.ib_format,
+                              static_cast<unsigned long long>(c.vb[0]), static_cast<unsigned long long>(c.vb[1]),
+                              static_cast<unsigned long long>(c.vb[2]), static_cast<unsigned long long>(c.vb[3]),
+                              c.stride[0], c.stride[1], c.stride[2], c.stride[3], c.offset[0], c.offset[1], c.offset[2],
+                              c.offset[3], static_cast<unsigned long long>(c.layout), c.base_vertex,
+                              seen->position[0], seen->position[1], seen->position[2]);
+            }
             // Your test: did the camera move, and how visible was what left? Both measured against the previous frame.
             const dropout_watch::Motion cam_motion = have_previous_camera ? dropout_watch::motion(previous_camera, scene.camera)
                                                                           : dropout_watch::Motion{};
@@ -388,7 +408,8 @@ struct Worker {
                               "cam_moved=%.3f cam_turned=%.2f cam_valid=%d dropped_frac=%.4f keys=%s | "
                               "capture accepted=%u unchanged=%u pass=%u prepass=%u small=%u read_pending=%u "
                               "deferred_budget=%u decode_failed=%u | queue inst=%llu missing_inst=%llu first=%llu "
-                              "first_us=%llu budget_us=%llu game_frames=%llu phase=%d",
+                              "first_us=%llu budget_us=%llu game_frames=%llu phase=%d | gaps returned=%u gap1=%llu gap2=%llu gap3=%llu "
+                              "gap4_8=%llu gap9_30=%llu gone=%llu held=%llu",
                               static_cast<unsigned long long>(frame.sequence), w.present, w.dropped.size(),
                               w.appeared.size(), cam_motion.moved, cam_motion.turned_deg, cam_motion.valid ? 1 : 0,
                               dropped_frac, keys + (keys[0] ? 1 : 0),
@@ -403,7 +424,9 @@ struct Worker {
                               live.frame_instances, live.frame_missing,
                               live_capture::rebuild_reasons[live_capture::kReasonFirst].load(),
                               live_capture::first_sight_us_total.load(), live_capture::budget_us_last.load(),
-                              live_capture::game_frames_total.load(), input_drive::current().phase);
+                              live_capture::game_frames_total.load(), input_drive::current().phase,
+                              gaps.returned_now, gaps.bucket[0], gaps.bucket[1], gaps.bucket[2], gaps.bucket[3],
+                              gaps.bucket[4], gaps.bucket[5], live.frame_held);
                 (void)name;
                 const dropout_watch::Why why =
                     dropout_watch::attribute(w.dropped, w.appeared, previous_ident, capture_now, submit_other, &missing);
@@ -430,11 +453,15 @@ struct Worker {
                                   ? "-" : dropout_watch::component_names(why.moved_mask).c_str(), reasons);
             }
             // Identity of every key submitted now, for next frame's attribution.
-            previous_ident.clear();
+            std::map<std::uint64_t, dropout_watch::Ident> ident;
             for (const auto& e : capture_now)
                 if (e.geometry && now.count(e.geometry))
-                    previous_ident[e.geometry] = {e.source, e.ib, e.index_count, e.start_index, e.key,
-                                                  {e.position[0], e.position[1], e.position[2]}};
+                    ident[e.geometry] = {e.source, e.ib, e.index_count, e.start_index, e.key,
+                                         {e.position[0], e.position[1], e.position[2]}};
+            for (const auto k : now)  // held over from the frame before: no capture event, so keep its last identity
+                if (!ident.count(k))
+                    if (const auto old = previous_ident.find(k); old != previous_ident.end()) ident.insert(*old);
+            previous_ident.swap(ident);
         }
         if (!live_capture::visibility_trace_enabled.load(std::memory_order_relaxed) ||
             !frame.sequence || frame.sequence <= trace_sequence) return;

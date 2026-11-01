@@ -245,4 +245,53 @@ inline Why attribute(const std::vector<std::uint64_t>& dropped, const std::vecto
     return why;
 }
 
+// How long a dropped key stays away: a 1-frame blink can be bridged by holding the object, a long absence is a real
+// removal or an LOD swap and holding it would leave a ghost (popin-key-b4000: 35% of still frames drop a key, 99% of
+// them `absent`). Steps are submitted frames; a key that never returns is counted when it ages out.
+struct Gaps {
+    static constexpr unsigned kBuckets = 6;  // returned after 1, 2, 3, 4-8, 9-30 frames; gone (> 30, or aged out)
+    unsigned long long bucket[kBuckets] = {};
+    unsigned returned_now = 0;               // keys that came back on the last step
+
+    void step(const std::vector<std::uint64_t>& dropped, const std::vector<std::uint64_t>& appeared) {
+        ++step_;
+        returned_now = 0;
+        for (const auto k : appeared) {
+            const auto it = away_.find(k);
+            if (it == away_.end()) continue;
+            const unsigned long long gap = step_ - it->second;
+            ++bucket[gap <= 3 ? gap - 1 : gap <= 8 ? 3 : gap <= 30 ? 4 : 5];
+            ++returned_now;
+            away_.erase(it);
+        }
+        for (const auto k : dropped) away_[k] = step_;
+        for (auto it = away_.begin(); it != away_.end();)  // bounded: a key away > 30 steps is gone
+            if (step_ - it->second > 30) { ++bucket[5]; it = away_.erase(it); } else ++it;
+    }
+    std::size_t away() const { return away_.size(); }
+
+  private:
+    std::map<std::uint64_t, unsigned long long> away_;
+    unsigned long long step_ = 0;
+};
+
+// Keys submitted without a mesh for `threshold` consecutive steps: never built, not a pop. Each is reported once.
+class Stuck {
+  public:
+    explicit Stuck(unsigned threshold = 30) : threshold_(threshold) {}
+    std::vector<std::uint64_t> step(const std::set<std::uint64_t>& missing) {
+        std::vector<std::uint64_t> out;
+        for (auto it = runs_.begin(); it != runs_.end();)
+            if (!missing.count(it->first)) it = runs_.erase(it); else ++it;
+        for (const auto k : missing)
+            if (++runs_[k] == threshold_ && reported_.insert(k).second) out.push_back(k);
+        if (reported_.size() > 4096) reported_.clear();  // bounded; a key may then be reported again
+        return out;
+    }
+  private:
+    unsigned threshold_;
+    std::map<std::uint64_t, unsigned> runs_;
+    std::set<std::uint64_t> reported_;
+};
+
 }  // namespace dropout_watch

@@ -226,7 +226,37 @@ int main() {
         assert(carry.size() == 1 && carry[11] == 1);
         assert(why.arrived_missing == 0);   // planning must not claim anything about build state
     }
-    std::puts("priming, single departures, return as arrival, synchronous event, threshold, camera motion, dropped fraction, attribution, churn breakdown, churn place, key mask, carry, carry planning");
+    // Return gaps: a key away for exactly one frame is a 1-frame blink; 2, 3, 4-8, 9-30 frames; > 30 is gone.
+    {
+        using V = std::vector<std::uint64_t>;
+        dropout_watch::Gaps g;
+        g.step({1, 2, 3, 4}, {});        // four keys leave
+        g.step({}, {1});                 // 1 back after 1 frame
+        assert(g.returned_now == 1 && g.bucket[0] == 1 && g.away() == 3);
+        g.step({}, {2});                 // 2 back after 2
+        g.step({}, {});
+        g.step({}, {3});                 // 3 back after 4
+        assert(g.bucket[1] == 1 && g.bucket[3] == 1 && g.bucket[2] == 0);
+        for (int i = 0; i < 30; ++i) g.step({}, {});
+        assert(g.bucket[5] == 1 && g.away() == 0);   // 4 never came back: gone, and no longer tracked
+        g.step({}, {4});                 // a return after aging out is not a blink
+        assert(g.returned_now == 0 && g.bucket[0] == 1);
+        g.step(V{9}, {});                // leaves, comes back on frame 9 -> bucket 9-30
+        for (int i = 0; i < 8; ++i) g.step({}, {});
+        g.step({}, {9});
+        assert(g.bucket[4] == 1);
+        unsigned long long total = 0; for (auto b : g.bucket) total += b;
+        assert(total == 5);              // every departure counted once
+    }
+    // Stuck: reported once, on the threshold step, only while missing on consecutive steps.
+    {
+        dropout_watch::Stuck s(3);
+        assert(s.step({5, 6}).empty() && s.step({5, 6}).empty());
+        assert((s.step({5}) == std::vector<std::uint64_t>{5}));   // 6 broke its run
+        assert(s.step({5, 6}).empty() && s.step({5, 6}).empty());  // 5 already reported; 6 restarts at 1
+        assert((s.step({5, 6}) == std::vector<std::uint64_t>{6}));
+    }
+    std::puts("priming, single departures, return as arrival, synchronous event, threshold, camera motion, dropped fraction, attribution, churn breakdown, churn place, key mask, carry, carry planning, return gaps, stuck keys");
 }
 '''
 

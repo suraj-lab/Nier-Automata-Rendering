@@ -19,7 +19,7 @@ import test_nscn_scene as ts
 OUT = A / 'runtime/live-visibility'
 tr.ENV_KEYS = tuple(tr.ENV_KEYS) + ('NIER_REMIX_LIVE', 'NIER_REMIX_LIVE_TEX', 'NIER_REMIX_LIVE_BUDGET',
                                   'NIER_REMIX_LIVE_TRACE', 'FAKE_REMIX_INSTANCE_LOG', 'NIER_REMIX_LIVE_PRESENCE_MIN',
-                                  'NIER_REMIX_LIVE_DRIVE', 'MOCK_CHURN_EVERY', 'MOCK_CHURN_SLOT2')
+                                  'NIER_REMIX_LIVE_DRIVE', 'MOCK_CHURN_EVERY', 'MOCK_CHURN_SLOT2', 'NIER_REMIX_LIVE_HOLD')
 NATIVE = tls.HARNESS.replace('int main() {', 'int original_scene_gate() {') + r'''
 #include <cassert>
 static remixapi_ErrorCode REMIXAPI_CALL reject_instance(const remixapi_InstanceInfo*) {
@@ -103,7 +103,24 @@ def wine(work):
     on = {'NIER_REMIX': '1', 'NIER_REMIX_LIVE': '1', 'NIER_REMIX_RUNTIME': tr.win(work / 'fake_remix.dll'),
           'NIER_REMIX_SCENE': tr.win(scene / 'scene.bin'), 'NIER_REMIX_LIVE_TEX': tr.win(tex),
           'NIER_REMIX_LIVE_BUDGET': '3072', 'MOCK_CAMERA': 'live-evict', 'MOCK_FRAME_MS': '60',
-          'FAKE_REMIX_INSTANCE_LOG': '1'}
+          'FAKE_REMIX_INSTANCE_LOG': '1',
+          # The trace joins each submit change to a capture change of the same sequence; a held item's submit change
+          # lands one frame after its capture change by design, so these runs measure the game's draws unheld.
+          'NIER_REMIX_LIVE_HOLD': '0'}
+    # Hold (default on): live-evict drops mesh B from the capture on frames 46-64. It must be held exactly one frame,
+    # reported as held, and only when the hold is on.
+    _, _, hold_log, hold_fake = tr.run(work, 'hold', {**on, 'NIER_REMIX_LIVE_HOLD': '1', 'NIER_REMIX_LIVE_PRESENCE_MIN': '0'})
+    assert 'VIOLATION' not in hold_fake, hold_fake[-2000:]
+    held = [int(m.group(1)) for m in re.finditer(r'held=(\d+)', hold_log)]
+    assert held and max(held) >= 1, f'no item was held when the capture lost one: {held[:40]}'
+    run_len = longest = 0
+    for h in held:
+        run_len = run_len + 1 if h else 0
+        longest = max(longest, run_len)
+    assert longest <= 2, f'an item was held for {longest} frames in a row: {held[:60]}'  # 2: two keys may leave on adjacent frames
+    _, _, unheld_log, _ = tr.run(work, 'hold-off', {**on, 'NIER_REMIX_LIVE_PRESENCE_MIN': '0'})
+    assert all(int(m.group(1)) == 0 for m in re.finditer(r'held=(\d+)', unheld_log)), 'held with NIER_REMIX_LIVE_HOLD=0'
+    print('hold: frames with a held item', sum(1 for h in held if h), 'longest run', longest)
     _, _, off_log, off_fake = tr.run(work, 'trace-off', on)
     assert 'remix: visibility ' not in off_log and 'VIOLATION' not in off_fake
     _, _, log, fake = tr.run(work, 'trace-on', {**on, 'NIER_REMIX_LIVE_TRACE': '1'})
@@ -172,6 +189,13 @@ def wine(work):
     assert 0 in phases and order == sorted(order), phases
     assert 'remix: drive phase=' in plain_log, 'drive counters missing from the stats window'
     print('frame log:', len(lines), 'frames, phases', sorted(set(phases)), 'last', queue[-1])
+    gap_keys = ('gap1', 'gap2', 'gap3', 'gap4_8', 'gap9_30', 'gone')
+    gap_rows = [{k: int(v) for k, v in re.findall(r'(returned|gap\w+|gone)=(\d+)', l.split('| gaps', 1)[-1])} for l in lines]
+    assert all(len(g) == 7 for g in gap_rows), lines[:1]
+    for k in gap_keys:  # cumulative buckets
+        assert [g[k] for g in gap_rows] == sorted(g[k] for g in gap_rows), (k, [g[k] for g in gap_rows])
+    assert 'remix: stuck ' not in plain_log, 'a healthy run reported a never-built key: ' + \
+        next(l for l in plain_log.splitlines() if 'remix: stuck ' in l)
     explained = 0
     for line in lines:
         f = dict(re.findall(r'([a-z_]+)=(\d+)', line))
@@ -217,6 +241,9 @@ def wine(work):
     # The swapped copy is the same object in the same place.
     assert all(f['place_same'] == f['churn_pointer'] and f['place_far'] == 0 for f in swaps), swaps[:3]
     print('churn sample:', swaps[:2], 'arrived_missing total', sum(f['arrived_missing'] for f in swaps))
+    # The swapped-out key comes back 10 frames later, every time: return gaps must see it in the 9-30 bucket.
+    churn_gaps = [int(m.group(1)) for m in re.finditer(r'gap9_30=(\d+)', churn_log)]
+    assert churn_gaps and churn_gaps[-1] > 0, f'a key returning after 10 frames was not measured: {churn_gaps[-3:]}'
     # Secondary-stream churn (the live pattern): slot 2 moves to an identical copy every 10 frames while POSITION stays.
     # The object must keep its key (no churn, nothing dropped), and the move must still reach the version (a rebuild).
     _, _, s2_log, _ = tr.run(work, 'churn-slot2', {**on, 'NIER_REMIX_LIVE_PRESENCE_MIN': '0', 'MOCK_CHURN_SLOT2': '10'})

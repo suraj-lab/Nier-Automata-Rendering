@@ -6,6 +6,7 @@
 #include <cstring>
 #include <map>
 #include <mutex>
+#include <set>
 #include <string>
 #include <vector>
 #include <remix_c.h>
@@ -29,6 +30,8 @@ struct CoverageTotals {
     unsigned best_flags = 0;
 };
 inline bool coverage_enabled = true;
+// NIER_REMIX_LIVE_HOLD=0 turns it off: an item the game skipped this frame is drawn once more from the frame before.
+inline bool hold_enabled = true;
 inline std::mutex coverage_mutex;
 inline CoverageTotals coverage;
 
@@ -57,6 +60,9 @@ struct State {
     std::map<std::uint64_t, std::uint64_t> carry;
     std::uint64_t carried = 0;   // instances drawn with a stand-in mesh, reported per stats window
     unsigned long long frame_instances = 0, frame_missing = 0;  // last submit: instances, and instances with no mesh
+    unsigned long long frame_held = 0;                          // last submit: instances held over from the frame before
+    std::vector<live_capture::Item> hold_items;                 // last submitted frame, for hold_enabled
+    std::vector<float> hold_transforms, hold_bones;
     remixapi_LightHandle sun = nullptr, sky = nullptr;
     live_capture::Sun sun_value;  // what `sun` was created with, when sun_captured
     bool sun_captured = false;
@@ -367,7 +373,9 @@ inline remixapi_ErrorCode submit(const remixapi_Interface& api, const live_captu
         if (trace) ++trace->dropped;
         return r;
     }
-    for (const auto& item : frame.items) {
+    // One item from a frame's arrays; `held` = last frame's item, drawn again because this frame skipped it.
+    const auto draw = [&](const live_capture::Item& item, const std::vector<float>& transforms,
+                          const std::vector<float>& bone_array, bool held) -> remixapi_ErrorCode {
         visibility_trace::Event event{};
         event.source = item.trace_source;
         event.geometry = item.geometry;
@@ -375,10 +383,10 @@ inline remixapi_ErrorCode submit(const remixapi_Interface& api, const live_captu
         event.target_h = item.trace_h;
         event.texture = item.texture;
         event.bones = item.bone_count;
-        event.flags = (item.sky ? 1u : 0u) | (item.blended ? 2u : 0u);
+        event.flags = (item.sky ? 1u : 0u) | (item.blended ? 2u : 0u) | (held ? 8u : 0u);
         auto mesh = s.meshes.find(item.geometry);
         bool carried = false;
-        if (mesh == s.meshes.end() || !mesh->second) {
+        if ((mesh == s.meshes.end() || !mesh->second) && !held) {
             // Never for a skinned draw: this frame's bone palette would be applied to the predecessor's bind pose, which
             // is a wrong pose rather than a missing one. Unmeasured either way, so the safe side wins.
             if (const auto c = item.bone_count ? s.carry.end() : s.carry.find(item.geometry); c != s.carry.end()) {
@@ -390,6 +398,7 @@ inline remixapi_ErrorCode submit(const remixapi_Interface& api, const live_captu
                 }
             }
         }
+        if ((mesh == s.meshes.end() || !mesh->second) && held) return REMIXAPI_ERROR_CODE_SUCCESS;  // evicted: nothing to hold
         if (mesh == s.meshes.end() || !mesh->second) {
             event.reason = visibility_trace::Reason::MeshMissing;
             event.instances = item.count;
@@ -397,11 +406,11 @@ inline remixapi_ErrorCode submit(const remixapi_Interface& api, const live_captu
             s.frame_instances += item.count;
             s.frame_missing += item.count;
             if (trace) trace->add(event);
-            continue;
+            return REMIXAPI_ERROR_CODE_SUCCESS;
         }
         for (unsigned i = 0; i < item.count; ++i) {
             const std::size_t base = (static_cast<std::size_t>(item.first) + i) * 12;
-            if (base + 12 > frame.transforms.size()) {
+            if (base + 12 > transforms.size()) {
                 event.reason = visibility_trace::Reason::BadTransform;
                 event.instances = item.count - i;
                 if (trace) trace->add(event);
@@ -411,8 +420,8 @@ inline remixapi_ErrorCode submit(const remixapi_Interface& api, const live_captu
             bones.sType = REMIXAPI_STRUCT_TYPE_INSTANCE_INFO_BONE_TRANSFORMS_EXT;
             bones.pNext = nullptr;
             const std::size_t bone_base = static_cast<std::size_t>(item.first_bone) * 12;
-            if (item.bone_count && bone_base + 12ull * item.bone_count <= frame.bones.size()) {
-                bones.boneTransforms_values = reinterpret_cast<const remixapi_Transform*>(frame.bones.data() + bone_base);
+            if (item.bone_count && bone_base + 12ull * item.bone_count <= bone_array.size()) {
+                bones.boneTransforms_values = reinterpret_cast<const remixapi_Transform*>(bone_array.data() + bone_base);
                 bones.boneTransforms_count = item.bone_count;
             }
             remixapi_InstanceInfo instance{};
@@ -425,7 +434,7 @@ inline remixapi_ErrorCode submit(const remixapi_Interface& api, const live_captu
             if (item.blended) instance.categoryFlags |= REMIXAPI_INSTANCE_CATEGORY_BIT_ALPHA_BLEND_TO_CUTOUT;
             if (item.sky) instance.categoryFlags |= REMIXAPI_INSTANCE_CATEGORY_BIT_SKY;
             for (unsigned r = 0; r < 3; ++r)
-                for (unsigned c = 0; c < 4; ++c) instance.transform.matrix[r][c] = frame.transforms[base + 4 * r + c];
+                for (unsigned c = 0; c < 4; ++c) instance.transform.matrix[r][c] = transforms[base + 4 * r + c];
             if (measure_coverage) {
                 const auto b = s.mesh_bounds.find(item.geometry);
                 std::lock_guard<std::mutex> lock(coverage_mutex);
@@ -455,6 +464,7 @@ inline remixapi_ErrorCode submit(const remixapi_Interface& api, const live_captu
             const remixapi_ErrorCode result = api.DrawInstance(&instance);
             s.frame_instances += 1;
             if (carried && !result) ++s.carried;   // drawn, but with the predecessor's mesh this frame
+            if (held && !result) ++s.frame_held;
             funnel::count_instance(result ? visibility_trace::Reason::DrawFailed : visibility_trace::Reason::Drawn);
             if (trace) {
                 event.reason = result ? visibility_trace::Reason::DrawFailed : visibility_trace::Reason::Drawn;
@@ -469,6 +479,24 @@ inline remixapi_ErrorCode submit(const remixapi_Interface& api, const live_captu
                 return result;
             }
         }
+        return REMIXAPI_ERROR_CODE_SUCCESS;
+    };
+    s.frame_held = 0;
+    for (const auto& item : frame.items)
+        if (const remixapi_ErrorCode r = draw(item, frame.transforms, frame.bones, false)) return r;
+    // NieR skips some draws for a single frame while nothing changes (popin-gaps-b4000: 28% of still-camera departures
+    // were back on the next Remix frame), and one Remix frame shows one game frame of ~5, so a one-game-frame gap is
+    // held on screen for ~66 ms. Last frame's items that this frame lacks are drawn once more; the stored copy holds
+    // only items the game really drew, so nothing is held twice and a real removal lingers one frame at most.
+    if (hold_enabled) {
+        std::set<std::uint64_t> now;
+        for (const auto& item : frame.items) now.insert(item.geometry);
+        for (const auto& item : s.hold_items)
+            if (!now.count(item.geometry))
+                if (const remixapi_ErrorCode r = draw(item, s.hold_transforms, s.hold_bones, true)) return r;
+        s.hold_items = frame.items;
+        s.hold_transforms = frame.transforms;
+        s.hold_bones = frame.bones;
     }
     if (s.sun) api.DrawLightInstance(s.sun);
     if (s.sky) api.DrawLightInstance(s.sky);

@@ -560,6 +560,10 @@ int wmain(int argc, wchar_t** argv) {
     const bool late_immutable = std::getenv("MOCK_LATE_IMMUTABLE") != nullptr;
     ID3D11Buffer* late_vb = nullptr, *late_ib = nullptr;
     const bool rewrite_same = std::getenv("MOCK_LIVE_REWRITE_SAME") != nullptr;  // same bytes every frame
+    // MOCK_SHARED_REWRITE: a second draw reads the same every-frame-rewritten vertex buffer through its own index
+    // buffer (popin-gaps-b4000: four objects sharing one rewritten slot-2 buffer were never built).
+    const bool shared_rewrite = std::getenv("MOCK_SHARED_REWRITE") != nullptr;
+    ID3D11Buffer* shared_ib = nullptr;
     const int spender_from = [] { const char* v = std::getenv("MOCK_LIVE_SPENDER_FROM"); return v ? std::atoi(v) : 0; }();
     ID3D11InputLayout* live_layout = nullptr, *live_layout_slot1 = nullptr, *live_layout_split = nullptr;
     // MOCK_CHURN_SLOT2=N: the main draw reads TEXCOORD from slot 2, and every N frames slot 2 moves to an identical copy
@@ -849,6 +853,7 @@ int wmain(int argc, wchar_t** argv) {
         lib.BindFlags = D3D11_BIND_INDEX_BUFFER;
         D3D11_SUBRESOURCE_DATA lid = {lindices, 0, 0};
         if (FAILED(device->CreateBuffer(&lib, &lid, &live_ib))) { std::fprintf(out, "FAIL live ib\n"); return 3; }
+        if (shared_rewrite && FAILED(device->CreateBuffer(&lib, &lid, &shared_ib))) { std::fprintf(out, "FAIL shared ib\n"); return 3; }
         D3D11_BUFFER_DESC lbd2{}; lbd2.ByteWidth = lbd.ByteWidth; lbd2.Usage = D3D11_USAGE_DEFAULT;
         lbd2.BindFlags = D3D11_BIND_VERTEX_BUFFER;
         D3D11_SUBRESOURCE_DATA lid2 = {lverts, 0, 0};
@@ -1235,6 +1240,11 @@ int wmain(int argc, wchar_t** argv) {
                         } else
                         context->DrawIndexed(192, 0, 0);
                         if (live_evict && pass == 1 && frame >= 55) context->DrawIndexed(189, 0, 0);  // mesh C
+                        if (shared_ib && pass == 1) {  // same rewritten VB, its own IB: a second object, drawn after A
+                            context->IASetIndexBuffer(shared_ib, DXGI_FORMAT_R32_UINT, 0);
+                            context->DrawIndexed(192, 0, 0);
+                            context->IASetIndexBuffer(ib, DXGI_FORMAT_R32_UINT, 0);
+                        }
                     }
                 }
                 if (late_immutable && frame >= 60) {
