@@ -87,3 +87,11 @@ builds before submit, so `arrived_missing` is only unit-tested. Full suite 70/70
   object without a built mesh, so it is absent from the Remix image: a measured cause of still-camera blinking.
 Open: which remaining key component moves; what the still-camera `absent` 61% is (game not drawing, rejected before
 the key is computed, or re-keyed with another range).
+
+## live-churn funnel windows: two different faults
+
+Instance-level per ~3 s window: steady state 0.5-2.3% of instances reach the renderer without a mesh; at 31.8 s
+(instances 9,270 -> 31,925, new area streaming) it is 50.5%, at 35.1 s 22.7%, at 62.8 s 8.4%, then back to ~1.2%.
+The same early window defers 2,915 builds on the 4 ms budget. Standing-still `absent` (61% of still-camera dropouts)
+is not a two-way key swap (absent == appeared in 151 of 951 events) and cannot be a pre-key rejection (such a draw is
+filtered identically every frame), so it is the game not issuing those draws: engine cull / FAR LOD, not capture.
