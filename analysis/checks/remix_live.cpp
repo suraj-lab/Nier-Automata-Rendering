@@ -170,7 +170,7 @@ State configure() {
                 live_capture::expire_frames = std::min<unsigned long long>(n, 1000000);  // no wrap in used_frame + expire
         if (const std::wstring budget = env(L"NIER_REMIX_LIVE_SHADOW_KB"); !budget.empty())
             if (const unsigned long long kb = _wcstoui64(budget.c_str(), nullptr, 10)) live_capture::shadow_budget = static_cast<std::size_t>(kb) << 10;
-        // NIER_REMIX_LIVE_TEX_PER_FRAME: new textures captured per frame. 0 = none this frame, default 4, clamped to 64.
+        // NIER_REMIX_LIVE_TEX_PER_FRAME: new GPU texture readbacks per frame. 0 = none, default 4, clamped to 64.
         // Rollback switches for the live test (analysis/ROADMAP.md): no HUD capture/replay; drop the sky dome again.
         live_capture::hud_enabled = env(L"NIER_REMIX_LIVE_NO_HUD") != L"1";
         live_capture::sky_enabled = env(L"NIER_REMIX_LIVE_NO_SKY") != L"1";

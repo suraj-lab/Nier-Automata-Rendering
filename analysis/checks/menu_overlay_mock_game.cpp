@@ -45,6 +45,19 @@ static void STDMETHODCALLTYPE spy_copy(ID3D11DeviceContext* self, ID3D11Resource
     reinterpret_cast<Fn>(next_copy.load())(self, dst, src);
 }
 
+// Count real staging copies of the PBR mask, independently of the capture's own budget counter.
+static std::atomic<void*> next_mask_copy{nullptr};
+static ID3D11Resource* mask_resource = nullptr;  // borrowed; the mock's SRV keeps it alive
+static unsigned mask_reads = 0;
+static void STDMETHODCALLTYPE spy_mask_copy(ID3D11DeviceContext* self, ID3D11Resource* dst, UINT dst_sub,
+                                            UINT x, UINT y, UINT z, ID3D11Resource* src, UINT src_sub,
+                                            const D3D11_BOX* box) {
+    if (src == mask_resource) ++mask_reads;
+    using Fn = void (STDMETHODCALLTYPE*)(ID3D11DeviceContext*, ID3D11Resource*, UINT, UINT, UINT, UINT,
+                                         ID3D11Resource*, UINT, const D3D11_BOX*);
+    reinterpret_cast<Fn>(next_mask_copy.load())(self, dst, dst_sub, x, y, z, src, src_sub, box);
+}
+
 // ---- a stand-in for another layer taking over the draw slots (MOCK_STEAL_DRAW=<frame>) ----
 // On the laptop our DrawIndexed/DrawIndexedInstanced hooks disappeared from the same context object and the same
 // vtable when the game switched to 2880x1800, so the probe must report an observed loss with the slot values, not a
@@ -465,6 +478,13 @@ int wmain(int argc, wchar_t** argv) {
     ID3D11ShaderResourceView* pbr_srvs[2] = {mesh_pbr ? make_srv(4, 4, DXGI_FORMAT_R8G8B8A8_UNORM, mask_px, 16, 0) : nullptr,
                                              mesh_pbr ? make_srv(4, 4, DXGI_FORMAT_R8G8B8A8_UNORM, nrm_px, 16, 0) : nullptr};
     if (mesh_pbr && (!pbr_srvs[0] || !pbr_srvs[1])) { std::fprintf(out, "FAIL pbr textures\n"); return 3; }
+    if (mesh_pbr) {
+        pbr_srvs[0]->GetResource(&mask_resource);
+        mask_resource->Release();
+        const auto hooked = vtable_hook::hook(*reinterpret_cast<void***>(context), 46,
+            reinterpret_cast<void*>(&spy_mask_copy), next_mask_copy, spy_protect);
+        if (hooked != vtable_hook::Result::Hooked) { std::fprintf(out, "FAIL mask copy spy\n"); return 3; }
+    }
     ID3D11ShaderResourceView* mesh_srvs[4] = {
         make_srv(4, 4, DXGI_FORMAT_R8G8B8A8_UNORM, rgba, 16, 0),
         make_srv(16, 16, DXGI_FORMAT_R8G8B8A8_UNORM, nullptr, 0, D3D11_BIND_RENDER_TARGET),
@@ -1458,6 +1478,7 @@ int wmain(int argc, wchar_t** argv) {
     }
     if (overlay_rehook) std::fprintf(out, "overlay_calls=%u overlay_loops=%u overlay_discoveries=%u second_calls=%u second_created=%u foreign_hooked=%u foreign_created=%u\n",
                                     ov_calls, ov_loops, ov_discoveries, second_calls, second_created, foreign_hooked, foreign_created);
+    if (mesh_pbr) std::fprintf(out, "mask_reads=%u\n", mask_reads);
     std::fprintf(out, "midframe_resets=%u\n", midframe_resets);
     std::fprintf(out, "presented=%u stub_presents=%u foreground=%d cs_lost=%u\n", presented, count(),
                  GetForegroundWindow() == hwnd, cs_lost);

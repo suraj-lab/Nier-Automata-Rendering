@@ -495,7 +495,7 @@ inline void publish_ui() {
     ui_building() = UiSnapshot{};
     ui_draw_count.store(static_cast<unsigned>(ready.draws.size()), std::memory_order_release);
 }  // the slot-20 light array is frame-level data: read at most once per frame
-inline unsigned textures_per_frame = 4;  // NIER_REMIX_LIVE_TEX_PER_FRAME (0 = none this frame): each new texture is a GPU readback + a file write on this thread
+inline unsigned textures_per_frame = 4;  // NIER_REMIX_LIVE_TEX_PER_FRAME: new GPU texture readbacks (0 = none); files written on the worker
 // NIER_REMIX_LIVE_NORMAL: also capture the material's normal map, at the slot the draw's own pixel shader decodes as one
 // (material_roles.h). It used to be slot 4 for every draw: that is g_NormalTexture of the effects shaders, and the
 // 2-channel *detail* normal of the world materials, whose normal map is slot 3 or 2 (analysis/PBR_MAPPING.md).
@@ -908,42 +908,43 @@ inline void STDMETHODCALLTYPE hooked_copy_region(ID3D11DeviceContext* self, ID3D
 
 // ---- textures ----------------------------------------------------------------------------------
 // A PS material texture with its whole mip chain, written once per resource as a DDS the Remix runtime can load.
-// Each one is a GPU readback and a file write on the game's thread, so they are rate-limited per frame and capped on disk.
+// GPU readbacks are rate-limited per frame; the worker writes the queued DDS files under the session disk cap.
 enum class TextureResult { Captured, Unusable, Deferred };
 
 inline TextureResult write_texture(ID3D11Device* device, ID3D11DeviceContext* context, ID3D11Resource* resource,
-                                   std::uint32_t& id, bool normal_slot = false, int channel = -1, bool invert = false) {
+                                   std::uint32_t& id, std::shared_ptr<const texture_capture::Texture>& source,
+                                   bool normal_slot = false, int channel = -1, bool invert = false) {
     if (texture_dir.empty() || texture_bytes_written >= texture_disk_budget) return TextureResult::Unusable;
     const PhaseTimer timer(kPhaseTexture);
-    if (textures_this_frame >= textures_per_frame) return TextureResult::Deferred;
-    ID3D11Texture2D* texture = nullptr;
-    if (FAILED(resource->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&texture))) || !texture)
-        return TextureResult::Unusable;
-    D3D11_TEXTURE2D_DESC desc{};
-    texture->GetDesc(&desc);
-    const UINT dynamic_binds = D3D11_BIND_RENDER_TARGET | D3D11_BIND_DEPTH_STENCIL | D3D11_BIND_UNORDERED_ACCESS;
-    TextureResult result = TextureResult::Unusable;
-    texture_capture::Texture pixels;
-    if (!(desc.BindFlags & dynamic_binds) && desc.Usage != D3D11_USAGE_DYNAMIC && desc.SampleDesc.Count == 1) {
-        ++textures_this_frame;
-        const unsigned long long started = now_us();
-        const bool read = texture_capture::read_mips(device, context, texture, desc, pixels);
-        texture_us_total.fetch_add(now_us() - started, std::memory_order_relaxed);
-        if (read) {
-            const std::uint32_t assigned = next_texture_id;
-            wchar_t name[64];
-            swprintf(name, 64, L"\\live_%u.dds", assigned);
-            const std::wstring path = texture_dir + name;
-            texture_bytes_written += pixels.bytes.size();
-            all_textures().push_back(TextureFile{assigned, path, std::make_shared<const texture_capture::Texture>(std::move(pixels)),
-                                                 normal_slot, channel, invert});
-            id = assigned;
-            ++next_texture_id;
-            result = TextureResult::Captured;
+    if (!source) {
+        if (textures_this_frame >= textures_per_frame) return TextureResult::Deferred;
+        ID3D11Texture2D* texture = nullptr;
+        if (FAILED(resource->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&texture))) || !texture)
+            return TextureResult::Unusable;
+        D3D11_TEXTURE2D_DESC desc{};
+        texture->GetDesc(&desc);
+        const UINT dynamic_binds = D3D11_BIND_RENDER_TARGET | D3D11_BIND_DEPTH_STENCIL | D3D11_BIND_UNORDERED_ACCESS;
+        texture_capture::Texture pixels;
+        bool read = false;
+        if (!(desc.BindFlags & dynamic_binds) && desc.Usage != D3D11_USAGE_DYNAMIC && desc.SampleDesc.Count == 1) {
+            ++textures_this_frame;
+            const unsigned long long started = now_us();
+            read = texture_capture::read_mips(device, context, texture, desc, pixels);
+            texture_us_total.fetch_add(now_us() - started, std::memory_order_relaxed);
         }
+        texture->Release();
+        if (!read) return TextureResult::Unusable;
+        source = std::make_shared<const texture_capture::Texture>(std::move(pixels));
     }
-    texture->Release();
-    return result;
+    const std::uint32_t assigned = next_texture_id;
+    wchar_t name[64];
+    swprintf(name, 64, L"\\live_%u.dds", assigned);
+    const std::wstring path = texture_dir + name;
+    texture_bytes_written += source->bytes.size();  // conservative per-output disk accounting, unchanged
+    all_textures().push_back(TextureFile{assigned, path, source, normal_slot, channel, invert});
+    id = assigned;
+    ++next_texture_id;
+    return TextureResult::Captured;
 }
 
 inline unsigned max_draws = 4096;
@@ -1387,8 +1388,9 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     std::uint64_t uv_bits = 0;            // ... folded into the version, so a changed repeat rebuilds the mesh
     bool texture_deferred = false;
     {
-        // One capture path for both material inputs: the resource cache and the write budget are shared, so a normal map
-        // that many draws bind is read back and written once.
+        // Share raw bytes between this draw's roles (metallic/roughness use the same mask); only the queued worker
+        // files retain them after the draw, so this adds no session-long pixel cache.
+        std::map<ID3D11Resource*, std::shared_ptr<const texture_capture::Texture>> captured_pixels;
         const auto obtain = [&](ID3D11Resource* resource, std::uint32_t& id, unsigned kind = 0) {
             const TextureKey key{resource, kind};
             const auto known = texture_ids().find(key);
@@ -1398,9 +1400,7 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
                 return TextureResult::Captured;
             }
             std::uint32_t assigned = 0;
-            // shortcut: metallic and roughness of one mask are read back separately (two readbacks of one texture);
-            // share one readback if texture time shows up in the frame budget.
-            const TextureResult result = write_texture(device, context, resource, assigned, kind == 1,
+            const TextureResult result = write_texture(device, context, resource, assigned, captured_pixels[resource], kind == 1,
                                                        kind >= 2 ? static_cast<int>((kind - 2) / 2) : -1,
                                                        kind >= 2 && (kind - 2) % 2);
             if (result == TextureResult::Deferred) {

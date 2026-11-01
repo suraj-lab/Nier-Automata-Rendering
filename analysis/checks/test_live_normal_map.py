@@ -31,7 +31,7 @@ import test_nscn_scene as ts
 tr.ENV_KEYS = tuple(tr.ENV_KEYS) + ('NIER_REMIX_LIVE', 'NIER_REMIX_LIVE_TEX', 'MOCK_NORMAL_TEX',
                                     'NIER_REMIX_LIVE_NORMAL', 'NIER_REMIX_LIVE_NORMAL_RAW', 'FAKE_REMIX_INSTANCE_LOG',
                                     'MOCK_CAMERA', 'MOCK_PBR_PS', 'NIER_REMIX_LIVE_PBR', 'NIER_REMIX_LIVE_ROUGHNESS_FLOOR', 'MOCK_UV_PS',
-                                    'MOCK_SMALL_DRAW', 'NIER_REMIX_LIVE_MIN_INDICES')
+                                    'MOCK_SMALL_DRAW', 'NIER_REMIX_LIVE_MIN_INDICES', 'NIER_REMIX_LIVE_TEX_PER_FRAME')
 
 BC5 = bytes((i * 19 + 5) & 0xff for i in range(2 * 2 * 16))  # the mock's 8x8 BC5 normal map
 RGBA4 = bytes((i * 7 + 3) & 0xff for i in range(4 * 4 * 4))  # the mock's 4x4 albedo
@@ -50,6 +50,11 @@ def dds(path):
 def main():
     work = Path(tempfile.mkdtemp(prefix='live-normal-'))
     tmo.build(work)
+    # Verify the spy's slot against the actual C ABI, not a remembered vtable index.
+    abi = '#define CINTERFACE\n#include <d3d11.h>\n#include <cstddef>\n' \
+          'static_assert(offsetof(ID3D11DeviceContextVtbl, CopySubresourceRegion) == 46 * sizeof(void*));\n'
+    subprocess.run(['x86_64-w64-mingw32-g++', '-std=c++17', '-x', 'c++', '-c', '-o', str(work / 'copy-slot.o'), '-'],
+                   input=abi, text=True, capture_output=True, check=True)
     subprocess.run(['x86_64-w64-mingw32-g++', '-std=c++17', '-O2', '-Wall', '-Wextra', '-Werror', '-shared',
                     '-static', '-static-libgcc', '-static-libstdc++', '-isystem', str(A / 'remix-probe/vendor'),
                     str(C / 'remix_live_fake_runtime.cpp'), '-ld3d9', '-o', str(work / 'fake_remix.dll')], check=True)
@@ -71,6 +76,7 @@ def main():
         files = {f['name']: f for f in (dds(p) for p in sorted(tex.glob('*.dds')))}
         notes[name] = [line.split('remix: ', 1)[1] for line in log.splitlines() if 'remix: material ps=' in line]
         fakes[name] = fake
+        mask_reads[name] = int(result.get('mask_reads', '-1'))
         smalls[name] = [line.split('remix: ', 1)[1] for line in log.splitlines() if 'remix: small ps=' in line]
         return files, mats
 
@@ -81,6 +87,7 @@ def main():
     notes = {}
     fakes = {}
     smalls = {}
+    mask_reads = {}
     # 1. No traceable roles: albedo only, whatever slot 4 holds.
     files, mats = run('plain', {'NIER_REMIX_LIVE_NORMAL': '1'})
     assert len(files) == 1 and next(iter(files.values()))['payload'] in (RGBA4, BC1), list(files)
@@ -103,6 +110,7 @@ def main():
 
     # 3. Normals on: the slot-3 map (4x4 RGBA8, converted), never the slot-4 detail map (8x8 BC5).
     files, mats = run('pbr-normal', {'MOCK_PBR_PS': '1', 'NIER_REMIX_LIVE_NORMAL': '1'})
+    pbr_normal_files = files
     named = [m for m in mats if field(m, 'normal') != '-']
     assert named, f'no normal map sent for a shader that decodes one: {mats[:2]}'
     for m in named:
@@ -123,6 +131,19 @@ def main():
     files, mats = run('pbr-disabled', {'MOCK_PBR_PS': '1', 'NIER_REMIX_LIVE_PBR': '0'})
     assert all(field(m, 'roughness') == '-' and field(m, 'metallic') == '-' for m in mats), mats[:2]
     results['disabled'] = 'NIER_REMIX_LIVE_PBR=0: no metallic/roughness textures'
+
+    # One raw mask for both derived files, even when only one GPU readback fits in a frame. This forces an initial
+    # deferral (albedo/normal consume earlier frames) and the existing invalidation path must rebuild with BOTH maps.
+    limited, mats = run('pbr-budget-one', {'MOCK_PBR_PS': '1', 'NIER_REMIX_LIVE_NORMAL': '1',
+                                          'NIER_REMIX_LIVE_TEX_PER_FRAME': '1'})
+    payloads = lambda fs: sorted((f['format'], f['width'], f['height'], f['mips'], f['payload']) for f in fs.values())
+    assert payloads(limited) == payloads(pbr_normal_files), 'one-readback budget lost or changed a texture'
+    assert any(' 2:D:' in n for n in notes['pbr-budget-one']), notes['pbr-budget-one']
+    assert any(all(field(m, k) != '-' for k in ('normal', 'metallic', 'roughness')) for m in mats), mats[:3]
+    for name in ('pbr', 'pbr-normal', 'pbr-nofloor', 'pbr-budget-one'):
+        assert mask_reads[name] == 1, f'{name}: expected one mask staging copy, observed {mask_reads[name]}'
+    assert mask_reads['pbr-disabled'] == 0, mask_reads
+    results['shared_mask'] = 'one mask staging copy for metallic + roughness; budget=1 defers then retries; DDS unchanged'
     # 7. Texture repeat from the shader's constants (terrain): uv * cb1[5].xy = (4, 2) is baked into the mesh UVs.
     def last_uv(fake):
         out = {}
