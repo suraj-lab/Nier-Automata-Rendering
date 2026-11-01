@@ -9,6 +9,7 @@
 #define DIRECTINPUT_VERSION 0x0800
 #include <windows.h>
 #include <dinput.h>
+#include <xinput.h>
 #include <d3d11.h>
 #include <d3dcompiler.h>
 #include <cstdio>
@@ -563,6 +564,8 @@ int wmain(int argc, wchar_t** argv) {
     // MOCK_SHARED_REWRITE: a second draw reads the same every-frame-rewritten vertex buffer through its own index
     // buffer (popin-gaps-b4000: four objects sharing one rewritten slot-2 buffer were never built).
     const bool shared_rewrite = std::getenv("MOCK_SHARED_REWRITE") != nullptr;
+    // MOCK_PAD: poll pad 0 the way NieR does (xinput1_4), and report what the game would see on frame 25.
+    const bool mock_pad = std::getenv("MOCK_PAD") != nullptr;
     ID3D11Buffer* shared_ib = nullptr;
     const int spender_from = [] { const char* v = std::getenv("MOCK_LIVE_SPENDER_FROM"); return v ? std::atoi(v) : 0; }();
     ID3D11InputLayout* live_layout = nullptr, *live_layout_slot1 = nullptr, *live_layout_split = nullptr;
@@ -1161,6 +1164,11 @@ int wmain(int argc, wchar_t** argv) {
                     context->IASetInputLayout(live_layout);
                     ID3D11Buffer* none = nullptr; const UINT zero = 0;
                     context->IASetVertexBuffers(1, 1, &none, &zero, &zero);
+                }
+                if (mock_pad && frame == 25) {  // before the panel opens at 30: an open panel gets the real pad
+                    XINPUT_STATE pad{};
+                    const DWORD r = XInputGetState(0, &pad);
+                    std::fprintf(out, "pad_25=%lu,%d\n", static_cast<unsigned long>(r), pad.Gamepad.sThumbLY);
                 }
                 if (rewrite_same && live_vb && frame != 50) {  // frame 50 must carry the real content change
                     // Identical bytes rewritten every frame: the capture must not turn that into a mesh rebuild.

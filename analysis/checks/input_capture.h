@@ -11,6 +11,7 @@
 #endif
 #include <windows.h>
 #include <dinput.h>
+#include <xinput.h>
 #include <atomic>
 #include <cstdint>
 #include <cstring>
@@ -19,6 +20,7 @@
 
 namespace input_capture {
 inline WNDPROC prev_wndproc = nullptr;
+inline bool xinput_hooked = false;  // XInputGetState patched (needs xinput1_4 loaded, as NieR imports it)
 inline bool enabled = false;
 
 using SetCursorPosFn = BOOL (WINAPI*)(int, int);
@@ -206,11 +208,75 @@ inline bool hook_dinput() {
     return w || a;
 }
 
+// Scripted walking (input_drive.h): NieR imports XInputGetState from xinput1_4 by ordinal and reads the keyboard
+// outside DirectInput, so a walk phase reports pad 0 connected with the left stick fully forward. Outside a walk
+// phase, and whenever the panel is open, the game gets the real answer.
+using XInputGetStateFn = DWORD (WINAPI*)(DWORD, XINPUT_STATE*);
+inline XInputGetStateFn real_xinput_get_state = nullptr;
+
+inline DWORD WINAPI drive_xinput_get_state(DWORD user, XINPUT_STATE* state) {
+    const DWORD result = real_xinput_get_state ? real_xinput_get_state(user, state) : ERROR_DEVICE_NOT_CONNECTED;
+    if (user != 0 || !state || enabled) return result;
+    input_drive::pad_calls.fetch_add(1, std::memory_order_relaxed);
+    if (!input_drive::current().walk) return result;
+    if (result != ERROR_SUCCESS) std::memset(state, 0, sizeof *state);
+    static DWORD packet = 0x100000;  // the game polls for changes by packet number
+    state->dwPacketNumber = ++packet;
+    state->Gamepad.sThumbLY = 32767;
+    input_drive::pad_walk.fetch_add(1, std::memory_order_relaxed);
+    return ERROR_SUCCESS;
+}
+
+// Patch every loaded module's xinput1_4 import slot that holds the real XInputGetState, by value: it is imported by
+// ordinal (2), which a by-name match would miss.
+inline bool hook_xinput() {
+    HMODULE xinput = GetModuleHandleW(L"xinput1_4.dll");
+    if (!xinput) return false;
+    FARPROC real = GetProcAddress(xinput, "XInputGetState");
+    if (!real) return false;
+    std::memcpy(&real_xinput_get_state, &real, sizeof real);
+    const auto real_value = reinterpret_cast<std::uintptr_t>(real);
+    const auto replacement = reinterpret_cast<std::uintptr_t>(&drive_xinput_get_state);
+    const auto* teb = reinterpret_cast<const unsigned char*>(NtCurrentTeb());
+    const auto* peb = *reinterpret_cast<const unsigned char* const*>(teb + 0x60);
+    if (!peb) return false;
+    const auto* ldr = *reinterpret_cast<const unsigned char* const*>(peb + 0x18);
+    if (!ldr) return false;
+    const auto* head = reinterpret_cast<const std::uintptr_t*>(ldr + 0x10);
+    bool patched = false;
+    for (auto* link = reinterpret_cast<const std::uintptr_t*>(*head); link != head;
+         link = reinterpret_cast<const std::uintptr_t*>(*link)) {
+        const auto base = *reinterpret_cast<const std::uintptr_t*>(reinterpret_cast<const unsigned char*>(link) + 0x30);
+        if (!base) continue;
+        const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
+        if (dos->e_magic != IMAGE_DOS_SIGNATURE) continue;
+        const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(base + dos->e_lfanew);
+        if (nt->Signature != IMAGE_NT_SIGNATURE) continue;
+        const DWORD rva = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress;
+        if (!rva) continue;
+        for (auto* desc = reinterpret_cast<const IMAGE_IMPORT_DESCRIPTOR*>(base + rva); desc->Name; ++desc) {
+            if (_stricmp(reinterpret_cast<const char*>(base + desc->Name), "xinput1_4.dll")) continue;
+            auto* iat = reinterpret_cast<std::uintptr_t*>(base + desc->FirstThunk);
+            for (unsigned i = 0; iat[i]; ++i) {
+                if (iat[i] != real_value) continue;
+                unsigned long old = 0;
+                if (protect(&iat[i], sizeof(std::uintptr_t), PAGE_READWRITE, &old)) {
+                    iat[i] = replacement;
+                    protect(&iat[i], sizeof(std::uintptr_t), old, &old);
+                    patched = true;
+                }
+            }
+        }
+    }
+    return patched;
+}
+
 // Install the WndProc subclass (call AFTER the ImGui backend has initialized, so it chains to ImGui).
 inline bool install(HWND window) {  // returns whether the DirectInput mouse hook is in place
     if (!window || prev_wndproc) return false;
     prev_wndproc = reinterpret_cast<WNDPROC>(SetWindowLongPtrW(window, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(&wndproc)));
     hook_set_cursor_pos();
+    xinput_hooked = hook_xinput();
     return hook_dinput();
 }
 }  // namespace input_capture

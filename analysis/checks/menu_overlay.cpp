@@ -211,7 +211,7 @@ void initialize(IDXGISwapChain* swapchain) {
     }
     if (!ImGui_ImplWin32_Init(window)) { ImGui::DestroyContext(); return disable("win32 backend"); }
     const bool dinput_hooked = input_capture::install(window);  // block the game's mouse while the panel is open
-    host.log("menu: dinput mouse hook=%d", dinput_hooked ? 1 : 0);
+    host.log("menu: dinput mouse hook=%d xinput hook=%d", dinput_hooked ? 1 : 0, input_capture::xinput_hooked ? 1 : 0);
     // Create shaders/buffers now: with asserts compiled out, a later silent failure would draw nothing.
     if (!ImGui_ImplDX11_Init(device, context) || !ImGui_ImplDX11_CreateDeviceObjects()) {
         ImGui_ImplDX11_Shutdown(); ImGui_ImplWin32_Shutdown(); ImGui::DestroyContext(); return disable("dx11 backend");

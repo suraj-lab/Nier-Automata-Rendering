@@ -20,7 +20,7 @@ OUT = A / 'runtime/live-visibility'
 tr.ENV_KEYS = tuple(tr.ENV_KEYS) + ('NIER_REMIX_LIVE', 'NIER_REMIX_LIVE_TEX', 'NIER_REMIX_LIVE_BUDGET',
                                   'NIER_REMIX_LIVE_TRACE', 'FAKE_REMIX_INSTANCE_LOG', 'NIER_REMIX_LIVE_PRESENCE_MIN',
                                   'NIER_REMIX_LIVE_DRIVE', 'MOCK_CHURN_EVERY', 'MOCK_CHURN_SLOT2', 'NIER_REMIX_LIVE_HOLD',
-                                  'NIER_REMIX_LIVE_DRIVE_MIN_INSTANCES', 'NIER_REMIX_LIVE_HOLD_TOGGLE_S')
+                                  'NIER_REMIX_LIVE_DRIVE_MIN_INSTANCES', 'NIER_REMIX_LIVE_HOLD_TOGGLE_S', 'MOCK_PAD')
 NATIVE = tls.HARNESS.replace('int main() {', 'int original_scene_gate() {') + r'''
 #include <cassert>
 static remixapi_ErrorCode REMIXAPI_CALL reject_instance(const remixapi_InstanceInfo*) {
@@ -198,6 +198,14 @@ def wine(work):
     order = [p if p >= 0 else 99 for p in phases[started:]]
     assert 0 in phases and order == sorted(order), phases
     assert 'remix: drive phase=' in plain_log, 'drive counters missing from the stats window'
+    # Scripted walking goes through XInput: pad 0 reads forward only inside a walk phase, the real answer otherwise.
+    _, walk_r, walk_log, _ = tr.run(work, 'walk', {**on, 'NIER_REMIX_LIVE_PRESENCE_MIN': '0', 'MOCK_PAD': '1',
+                                                  'NIER_REMIX_LIVE_DRIVE': 'walk:60', 'NIER_REMIX_LIVE_DRIVE_MIN_INSTANCES': '1'})
+    assert 'xinput hook=1' in walk_log, 'XInputGetState was not hooked'
+    assert walk_r.get('pad_25') == '0,32767', f'a walk phase did not push the left stick forward: {walk_r.get("pad_25")}'
+    _, still_r, _, _ = tr.run(work, 'walk-still', {**on, 'MOCK_PAD': '1', 'NIER_REMIX_LIVE_DRIVE': 'still:60',
+                                                   'NIER_REMIX_LIVE_DRIVE_MIN_INSTANCES': '1'})
+    assert still_r.get('pad_25', '').split(',')[-1] == '0', f'pad input outside a walk phase: {still_r.get("pad_25")}'
     print('frame log:', len(lines), 'frames, phases', sorted(set(phases)), 'last', queue[-1])
     gap_keys = ('gap1', 'gap2', 'gap3', 'gap4_8', 'gap9_30', 'gone')
     gap_rows = [{k: int(v) for k, v in re.findall(r'(returned|gap\w+|gone)=(\d+)', l.split('| gaps', 1)[-1])} for l in lines]

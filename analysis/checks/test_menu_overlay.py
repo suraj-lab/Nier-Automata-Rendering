@@ -69,7 +69,7 @@ def build(work):
     gpp = ['x86_64-w64-mingw32-g++', '-std=c++17', '-O2', '-Wall', '-Wextra', '-Werror', '-static', '-static-libgcc',
            '-static-libstdc++']
     subprocess.run([*gpp, '-shared', str(C / 'menu_overlay_stub_dlaa.cpp'), '-o', str(work / 'd3d11_dlaa.dll')], check=True)
-    subprocess.run([*gpp, '-municode', str(C / 'menu_overlay_mock_game.cpp'), '-ldinput8', '-ldxguid', '-o', str(work / 'mock.exe')], check=True)  # D3DCompile loaded at runtime
+    subprocess.run([*gpp, '-municode', str(C / 'menu_overlay_mock_game.cpp'), '-ldinput8', '-ldxguid', '-lxinput1_4', '-o', str(work / 'mock.exe')], check=True)  # D3DCompile loaded at runtime
 
 
 def scenario(work, name, ini, fonts, click, files=None):

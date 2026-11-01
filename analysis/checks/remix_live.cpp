@@ -750,10 +750,11 @@ struct Worker {
                         if (total) logger.load()("remix: decode_failures%s", why);
                         if (input_drive::start_us.load())  // cumulative: which DirectInput calls the game makes
                             logger.load()("remix: drive phase=%d mouse_state=%llu mouse_data=%llu key_state=%llu "
-                                          "key_data=%llu injected=%llu", input_drive::current().phase,
+                                          "key_data=%llu injected=%llu pad_calls=%llu pad_walk=%llu", input_drive::current().phase,
                                           input_drive::mouse_state.load(), input_drive::mouse_data.load(),
                                           input_drive::key_state.load(), input_drive::key_data.load(),
-                                          input_drive::injected.load());
+                                          input_drive::injected.load(), input_drive::pad_calls.load(),
+                                          input_drive::pad_walk.load());
                         // Which layouts produced the no-POSITION refusals: this names the draw family, once per window.
                         const auto layouts = layout_signature::take();
                         for (const auto& entry : layouts)

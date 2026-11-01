@@ -34,7 +34,7 @@ def main():
 
         # The mock game, plus the built DLL and the stub mod layer it chain-loads.
         subprocess.run([GPP, *STATIC, '-municode', str(CHECKS / 'menu_overlay_mock_game.cpp'),
-                        '-ldinput8', '-ldxguid', '-o', str(work / 'mock.exe')],
+                        '-ldinput8', '-ldxguid', '-lxinput1_4', '-o', str(work / 'mock.exe')],
                        check=True, capture_output=True, text=True, timeout=600)
         subprocess.run([GPP, *STATIC, '-shared', str(CHECKS / 'menu_overlay_stub_dlaa.cpp'),
                         '-o', str(work / 'd3d11_dlaa.dll')], check=True, capture_output=True, text=True, timeout=600)

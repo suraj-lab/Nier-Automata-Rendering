@@ -70,6 +70,8 @@ inline std::vector<Phase> script;                    // written once, before sta
 inline std::atomic<unsigned long long> start_us{0};  // 0 = not started
 // Which DirectInput calls the game makes, and how many were changed: if turning never moves the camera, these say why.
 inline std::atomic<unsigned long long> mouse_state{0}, mouse_data{0}, key_state{0}, key_data{0}, injected{0};
+// XInputGetState calls for pad 0, and how many reported the scripted walk (NieR reads the keyboard elsewhere).
+inline std::atomic<unsigned long long> pad_calls{0}, pad_walk{0};
 
 inline Now current() {
     const unsigned long long s = start_us.load(std::memory_order_acquire);
