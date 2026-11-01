@@ -206,6 +206,9 @@ def wine(work):
     _, still_r, _, _ = tr.run(work, 'walk-still', {**on, 'MOCK_PAD': '1', 'NIER_REMIX_LIVE_DRIVE': 'still:60',
                                                    'NIER_REMIX_LIVE_DRIVE_MIN_INSTANCES': '1'})
     assert still_r.get('pad_25', '').split(',')[-1] == '0', f'pad input outside a walk phase: {still_r.get("pad_25")}'
+    _, back_r, _, _ = tr.run(work, 'walk-back', {**on, 'MOCK_PAD': '1', 'NIER_REMIX_LIVE_DRIVE': 'back:60',
+                                                 'NIER_REMIX_LIVE_DRIVE_MIN_INSTANCES': '1'})
+    assert back_r.get('pad_25') == '0,-32768', f'a back phase did not pull the left stick back: {back_r.get("pad_25")}'
     print('frame log:', len(lines), 'frames, phases', sorted(set(phases)), 'last', queue[-1])
     gap_keys = ('gap1', 'gap2', 'gap3', 'gap4_8', 'gap9_30', 'gone')
     gap_rows = [{k: int(v) for k, v in re.findall(r'(returned|gap\w+|gone)=(\d+)', l.split('| gaps', 1)[-1])} for l in lines]

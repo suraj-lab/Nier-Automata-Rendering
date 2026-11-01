@@ -1,6 +1,6 @@
 #pragma once
 // Scripted camera input for pop-in experiments: NIER_REMIX_LIVE_DRIVE="still:30,turn:8:40,still:20,walk:8,still:20".
-// Each phase is kind:seconds[:mouse counts per poll]. Turning and walking happen in separate phases so the fit of
+// Each phase is kind:seconds[:mouse counts per poll]. walk/back push the left stick forward/back (camera-relative). Turning and walking happen in separate phases so the fit of
 // missing meshes against turn rate, movement and build budget has independent columns (live-churn: turn and move
 // correlated 0.73 when a person drove the camera). The clock starts at the first live frame; after the last phase
 // nothing is injected. Injection lives in input_capture.h (DirectInput hook); the frame log reports the phase.
@@ -12,9 +12,9 @@
 
 namespace input_drive {
 
-enum class Kind { Still, Turn, Walk };
+enum class Kind { Still, Turn, Walk, Back };
 struct Phase { Kind kind; double seconds; long dx; };
-struct Now { int phase = -1; long dx = 0; bool walk = false; };  // phase -1: not driving
+struct Now { int phase = -1; long dx = 0; int walk = 0; };  // walk: +1 forward, -1 back; phase -1: not driving
 
 // Empty on any malformed entry: a half-parsed script would label the data with the wrong phases.
 inline std::vector<Phase> parse(const std::string& text) {
@@ -40,9 +40,9 @@ inline std::vector<Phase> parse(const std::string& text) {
             const long v = std::strtol(dx.c_str(), &stop, 10);
             if (dx.empty() || *stop || !v) return {};
             p = {Kind::Turn, seconds, v};
-        } else if (kind == "walk" || kind == "still") {
+        } else if (kind == "walk" || kind == "back" || kind == "still") {
             if (c2 != std::string::npos) return {};
-            p.kind = kind == "walk" ? Kind::Walk : Kind::Still;
+            p.kind = kind == "walk" ? Kind::Walk : kind == "back" ? Kind::Back : Kind::Still;
         } else {
             return {};
         }
@@ -55,7 +55,8 @@ inline Now at(const std::vector<Phase>& script, double t) {
     if (t < 0) return {};
     for (std::size_t i = 0; i < script.size(); ++i) {
         if (t < script[i].seconds)
-            return {static_cast<int>(i), script[i].kind == Kind::Turn ? script[i].dx : 0, script[i].kind == Kind::Walk};
+            return {static_cast<int>(i), script[i].kind == Kind::Turn ? script[i].dx : 0,
+                    script[i].kind == Kind::Walk ? 1 : script[i].kind == Kind::Back ? -1 : 0};
         t -= script[i].seconds;
     }
     return {};

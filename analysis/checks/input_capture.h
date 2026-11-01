@@ -131,7 +131,7 @@ inline void drive_state(void* self, DWORD size, void* data) {
         if (n.dx) { static_cast<DIMOUSESTATE*>(data)->lX += n.dx; input_drive::injected.fetch_add(1, std::memory_order_relaxed); }
     } else if (type == DI8DEVTYPE_KEYBOARD && size >= 256) {
         input_drive::key_state.fetch_add(1, std::memory_order_relaxed);
-        if (n.walk) { static_cast<unsigned char*>(data)[DIK_W] = 0x80; input_drive::injected.fetch_add(1, std::memory_order_relaxed); }
+        if (n.walk) { static_cast<unsigned char*>(data)[n.walk > 0 ? DIK_W : DIK_S] = 0x80; input_drive::injected.fetch_add(1, std::memory_order_relaxed); }
     }
 }
 
@@ -218,11 +218,12 @@ inline DWORD WINAPI drive_xinput_get_state(DWORD user, XINPUT_STATE* state) {
     const DWORD result = real_xinput_get_state ? real_xinput_get_state(user, state) : ERROR_DEVICE_NOT_CONNECTED;
     if (user != 0 || !state || enabled) return result;
     input_drive::pad_calls.fetch_add(1, std::memory_order_relaxed);
-    if (!input_drive::current().walk) return result;
+    const int walk = input_drive::current().walk;
+    if (!walk) return result;
     if (result != ERROR_SUCCESS) std::memset(state, 0, sizeof *state);
     static DWORD packet = 0x100000;  // the game polls for changes by packet number
     state->dwPacketNumber = ++packet;
-    state->Gamepad.sThumbLY = 32767;
+    state->Gamepad.sThumbLY = walk > 0 ? 32767 : -32768;
     input_drive::pad_walk.fetch_add(1, std::memory_order_relaxed);
     return ERROR_SUCCESS;
 }

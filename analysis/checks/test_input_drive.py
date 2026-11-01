@@ -20,6 +20,9 @@ int main() {
     using namespace input_drive;
     const auto s = parse("still:30,turn:8:40,still:2.5,walk:8,turn:4:-40");
     assert(s.size() == 5);
+    const auto b = parse("back:3,walk:2");
+    assert(b.size() == 2 && b[0].kind == Kind::Back && at(b, 1).walk == -1 && at(b, 4).walk == 1 && at(b, 1).dx == 0);
+    assert(parse("back:3:1").empty() && parse("back").empty());
     assert(s[1].kind == Kind::Turn && s[1].seconds == 8 && s[1].dx == 40);
     assert(s[2].seconds == 2.5 && s[3].kind == Kind::Walk && s[4].dx == -40);
     // Malformed anywhere: nothing, so a typo cannot silently shift every later phase.
@@ -28,9 +31,9 @@ int main() {
         assert(parse(bad).empty());
     // Boundaries: a phase owns [start, end); before the start and after the end nothing is driven.
     assert(at(s, -0.1).phase == -1);
-    assert(at(s, 0).phase == 0 && at(s, 0).dx == 0 && !at(s, 0).walk);
+    assert(at(s, 0).phase == 0 && at(s, 0).dx == 0 && at(s, 0).walk == 0);
     assert(at(s, 29.999).phase == 0 && at(s, 30).phase == 1 && at(s, 30).dx == 40);
-    assert(at(s, 38).phase == 2 && at(s, 40.5).phase == 3 && at(s, 40.5).walk && at(s, 40.5).dx == 0);
+    assert(at(s, 38).phase == 2 && at(s, 40.5).phase == 3 && at(s, 40.5).walk == 1 && at(s, 40.5).dx == 0);
     assert(at(s, 48.5).phase == 4 && at(s, 48.5).dx == -40);
     assert(at(s, 52.5).phase == -1 && at(s, 1e9).phase == -1);
     assert(at({}, 1).phase == -1);
