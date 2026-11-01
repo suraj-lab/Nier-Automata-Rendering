@@ -162,3 +162,22 @@ Remix fps is not compared here.
   create 0 meshes/s (18.6/s before) and hold 44 MB of meshes (125 MB before). Differences in that view: 160 meshes
   against 154 (the formerly never-built objects, and ~1 held instance per frame). Next: A/B `NIER_REMIX_LIVE_HOLD=0` on
   the same build; if fps stays low, the objects that now get built are the cost (path-tracing them, not building them).
+
+### Hold cost: in-run A/B (popin-toggle-b4000, DLL 8a2c844a, `NIER_REMIX_LIVE_HOLD_TOGGLE_S=3`)
+
+popin-nohold-b4000 (hold off) was back at 17.2 fps in phase 1, which pointed at the hold, but across all runs with a
+clean phase 1 the split was not by hold: b4000 and fast-b4000 (no hold existed) were also at 11-12 fps, key-b4000 and
+gaps-b4000 at 18.5. Remix logs and memory budgets are identical in all runs. So the hold was A/B'd inside one run: it
+flips every 3 s, the first frame after each flip is dropped, still phases only. Power: AC, Performance plan, 43-45%.
+
+| still phases | hold off | hold on |
+|---|---|---|
+| frames | 675 | 801 |
+| Remix fps | 14.35 | 14.42 |
+| frames with a visible drop | 40.3% | **6.6%** |
+| held instances per frame | 0 | 5.7 |
+
+Per-phase fps difference (on - off): -0.34 to +0.43, no sign. Phase 1: 17.8 off, 17.5 on. **The hold costs nothing
+measurable and removes ~85% of visible still-camera drops.** The 11-12 fps runs were machine state, not code;
+receipts now record the power source and plan (the laptop was at 35% charge mid-session), so the next slow run can
+be checked against it.
