@@ -68,12 +68,14 @@ def main():
         mats = [line for line in fake.splitlines() if line.startswith('CreateMaterial ')]
         assert mats, fake[-800:]
         files = {f['name']: f for f in (dds(p) for p in sorted(tex.glob('*.dds')))}
+        notes[name] = [line.split('remix: ', 1)[1] for line in log.splitlines() if 'remix: material ps=' in line]
         return files, mats
 
     def field(line, key):
         return line.split(f'{key}=')[1].split()[0]
 
     results = {}
+    notes = {}
     # 1. No traceable roles: albedo only, whatever slot 4 holds.
     files, mats = run('plain', {'NIER_REMIX_LIVE_NORMAL': '1'})
     assert len(files) == 1 and next(iter(files.values()))['payload'] in (RGBA4, BC1), list(files)
@@ -116,6 +118,12 @@ def main():
     files, mats = run('pbr-disabled', {'MOCK_PBR_PS': '1', 'NIER_REMIX_LIVE_PBR': '0'})
     assert all(field(m, 'roughness') == '-' and field(m, 'metallic') == '-' for m in mats), mats[:2]
     results['disabled'] = 'NIER_REMIX_LIVE_PBR=0: no metallic/roughness textures'
+    # 6. One diagnostic line per pixel shader: its roles and what happened at each role's slot.
+    assert any('roles=-' in n for n in notes['plain']), notes['plain'][:3]
+    pbr = [n for n in notes['pbr'] if 'albedo=0.xyz' in n]
+    assert pbr and all('metal=2.x' in n and 'gloss=2.y~' in n and ' 2:' in n for n in pbr), notes['pbr'][:3]
+    assert all(len(set(notes[k])) == len(notes[k]) for k in notes), 'a shader was noted twice'
+    results['notes'] = pbr[0]
     print(json.dumps({'passed': True, 'work': str(work), 'checks': results,
                       'limits': 'Wine mock: proves the slot choice, channel extraction and plumbing, not how it looks live.'},
                      indent=2))

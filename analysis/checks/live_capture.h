@@ -1037,6 +1037,37 @@ inline DisassembleFn disassembler() {
 // texture channel is albedo / metal / gloss / normal (material_roles.h, analysis/PBR_MAPPING.md), and whether it is an
 // effects shader (declares the effect buffers t27 / t30: particles, smoke, distortion).
 struct PixelInfo { alpha_test::Result alpha; material_roles::Roles roles; bool effect = false; };
+// One line per distinct pixel shader, the first time it is seen with a draw: what the material path did with it. For
+// live runs where some surfaces come out wrong (pbr-look1: untextured dunes, chrome rocks, missing foliage), so each
+// can be traced back to a shader, its roles and the fate of each texture. Drained by the worker, bounded.
+struct MaterialNote {
+    unsigned long long ps = 0;
+    bool effect = false;
+    std::string roles;    // "albedo=0.xyz metal=2.x gloss=2.y~ normal=3.xyz" (traced roles only)
+    std::string slots;    // per role: slot:result:format:bind, result C captured D deferred U unusable - unbound
+    int alpha_op = 7;
+};
+inline std::mutex& material_notes_mutex() { static std::mutex m; return m; }
+inline std::vector<MaterialNote>& material_notes() { static std::vector<MaterialNote> v; return v; }
+inline std::set<unsigned long long>& noted_shaders() { static std::set<unsigned long long> s; return s; }
+inline void note_material(MaterialNote note) {
+    std::lock_guard<std::mutex> lock(material_notes_mutex());
+    if (noted_shaders().size() >= 2000 || !noted_shaders().insert(note.ps).second) return;
+    material_notes().push_back(std::move(note));
+}
+inline std::vector<MaterialNote> take_material_notes() {
+    std::lock_guard<std::mutex> lock(material_notes_mutex());
+    std::vector<MaterialNote> out;
+    out.swap(material_notes());
+    return out;
+}
+inline unsigned long long current_ps(ID3D11DeviceContext* context) {
+    ID3D11PixelShader* ps = nullptr;
+    context->PSGetShader(&ps, nullptr, nullptr);
+    if (!ps) return 0;
+    ps->Release();
+    return static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(ps));
+}
 inline std::map<ID3D11PixelShader*, PixelInfo>& pixel_infos() {
     static std::map<ID3D11PixelShader*, PixelInfo> m;
     return m;
@@ -1275,6 +1306,7 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     // the path-traced scene (user decision 2026-11-01). NIER_REMIX_LIVE_EFFECTS=1 keeps them for comparison.
     const PixelInfo pixel = pixel_info(context);
     if (pixel.effect && !keep_effects) {
+        note_material({current_ps(context), true, {}, {}, 7});
         trace.event.reason = visibility_trace::Reason::Effect;
         release_all(vbs, 4, ib, layout);
         return;
@@ -1373,12 +1405,27 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
         context->PSGetShaderResources(0, 16, views);
         // Each material input from the slot the draw's own pixel shader uses for it (material_roles.h).
         const material_roles::Roles& roles = pixel.roles;
+        std::string slot_notes;  // for note_material: what happened at each role's slot
         const auto take = [&](int slot, std::uint32_t& id, unsigned kind) {
-            if (slot < 0 || slot >= 16 || !views[slot]) return TextureResult::Unusable;
+            if (slot < 0 || slot >= 16 || !views[slot]) {
+                slot_notes += " " + std::to_string(slot) + ":-";
+                return TextureResult::Unusable;
+            }
             ID3D11Resource* resource = nullptr;
             views[slot]->GetResource(&resource);
             if (!resource) return TextureResult::Unusable;
             const TextureResult r = obtain(resource, id, kind);
+            D3D11_TEXTURE2D_DESC desc{};
+            ID3D11Texture2D* t2d = nullptr;
+            if (SUCCEEDED(resource->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&t2d))) && t2d) {
+                t2d->GetDesc(&desc);
+                t2d->Release();
+            }
+            char note[64];
+            std::snprintf(note, sizeof note, " %d:%c:%u:%x:%ux%u", slot,
+                          r == TextureResult::Captured ? (id ? 'C' : 'U') : r == TextureResult::Deferred ? 'D' : 'U',
+                          static_cast<unsigned>(desc.Format), desc.BindFlags, desc.Width, desc.Height);
+            slot_notes += note;
             resource->Release();
             return r;
         };
@@ -1394,6 +1441,16 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
         if (pbr_textures && roles.metal.slot >= 0) take(roles.metal.slot, metallic, 2 + 2 * lane(roles.metal.channels));
         if (pbr_textures && roles.gloss.slot >= 0)
             take(roles.gloss.slot, roughness, 2 + 2 * lane(roles.gloss.channels) + (roles.gloss.invert ? 1 : 0));
+        {
+            std::string traced;
+            const auto add = [&](const char* name, const material_roles::Channel& c) {
+                if (c.slot >= 0) traced += std::string(traced.empty() ? "" : " ") + name + "=" + std::to_string(c.slot) + "." +
+                                           c.channels + (c.invert ? "~" : "");
+            };
+            add("albedo", roles.albedo); add("metal", roles.metal); add("gloss", roles.gloss);
+            add("normal", roles.normal); add("detail", roles.detail_normal);
+            note_material({current_ps(context), false, traced.empty() ? "-" : traced, slot_notes, pixel.alpha.op});
+        }
         for (unsigned slot = 0; slot < 16; ++slot)
             if (views[slot]) views[slot]->Release();  // GetShaderResources added one reference each
     }

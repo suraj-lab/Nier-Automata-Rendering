@@ -782,6 +782,10 @@ struct Worker {
                                           input_drive::injected.load(), input_drive::pad_calls.load(),
                                           input_drive::pad_walk.load());
                         // Which layouts produced the no-POSITION refusals: this names the draw family, once per window.
+                        for (const auto& n : live_capture::take_material_notes())
+                            logger.load()("remix: material ps=%llx effect=%d alpha=%d roles=%s slots=%s",
+                                          n.ps, n.effect ? 1 : 0, n.alpha_op, n.roles.empty() ? "-" : n.roles.c_str(),
+                                          n.slots.empty() ? " -" : n.slots.c_str());
                         const auto layouts = layout_signature::take();
                         for (const auto& entry : layouts)
                             logger.load()("remix: no_position_layout n=%llu sig=%s", entry.count, entry.text);
