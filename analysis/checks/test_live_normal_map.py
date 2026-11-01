@@ -30,7 +30,8 @@ import test_nscn_scene as ts
 
 tr.ENV_KEYS = tuple(tr.ENV_KEYS) + ('NIER_REMIX_LIVE', 'NIER_REMIX_LIVE_TEX', 'MOCK_NORMAL_TEX',
                                     'NIER_REMIX_LIVE_NORMAL', 'NIER_REMIX_LIVE_NORMAL_RAW', 'FAKE_REMIX_INSTANCE_LOG',
-                                    'MOCK_CAMERA', 'MOCK_PBR_PS', 'NIER_REMIX_LIVE_PBR', 'NIER_REMIX_LIVE_ROUGHNESS_FLOOR', 'MOCK_UV_PS')
+                                    'MOCK_CAMERA', 'MOCK_PBR_PS', 'NIER_REMIX_LIVE_PBR', 'NIER_REMIX_LIVE_ROUGHNESS_FLOOR', 'MOCK_UV_PS',
+                                    'MOCK_SMALL_DRAW', 'NIER_REMIX_LIVE_MIN_INDICES')
 
 BC5 = bytes((i * 19 + 5) & 0xff for i in range(2 * 2 * 16))  # the mock's 8x8 BC5 normal map
 RGBA4 = bytes((i * 7 + 3) & 0xff for i in range(4 * 4 * 4))  # the mock's 4x4 albedo
@@ -70,6 +71,7 @@ def main():
         files = {f['name']: f for f in (dds(p) for p in sorted(tex.glob('*.dds')))}
         notes[name] = [line.split('remix: ', 1)[1] for line in log.splitlines() if 'remix: material ps=' in line]
         fakes[name] = fake
+        smalls[name] = [line.split('remix: ', 1)[1] for line in log.splitlines() if 'remix: small ps=' in line]
         return files, mats
 
     def field(line, key):
@@ -78,6 +80,7 @@ def main():
     results = {}
     notes = {}
     fakes = {}
+    smalls = {}
     # 1. No traceable roles: albedo only, whatever slot 4 holds.
     files, mats = run('plain', {'NIER_REMIX_LIVE_NORMAL': '1'})
     assert len(files) == 1 and next(iter(files.values()))['payload'] in (RGBA4, BC1), list(files)
@@ -137,6 +140,15 @@ def main():
     assert any('uv:0:cb1[5].xy=4,2' in n for n in notes['uv-on']), notes['uv-on'][:3]
     assert not any(' uv:' in n for n in notes['uv-off']), notes['uv-off'][:3]
     results['uv'] = f'albedo repeat cb1[5].xy=(4,2) baked into mesh UVs: {scaled[0][1]} -> {scaled[0][2]}'
+    # 8. The size filter: a 6-index draw in the scene image is dropped and reported (default 128), kept when lowered.
+    run('small-default', {'MOCK_CAMERA': 'live', 'MOCK_SMALL_DRAW': '1'})
+    run('small-all', {'MOCK_CAMERA': 'live', 'MOCK_SMALL_DRAW': '1', 'NIER_REMIX_LIVE_MIN_INDICES': '3'})
+    six = lambda fake: [l for l in fake.splitlines() if l.startswith('CreateMesh ') and ' indices=6 ' in l]
+    assert any('indices=6 ' in s and 'in_scene=1' in s for s in smalls['small-default']), smalls['small-default'][:3]
+    assert not six(fakes['small-default']), six(fakes['small-default'])[:2]
+    assert six(fakes['small-all']), 'NIER_REMIX_LIVE_MIN_INDICES=3 did not let the 6-index draw through'
+    assert not any('indices=6 ' in s for s in smalls['small-all']), smalls['small-all'][:3]
+    results['small'] = 'a 6-index scene draw is dropped and reported by default, uploaded with NIER_REMIX_LIVE_MIN_INDICES=3'
     # 6. One diagnostic line per pixel shader: its roles and what happened at each role's slot.
     assert any('roles=-' in n for n in notes['plain']), notes['plain'][:3]
     pbr = [n for n in notes['pbr'] if 'albedo=0.xyz' in n]

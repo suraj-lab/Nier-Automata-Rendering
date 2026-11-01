@@ -181,6 +181,8 @@ State configure() {
             roughness_floor = static_cast<unsigned char>(v <= 0 ? 0 : v >= 1 ? 255 : v * 255.0 + 0.5);
         }
         live_capture::keep_effects = env(L"NIER_REMIX_LIVE_EFFECTS") == L"1";
+        if (const std::wstring n = env(L"NIER_REMIX_LIVE_MIN_INDICES"); !n.empty())
+            live_capture::min_index_count = static_cast<unsigned>(std::min<unsigned long long>(_wcstoui64(n.c_str(), nullptr, 10), 1u << 20));
         // NieR stores tangent-space X,Y with no Z, while Remix decodes unsigned octahedral; converting on the worker keeps
         // the game thread's work unchanged. RAW keeps the old bytes for an A/B, FLIP_Y settles the handedness on screen.
         normal_octahedral = live_capture::normal_textures && env(L"NIER_REMIX_LIVE_NORMAL_RAW") != L"1";
@@ -786,6 +788,9 @@ struct Worker {
                             logger.load()("remix: material ps=%llx effect=%d alpha=%d roles=%s slots=%s",
                                           n.ps, n.effect ? 1 : 0, n.alpha_op, n.roles.empty() ? "-" : n.roles.c_str(),
                                           n.slots.empty() ? " -" : n.slots.c_str());
+                        for (const auto& n : live_capture::take_small_notes())
+                            logger.load()("remix: small ps=%llx indices=%u instances=%u in_scene=1", n.ps, n.indices,
+                                          n.instances);
                         const auto layouts = layout_signature::take();
                         for (const auto& entry : layouts)
                             logger.load()("remix: no_position_layout n=%llu sig=%s", entry.count, entry.text);

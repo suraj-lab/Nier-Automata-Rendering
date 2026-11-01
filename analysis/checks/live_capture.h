@@ -948,7 +948,7 @@ inline TextureResult write_texture(ID3D11Device* device, ID3D11DeviceContext* co
 
 inline unsigned max_draws = 4096;
 
-inline unsigned min_index_count = 128;
+inline unsigned min_index_count = 128;  // NIER_REMIX_LIVE_MIN_INDICES (live A/B for foliage)
 
 inline void begin_frame(ID3D11DeviceContext* context, unsigned width = 0, unsigned height = 0) {
     // No frame opens behind the F10 original view, so nothing is captured and no empty frame reaches the latch.
@@ -1055,6 +1055,20 @@ inline void note_material(MaterialNote note) {
     std::lock_guard<std::mutex> lock(material_notes_mutex());
     if (noted_shaders().size() >= 2000 || !noted_shaders().insert(note.ps).second) return;
     material_notes().push_back(std::move(note));
+}
+struct SmallNote { unsigned long long ps = 0; unsigned indices = 0, instances = 0; };
+inline std::vector<SmallNote>& small_notes() { static std::vector<SmallNote> v; return v; }
+inline std::set<unsigned long long>& noted_small() { static std::set<unsigned long long> s; return s; }
+inline void note_small(unsigned long long ps, unsigned indices, unsigned instances) {
+    std::lock_guard<std::mutex> lock(material_notes_mutex());
+    if (noted_small().size() >= 1000 || !noted_small().insert(ps).second) return;
+    small_notes().push_back({ps, indices, instances});
+}
+inline std::vector<SmallNote> take_small_notes() {
+    std::lock_guard<std::mutex> lock(material_notes_mutex());
+    std::vector<SmallNote> out;
+    out.swap(small_notes());
+    return out;
 }
 inline std::vector<MaterialNote> take_material_notes() {
     std::lock_guard<std::mutex> lock(material_notes_mutex());
@@ -1188,7 +1202,14 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     const std::pair<unsigned, unsigned> final_size{final_width, final_height};
     const bool ui_pass = hud_enabled && scene_target_enabled && scene_width && final_width && blended &&
                          early_target == final_size && std::pair<unsigned, unsigned>{scene_width, scene_height} != final_size;
-    if (!ui_pass && index_count < min_index_count) { trace.event.reason = visibility_trace::Reason::Small; return; }
+    if (!ui_pass && index_count < min_index_count) {
+        // What the size filter drops from the scene image itself (grass, leaf cards and small props would be here):
+        // one line per pixel shader, so a missing class of object can be tied to this filter or ruled out.
+        if (scene_width && early_target == std::pair<unsigned, unsigned>{scene_width, scene_height})
+            note_small(current_ps(context), index_count, instance_count);
+        trace.event.reason = visibility_trace::Reason::Small;
+        return;
+    }
     D3D11_PRIMITIVE_TOPOLOGY topology = D3D11_PRIMITIVE_TOPOLOGY_UNDEFINED;
     context->IAGetPrimitiveTopology(&topology);
     if (topology != D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST) {

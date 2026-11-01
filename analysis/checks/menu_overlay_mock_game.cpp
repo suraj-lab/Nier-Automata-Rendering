@@ -353,6 +353,8 @@ int wmain(int argc, wchar_t** argv) {
         "cbuffer M : register(b1) { float4 pad0, pad1, pad2, pad3, pad4; float4 tile; };\n"
         "float4 main(float4 p : SV_POSITION) : SV_TARGET { return t0.Sample(s, p.xy * tile.xy); }\n";
     const bool mesh_uv = std::getenv("MOCK_UV_PS") != nullptr;
+    // MOCK_SMALL_DRAW: a 6-index draw (two triangles of the main mesh) into the scene target, like a grass or leaf card.
+    const bool small_draw = std::getenv("MOCK_SMALL_DRAW") != nullptr;
     ID3DBlob* ps_blob = nullptr;
     const char* mesh_ps_src = mesh_uv ? uv_ps_src : mesh_pbr ? pbr_ps_src : mesh_discards ? cutout_ps_src : ps_src;
     const SIZE_T mesh_ps_len = mesh_uv ? sizeof uv_ps_src - 1 : mesh_pbr ? sizeof pbr_ps_src - 1
@@ -1297,6 +1299,7 @@ int wmain(int argc, wchar_t** argv) {
                             context->IASetInputLayout(live_layout);
                         } else
                         context->DrawIndexed(192, 0, 0);
+                        if (small_draw && pass == 1) context->DrawIndexed(6, 0, 0);
                         if (live_evict && pass == 1 && frame >= 55) context->DrawIndexed(189, 0, 0);  // mesh C
                         if (shared_ib && pass == 1) {  // same rewritten VB, its own IB: a second object, drawn after A
                             context->IASetIndexBuffer(shared_ib, DXGI_FORMAT_R32_UINT, 0);
