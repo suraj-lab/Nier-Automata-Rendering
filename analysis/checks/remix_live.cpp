@@ -10,6 +10,8 @@
 #include <memory>
 #include <string>
 #include <thread>
+#include <condition_variable>
+#include <deque>
 #include <vector>
 #include <remix_c.h>
 #include "nscn_scene.h"
@@ -292,6 +294,91 @@ BOOL CALLBACK list_window(HWND hwnd, LPARAM) {
     return TRUE;
 }
 
+// New texture files are converted (normal -> octahedral, mask -> R8 channels) and written on their own thread. Inline on
+// the Remix worker that froze the image for 0.8-1.7 s whenever content streamed in (frametime1-attribution.md); on the
+// game thread it froze the game (2026-10-31). Finished files are handed back to the worker, which gives live_scene only
+// those, so Remix never names a file that is not complete; an upload naming an unfinished file waits in the backlog.
+// shortcut: like the worker, never torn down; process exit ends it.
+struct TextureWriter {
+    std::mutex mutex;
+    std::condition_variable wake;
+    std::deque<live_capture::TextureFile> todo;
+    std::vector<live_capture::TextureFile> done;
+    bool started = false;
+    bool texture_write_failed = false;
+    bool normal_convert_failed = false;
+
+    void push(std::vector<live_capture::TextureFile> files) {
+        if (files.empty()) return;
+        std::lock_guard<std::mutex> lock(mutex);
+        for (auto& f : files) todo.push_back(std::move(f));
+        if (!started) { started = true; std::thread([this] { run(); }).detach(); }
+        wake.notify_one();
+    }
+    std::vector<live_capture::TextureFile> take_done() {
+        std::lock_guard<std::mutex> lock(mutex);
+        std::vector<live_capture::TextureFile> out;
+        out.swap(done);
+        return out;
+    }
+    void run() {
+        for (;;) {
+            live_capture::TextureFile file;
+            {
+                std::unique_lock<std::mutex> lock(mutex);
+                wake.wait(lock, [this] { return !todo.empty(); });
+                file = std::move(todo.front());
+                todo.pop_front();
+            }
+            bool written = false;
+            try { written = write_one(file); } catch (...) {}
+            if (!written) file.path.clear();  // not on disk: the material uses its constants instead
+            file.pixels.reset();
+            std::lock_guard<std::mutex> lock(mutex);
+            done.push_back(std::move(file));
+        }
+    }
+    // True once `file` is complete on disk.
+    bool write_one(live_capture::TextureFile& file) {
+        if (!file.pixels) return true;  // already on disk
+        if (tex_write_delay_ms) Sleep(tex_write_delay_ms);  // test switch: a slow disk must not stall the game
+        std::shared_ptr<const texture_capture::Texture> pixels = file.pixels;
+        if (file.channel >= 0) {
+            // One mask channel as R8 for Remix's metallic / roughness; a mask format the decoder does not know is
+            // not written at all, so the material falls back to its constants instead of reading colour as metal.
+            auto converted = std::make_shared<texture_capture::Texture>(*pixels);
+            // The floor only for roughness (the inverted gloss channel); metalness keeps its values.
+            if (!texture_capture::to_channel(*converted, static_cast<unsigned>(file.channel), file.invert,
+                                             file.invert ? roughness_floor : 0)) {
+                if (!mask_convert_failed) {
+                    mask_convert_failed = true;
+                    logger.load()("remix: live mask texture format %u not converted; constants used",
+                                  static_cast<unsigned>(pixels->format));
+                }
+                return false;
+            }
+            pixels = converted;
+        }
+        if (file.normal && normal_octahedral) {
+            // Converted per texture, on this thread: the game's mip chain is preserved level by level.
+            auto converted = std::make_shared<texture_capture::Texture>(*pixels);
+            if (texture_capture::to_octahedral(*converted, normal_flip_y)) pixels = converted;
+            else if (!normal_convert_failed) {
+                normal_convert_failed = true;
+                logger.load()("remix: live normal texture format not converted; sent as the game wrote it");
+            }
+        }
+        if (!texture_capture::write_dds(file.path.c_str(), *pixels)) {
+            if (!texture_write_failed) {
+                texture_write_failed = true;
+                logger.load()("remix: live texture write failed: %ls", file.path.c_str());
+            }
+            return false;
+        }
+        return true;
+    }
+};
+
 // Everything Remix-side lives on this thread.
 struct Worker {
     remixapi_Interface api{};
@@ -312,8 +399,7 @@ struct Worker {
     bool release_reported = false;
     bool injection_reported = false;
     bool big_write_reported = false;
-    bool texture_write_failed = false;
-    bool normal_convert_failed = false;
+    TextureWriter writer;
     bool pass_reported = false;
     bool latch_reported = false;
     Frame back;
@@ -633,43 +719,9 @@ struct Worker {
             }
             plan_carry(frame);
             std::vector<live_capture::Upload> uploads = live_capture::take_uploads();
-            std::vector<live_capture::TextureFile> textures = live_capture::take_textures();
-            for (live_capture::TextureFile& file : textures) {
-                if (!file.pixels) continue;
-                if (tex_write_delay_ms) Sleep(tex_write_delay_ms);  // test switch: a slow disk must not stall the game
-                std::shared_ptr<const texture_capture::Texture> pixels = file.pixels;
-                if (file.channel >= 0) {
-                    // One mask channel as R8 for Remix's metallic / roughness; a mask format the decoder does not know is
-                    // not written at all, so the material falls back to its constants instead of reading colour as metal.
-                    auto converted = std::make_shared<texture_capture::Texture>(*pixels);
-                    // The floor only for roughness (the inverted gloss channel); metalness keeps its values.
-                    if (!texture_capture::to_channel(*converted, static_cast<unsigned>(file.channel), file.invert,
-                                                     file.invert ? roughness_floor : 0)) {
-                        if (!mask_convert_failed) {
-                            mask_convert_failed = true;
-                            logger.load()("remix: live mask texture format %u not converted; constants used",
-                                          static_cast<unsigned>(pixels->format));
-                        }
-                        file.pixels.reset();
-                        continue;
-                    }
-                    pixels = converted;
-                }
-                if (file.normal && normal_octahedral) {
-                    // Converted per texture, on this thread: the game's mip chain is preserved level by level.
-                    auto converted = std::make_shared<texture_capture::Texture>(*pixels);
-                    if (texture_capture::to_octahedral(*converted, normal_flip_y)) pixels = converted;
-                    else if (!normal_convert_failed) {
-                        normal_convert_failed = true;
-                        logger.load()("remix: live normal texture format not converted; sent as the game wrote it");
-                    }
-                }
-                if (!texture_capture::write_dds(file.path.c_str(), *pixels) && !texture_write_failed) {
-                    texture_write_failed = true;
-                    logger.load()("remix: live texture write failed: %ls", file.path.c_str());
-                }
-                file.pixels.reset();
-            }
+            writer.push(live_capture::take_textures());
+            // Only finished files: a path reaches Remix once its DDS is complete on disk.
+            std::vector<live_capture::TextureFile> textures = writer.take_done();
             if (!big_write_reported && live_capture::skipped_writes.load(std::memory_order_relaxed)) {
                 big_write_reported = true;
                 logger.load()("remix: live %llu large buffer writes not mirrored on the CPU (re-read when drawn)",

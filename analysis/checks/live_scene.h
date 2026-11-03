@@ -52,6 +52,8 @@ struct State {
     std::map<std::uint64_t, std::uint64_t> last_used;
     std::map<std::uint64_t, remixapi_MaterialHandle> materials;  // texture id, plus alpha test above bit 32
     std::vector<std::wstring> texture_paths;  // indexed by (texture id - 1); Remix keeps each c_str()
+    // Texture ids whose file the writer thread has finished (written, or given up on: then the path stays empty).
+    std::vector<char> landed;
     std::vector<live_capture::Upload> backlog;  // uploads deferred to later iterations, so one frame cannot stall
     std::vector<std::uint64_t> evicted_keys;     // reported to the capture side, which then uploads them again
     std::map<std::uint64_t, unsigned> refused;   // meshes the runtime refused: retried a few times, then left out
@@ -87,6 +89,7 @@ inline void destroy(const remixapi_Interface& api, State& s) {
     s.last_used.clear();
     s.materials.clear();
     s.texture_paths.clear();
+    s.landed.clear();
     s.sun = s.sky = nullptr;
     s.sun_captured = false;
     s.lights.clear();
@@ -94,13 +97,25 @@ inline void destroy(const remixapi_Interface& api, State& s) {
     s.bytes = 0;
 }
 
-// Textures first seen up to this frame, in id order, so the path strings stay alive.
+// Texture files the writer has finished, so the path strings stay alive. An empty path is a file that was not written
+// (unknown mask format, write error): never named to Remix; a metallic / roughness / normal input then falls back to its
+// constants, a missing albedo leaves the mesh without a material (untextured), as a refused texture always has.
 inline void add_textures(State& s, const std::vector<live_capture::TextureFile>& files) {
     for (const auto& f : files) {
         if (f.id == 0) continue;
-        if (s.texture_paths.size() < f.id) s.texture_paths.resize(f.id);
+        if (s.texture_paths.size() < f.id) { s.texture_paths.resize(f.id); s.landed.resize(f.id, 0); }
         s.texture_paths[f.id - 1] = f.path;
+        s.landed[f.id - 1] = 1;
     }
+}
+
+// Every file this upload's material names has landed (id 0 = no texture in that role; a registered path has landed).
+inline bool files_landed(const State& s, const live_capture::Upload& u) {
+    for (const std::uint32_t id : {u.texture, u.normal, u.metallic, u.roughness})
+        if (id && !(id <= s.texture_paths.size() && !s.texture_paths[id - 1].empty()) &&
+            !(id <= s.landed.size() && s.landed[id - 1]))
+            return false;
+    return true;
 }
 
 // One material per (texture, normal map, metallic, roughness, alpha test). Opaque keeps the hash and settings the live
@@ -113,12 +128,12 @@ inline remixapi_MaterialHandle material_for(const remixapi_Interface& api, State
     const bool tested = alpha_op != 7;
     // shortcut: the normal id rides in bits 48-63, so two ids that differ only above 65535 would share a material; a
     // session that captures more than 65535 textures needs a struct key instead. PBR ids are mixed in separately below.
-    std::uint64_t key = texture | (tested ? (std::uint64_t(alpha_op) << 32 | std::uint64_t(alpha_ref) << 40) : 0) |
-                        (std::uint64_t(normal) << 48);
     const auto path_of = [&s](std::uint32_t id) -> const wchar_t* {
         return id && id <= s.texture_paths.size() && !s.texture_paths[id - 1].empty() ? s.texture_paths[id - 1].c_str()
                                                                                      : nullptr;
     };
+    std::uint64_t key = texture | (tested ? (std::uint64_t(alpha_op) << 32 | std::uint64_t(alpha_ref) << 40) : 0) |
+                        (std::uint64_t(normal) << 48);
     const wchar_t* metallic_path = path_of(metallic);
     const wchar_t* roughness_path = path_of(roughness);
     const bool pbr = metallic_path || roughness_path;
@@ -269,13 +284,16 @@ inline bool update(const remixapi_Interface& api, std::vector<live_capture::Uplo
         if (queued != position.end()) queue[queued->second] = std::move(upload);
         else { position[upload.geometry] = queue.size(); queue.push_back(std::move(upload)); }
     }
-    std::size_t index = 0;
-    for (; index < queue.size() && index < kBuildsPerCall; ++index)
-        if (!build_mesh(api, s, queue[index]) && ++s.refused[queue[index].geometry] <= kRetries)
-            s.evicted_keys.push_back(queue[index].geometry);  // capture uploads it again; a persistent refusal stops here
-    for (; index < queue.size(); ++index) {
-        if (s.backlog.size() < kMaxBacklog) s.backlog.push_back(std::move(queue[index]));
-        else s.evicted_keys.push_back(queue[index].geometry);  // forgotten by the capture side, so not lost for good
+    // An upload whose texture files are still being written waits in the backlog and is built once, complete, when they
+    // have landed (the writer thread, remix_live.cpp): no bare build plus a rebuild, and Remix never names a missing file.
+    std::size_t builds = 0;
+    for (auto& upload : queue) {
+        if (builds < kBuildsPerCall && files_landed(s, upload)) {
+            ++builds;
+            if (!build_mesh(api, s, upload) && ++s.refused[upload.geometry] <= kRetries)
+                s.evicted_keys.push_back(upload.geometry);  // capture uploads it again; a persistent refusal stops here
+        } else if (s.backlog.size() < kMaxBacklog) s.backlog.push_back(std::move(upload));
+        else s.evicted_keys.push_back(upload.geometry);  // forgotten by the capture side, so not lost for good
     }
     if (!s.sun || !s.sky) {
         if (const remixapi_ErrorCode r = nscn::make_lights(api, options, s.sun, s.sky)) return false;

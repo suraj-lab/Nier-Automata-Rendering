@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cwchar>
 #include <atomic>
 #include <cstdint>
 #include <map>
@@ -66,8 +67,33 @@ remixapi_ErrorCode REMIXAPI_CALL startup(const remixapi_StartupInfo* info) {
     if (info) startup_window = info->hwnd;
     return registered ? REMIXAPI_ERROR_CODE_ALREADY_EXISTS : REMIXAPI_ERROR_CODE_SUCCESS;
 }
+// The real runtime loads a material's DDS files when it creates the material: a live texture (live_*.dds) that is not
+// completely on disk yet would load as nothing. Checked: present, "DDS " magic, DX10 header, more than the 148 header bytes.
+// Scene-file textures (nscn fixtures) are not checked; those gates do not write them.
+void check_on_disk(const wchar_t* path) {
+    if (!path) return;
+    const wchar_t* name = std::wcsrchr(path, L'\\');
+    name = name ? name + 1 : path;
+    if (std::wcsncmp(name, L"live_", 5)) return;
+    char shown[MAX_PATH * 3] = "";
+    WideCharToMultiByte(CP_UTF8, 0, name, -1, shown, sizeof shown, nullptr, nullptr);
+    FILE* f = _wfopen(path, L"rb");
+    if (!f) { note("VIOLATION CreateMaterial names %s, which is not on disk", shown); return; }
+    unsigned char head[148] = {};
+    const std::size_t got = std::fread(head, 1, sizeof head, f);
+    const bool more = std::fgetc(f) != EOF;
+    std::fclose(f);
+    if (got < sizeof head || !more || std::memcmp(head, "DDS ", 4) || std::memcmp(head + 84, "DX10", 4))
+        note("VIOLATION CreateMaterial names %s, which is incomplete on disk (%zu header bytes)", shown, got);
+}
 remixapi_ErrorCode REMIXAPI_CALL create_material(const remixapi_MaterialInfo* i, remixapi_MaterialHandle* h) {
     ++materials;
+    if (i) {
+        check_on_disk(i->albedoTexture);
+        check_on_disk(i->normalTexture);
+        const auto* e = static_cast<const remixapi_MaterialInfoOpaqueEXT*>(i->pNext);
+        if (e && e->sType == REMIXAPI_STRUCT_TYPE_MATERIAL_INFO_OPAQUE_EXT) { check_on_disk(e->roughnessTexture); check_on_disk(e->metallicTexture); }
+    }
     if (i && i->albedoTexture) {
         char path[MAX_PATH * 3] = "";
         WideCharToMultiByte(CP_UTF8, 0, i->albedoTexture, -1, path, sizeof path, nullptr, nullptr);
@@ -88,10 +114,10 @@ remixapi_ErrorCode REMIXAPI_CALL create_material(const remixapi_MaterialInfo* i,
         char rough[MAX_PATH * 3], metal[MAX_PATH * 3];
         base_name(opaque_ext ? ext->roughnessTexture : nullptr, rough, sizeof rough);
         base_name(opaque_ext ? ext->metallicTexture : nullptr, metal, sizeof metal);
-        note("CreateMaterial path=%s normal=%s presented=%u alpha=%d/%u hash=%llu roughness=%s metallic=%s",
+        note("CreateMaterial path=%s normal=%s presented=%u alpha=%d/%u hash=%llu roughness=%s metallic=%s id=%llu",
              slash ? slash + 1 : path, normal[0] ? normal : "-", frames,
              opaque_ext ? ext->alphaTestType : -1, opaque_ext ? unsigned(ext->alphaReferenceValue) : 0u,
-             static_cast<unsigned long long>(i->hash), rough[0] ? rough : "-", metal[0] ? metal : "-");
+             static_cast<unsigned long long>(i->hash), rough[0] ? rough : "-", metal[0] ? metal : "-", handle);
     }
     *h = reinterpret_cast<remixapi_MaterialHandle>(handle++); return REMIXAPI_ERROR_CODE_SUCCESS;
 }
@@ -137,10 +163,11 @@ remixapi_ErrorCode REMIXAPI_CALL create_mesh(const remixapi_MeshInfo* i, remixap
             uv0[1] += i->surfaces_values[0].vertices_values[k].texcoord[1];
         }
     }
-    note("CreateMesh hash=%llu surfaces=%u verts=%llu indices=%llu materials=%u skinned=%d bonesPerVertex=%u weights=%llu v0=%.3f,%.3f,%.3f presented=%u started=%d key=%llu uvsum=%.4f,%.4f",
+    note("CreateMesh hash=%llu surfaces=%u verts=%llu indices=%llu materials=%u skinned=%d bonesPerVertex=%u weights=%llu v0=%.3f,%.3f,%.3f presented=%u started=%d key=%llu uvsum=%.4f,%.4f mat=%llu",
          i ? static_cast<unsigned long long>(i->hash) : 0ull, i ? i->surfaces_count : 0u, verts, indices, materials,
          skinned ? 1 : 0, bones_per_vertex, weights, v0[0], v0[1], v0[2], frames, started,
-         i ? static_cast<unsigned long long>(i->hash) >> 32 : 0ull, uv0[0], uv0[1]);  // live_scene: capture key in the high 32 bits
+         i ? static_cast<unsigned long long>(i->hash) >> 32 : 0ull, uv0[0], uv0[1],
+         i && i->surfaces_count ? static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(i->surfaces_values[0].material)) : 0ull);  // live_scene: capture key in the high 32 bits
     if (!started) note("VIOLATION CreateMesh before Startup");
     const unsigned long long hash = i ? static_cast<unsigned long long>(i->hash) : 0ull;
     if (!hash) { *h = reinterpret_cast<remixapi_MeshHandle>(handle++); return REMIXAPI_ERROR_CODE_SUCCESS; }
@@ -229,6 +256,12 @@ remixapi_ErrorCode REMIXAPI_CALL present(const remixapi_PresentInfo*) {
     if (frame_instances && !frame_traced)
         note("VIOLATION Present with %u instances, all SKY: zero ray-traced surfaces (real runtime: divide by zero)", frame_instances);
     if (hang_present && frames == 3) { note("Present hanging on request"); Sleep(INFINITE); }
+    // Long gaps between Remix frames once running: the worker stalled (live frametime1: 0.8-1.7 s freezes while new
+    // textures were converted on the worker). Logged, not a violation: gates decide what gap their case allows.
+    static ULONGLONG last_present = 0;
+    const ULONGLONG now = GetTickCount64();
+    if (frames >= 5 && now - last_present > 250) note("Present gap %llu ms before frame %u", now - last_present, frames + 1);
+    last_present = now;
     ++frames; stage = 9;
     if (frames == 1 && startup_window) {
         // What the real runtime does to its window (measured 2026-10-27: it imports ShowWindow/SetWindowPos and the

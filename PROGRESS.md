@@ -1,5 +1,38 @@
 # NieR:Automata Rendering — Progress & Resume
 
+## START HERE / PAUSED (2026-11-03 night): texture stalls fixed offline, next is one laptop run
+
+Cause of the frametime1 freezes, settled offline: the Remix worker converted new normal/mask textures inline and
+untimed. Evidence: `analysis/evidence/remix-current/2026-11-01/frametime1-attribution.md`, section "Settled offline",
+and `frametime1_video.py`. The longest visible freeze per window correlates with new textures at r = +0.70.
+No game run, nothing installed. Full suite **81/81**, DLL `99f8eacf0620bf44`.
+
+- **Step 1, per-block texture decoding:** `normal_octahedral.h` / `mask_channels.h`. Byte-identical to the frozen
+  reference `checks/fixtures/texture-convert-reference/` (gate `test_texture_convert_fast.py`, 21k cases). Also checked
+  on 260 real captures, 2,504 comparisons, 0 mismatches. Speed: BC1 normals 4.1x, BC1 / BC3 masks 8.4x / 7.3x.
+  Implemented by a cloud `worker` after the local Qwen run stopped on length (ledger).
+- **Step 2, writer thread:** `TextureWriter` in `remix_live.cpp` converts and writes DDS files off the render loop.
+  `live_scene.h` builds an upload only once every file it names has landed (`files_landed`; it waits in the backlog),
+  so each mesh is still built once and Remix never names a missing file. An unwritten file (unknown mask format, write
+  error) lands with an empty path: constants for PBR inputs, untextured for albedo. Gates:
+  `test_live_texture_writer.py` (Wine, 300 ms slow disk: no Present gap over 250 ms where inline gave 377 ms, same
+  materials and build counts as sync) and `test_live_late_files.py` (native). Both go red on the mutations.
+- **Gate infrastructure changed:**
+  - fake runtime: `check_on_disk` VIOLATION, `Present gap` lines, `id=` / `mat=` fields;
+  - mock: `MOCK_LATE_TEXTURE`;
+  - `test_live_geometry.py` now classifies builds by capture key, not by Remix-frame windows;
+  - `test_live_visibility.py`'s mesh signature no longer includes `presented`, matching its own docstring. Both had
+    pinned timing that shifted by one frame.
+- **Not done:** the multi-angle `code-review` workflow was stopped before its verify phase, so treat it as no review.
+  Its scratch copy filled the /tmp quota. The single cloud `reviewer` found no P0/P1. Its remaining notes:
+  - the `logger` is now called from the writer thread; the host log's thread safety is unchecked;
+  - nothing has been run under ThreadSanitizer.
+- **Next:** one approved laptop run on the same save as frametime1, AC power, a route that streams in new content.
+  Compare the `other` ms per frame and the recording's longest freezes (`frametime1_video.py`). A mesh may now appear
+  a little later than before while its files are written; watch for pop-in.
+- Worktree `~/Projects/nier-wt-fastconv` (detached, step-1 candidate, already merged by copy) can be removed with
+  `git worktree remove`.
+
 ## START HERE / PAUSED (2026-11-01, after frametime1)
 
 The operator requested a pause. Laptop game files restored and hash-verified (`d3d11.dll` original

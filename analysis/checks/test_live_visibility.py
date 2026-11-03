@@ -85,8 +85,10 @@ def mesh_signature(log):
     for line in log.splitlines():
         if line.startswith('CreateMesh'):
             fields = dict(re.findall(r'(\w+)=([^\s]+)', line))
+            # No `presented`: the frame a build lands on is timing (it varied by one once texture files moved to their
+            # own thread, 2026-11-03); the build count and content are what diagnostics must not change.
             out.append(tuple(fields.get(k) for k in ('surfaces', 'verts', 'indices', 'materials', 'skinned',
-                                                     'bonesPerVertex', 'weights', 'v0', 'presented')))
+                                                     'bonesPerVertex', 'weights', 'v0')))
     return sorted(out)
 
 

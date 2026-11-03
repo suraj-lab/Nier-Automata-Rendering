@@ -92,12 +92,18 @@ def inside():
         # assertions below, so it is filtered out here rather than polluting them.
         meshes = [dict(kv.split('=', 1) for kv in re.findall(r'(\w+=\S+)', x)) for x in world_meshes(fake)]
         assert meshes, fake
-        early = [m for m in meshes if int(m['presented']) < 35]
-        mid = [m for m in meshes if 35 <= int(m['presented']) < 48]
-        late = [m for m in meshes if int(m['presented']) >= 48]
-        assert len(early) == 1, f'mesh A must be built once, not per frame: {early[:3]}'
-        assert len(mid) == 1, f'mesh B built when it first appears: {[m["presented"] for m in mid]}'
-        assert len(late) == 1, f'mesh A rebuilt once after its dynamic content changed: {[m["presented"] for m in late]}'
+        # By capture key, not by fixed Remix-frame windows: the presented count at which a build lands shifts with
+        # worker timing (texture files moved to their own thread, 2026-11-03: A's rebuild moved from 48 to 47).
+        by_key = {}
+        for m in meshes:
+            by_key.setdefault(m['key'], []).append(int(m['presented']))
+        a = [k for k, v in by_key.items() if min(v) < 35]
+        b = [k for k, v in by_key.items() if min(v) >= 35]
+        assert len(a) == 1 and len(b) == 1, f'expected mesh A (from the start) and mesh B (from frame 40): {by_key}'
+        a_builds, b_builds = by_key[a[0]], by_key[b[0]]
+        assert len(b_builds) == 1, f'mesh B built when it first appears, once: {b_builds}'
+        assert len(a_builds) == 2 and a_builds[1] >= 44, \
+            f'mesh A built once, not per frame, and rebuilt once after its dynamic content changed (frame 50): {a_builds}'
         assert all(int(m['indices']) == 192 for m in meshes), [m['indices'] for m in meshes]
         # Only the referenced vertices may be uploaded: 65 for this fan, not 192*3.
         assert all(int(m['verts']) <= 65 for m in meshes), [m['verts'] for m in meshes]

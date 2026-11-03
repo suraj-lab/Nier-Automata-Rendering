@@ -68,9 +68,38 @@ negative), so nothing above uses them. `decode_failures=313` was all reached bef
 grow; it is not part of this slowdown. Report windows are 60 worker frames, not equal wall time, so cross-window
 comparisons are per-window rates, not per-second.
 
+## Settled offline (2026-11-03): (b), texture conversion on the Remix worker, untimed
+
+No laptop run was needed. Three independent pieces:
+
+1. **Source.** `remix_live.cpp` (`frame()`, the loop over `take_textures()` right before `live update`) runs
+   `to_channel` (metallic / roughness R8), `to_octahedral` (normal -> RGBA8) and `write_dds` for every new texture **on
+   the Remix worker, outside every timed stage**, so its whole cost lands in `other`. It was moved there from the game
+   thread on 2026-10-31 (1.1 s game freezes, `live_types.h` comment on `TextureFile`); the cost moved, it did not go.
+2. **Cost, desktop native x64 -O2** (`normal_octahedral.h` / `mask_channels.h` as shipped, BC1 full mip chain):
+
+   | size | octahedral normal | one mask channel |
+   |---|---:|---:|
+   | 1024 | 20.3 ms (5 MB RGBA8 out) | 12.4 ms |
+   | 2048 | 81.0 ms (21 MB) | 49.3 ms |
+   | 4096 | 323 ms (85 MB) | 197 ms |
+
+   A material with normal + metallic + roughness at 1024 is ~45 ms before the file write; the laptop runs the x64 DLL
+   under ARM64 emulation, so slower. The log gives 25-40 ms of `other` per new texture output: consistent.
+   Windows with no new texture outputs: `other` 3.2 ms, 14.1 fps (n=18); with any: 23.0 ms, 12.1 fps (n=35).
+3. **The recording** (post-tonemap ground truth; method from Rayman3-RTX `session-findings-20261103.md` 6.1),
+   `frametime1_video.py`: per report window, the longest visible freeze correlates with new texture outputs
+   **r = +0.70**, distinct-image rate with them r = -0.69 (44 windows). Freezes of 0.77-1.74 s sit in exactly the
+   texture-burst windows (20:38:16, :21, :28, :37, :56, 20:39:30, 20:41:08). That is what the user saw as
+   "LOD/texture slowdowns".
+
+So the fix is not the game-thread readback. It is either moving this loop off the render worker (a writer thread;
+a material appears when its file exists, `test_live_late_material.py` territory) or making the conversion cheap:
+`bc1_texel` re-decodes both RGB565 endpoints for each of the 16 texels of a block, with float maths per texel.
+
 ## Next actions, in order
 
-1. The two env-only A/Bs above, one laptop run, same save (needs operator approval).
+1. ~~The two env-only A/Bs above~~ — superseded by the section above; no run needed to pick the fix.
 2. Whichever leg wins, gate the fix offline first: async texture readback (extends the existing buffer read path in
    `live_capture.h`) or a texture-triggered-rebuild budget, both testable with the Wine mock as `shared-mask.md` and
    `frame-copy.md` were.

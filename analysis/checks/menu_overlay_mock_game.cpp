@@ -576,6 +576,9 @@ int wmain(int argc, wchar_t** argv) {
     // live-late: two geometries with two different textures, steady from frame 1, no evictions. Used to prove that a
     // geometry whose texture was not captured yet gets its material when the texture finally lands.
     const bool live_late = camera_mode && !std::strcmp(camera_mode, "live-late");
+    // MOCK_LATE_TEXTURE=1: the second geometry (drawn from frame 40) uses its own albedo, so a new texture streams in
+    // mid-run as in the game, not only in the first frames (test_live_texture_writer.py).
+    const bool late_texture = std::getenv("MOCK_LATE_TEXTURE") != nullptr;
     // live-additive: blending is on but additive, as particles and light shafts are drawn. Not a cutout.
     const bool live_additive = camera_mode && !std::strcmp(camera_mode, "live-additive");
     const bool live_untransformed = camera_mode && !std::strcmp(camera_mode, "live-nocb");
@@ -1281,7 +1284,7 @@ int wmain(int argc, wchar_t** argv) {
                 for (unsigned repeat = 0; repeat < (empty_frame || frame < sky_only_until ? 0u : repeats); ++repeat)
                 for (int pass = (frame >= 40 || live_late || live_hud) ? 2 : 1; pass >= 1; --pass) {
                     if (live_evict && pass == 2 && frame > 45 && frame < 65) continue;  // B unused in between
-                    if (live_evict || live_late || live_hud) context->PSSetShaderResources(0, 1, &mesh_srvs[pass == 2 ? 2 : 0]);
+                    if (live_evict || live_late || live_hud || late_texture) context->PSSetShaderResources(0, 1, &mesh_srvs[pass == 2 ? 2 : 0]);
                     // MOCK_NORMAL_TEX: slot 4 is the normal map on the world draw (the live path must not treat it as albedo).
                     if (normal_srv) context->PSSetShaderResources(4, 1, &normal_srv);
                     if (mesh_pbr) context->PSSetShaderResources(2, 2, pbr_srvs);
