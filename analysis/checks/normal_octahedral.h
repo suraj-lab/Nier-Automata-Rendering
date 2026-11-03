@@ -83,33 +83,109 @@ inline std::size_t level_bytes(Source source, unsigned w, unsigned h) {
     }
 }
 
+// The 8-entry endpoint table of a BC4 channel block, same expressions as bc4_texel.
+inline void bc4_table(const unsigned char* block, bool snorm, float table[8]) {
+    auto endpoint = [snorm](unsigned char v) {
+        return snorm ? static_cast<float>(static_cast<signed char>(v)) / 127.f : static_cast<float>(v) / 255.f;
+    };
+    table[0] = endpoint(block[0]);
+    table[1] = endpoint(block[1]);
+    if (table[0] > table[1]) {
+        for (int i = 1; i <= 6; ++i) table[i + 1] = table[0] + (table[1] - table[0]) * i / 7.f;
+    } else {
+        for (int i = 1; i <= 4; ++i) table[i + 1] = table[0] + (table[1] - table[0]) * i / 5.f;
+        table[6] = snorm ? -1.f : 0.f;
+        table[7] = 1.f;
+    }
+}
+
+// The 48 index bits of a BC4 channel block (bytes 2..7).
+inline std::uint64_t bc4_bits(const unsigned char* block) {
+    std::uint64_t bits = 0;
+    for (int i = 0; i < 6; ++i) bits |= static_cast<std::uint64_t>(block[2 + i]) << (8 * i);
+    return bits;
+}
+
 // Converts one level into RGBA8 octahedral. `out` must hold w*h*4 bytes. False when the input is too short or a
 // texel has no usable normal, so an unexpected texture is left as the game wrote it rather than half-converted.
+// Block formats decode per 4x4 block with the same float expressions as bc1_texel / bc4_texel.
 inline bool convert_level(Source source, const unsigned char* in, std::size_t in_bytes, unsigned w, unsigned h,
                           bool flip_y, unsigned char* out) {
     if (!in || !out || in_bytes < level_bytes(source, w, h)) return false;
-    const std::size_t bw = (w + 3u) / 4u;
+    const std::size_t bw = (w + 3u) / 4u, bh = (h + 3u) / 4u;
+    if (source == Source::Bc1) {
+        for (std::size_t by = 0; by < bh; ++by)
+            for (std::size_t bx = 0; bx < bw; ++bx) {
+                const unsigned char* block = in + (by * bw + bx) * 8;
+                const unsigned c0 = block[0] | (block[1] << 8), c1 = block[2] | (block[3] << 8);
+                float a[3], b[3], pal[4][3];
+                rgb565(c0, a);
+                rgb565(c1, b);
+                for (int i = 0; i < 3; ++i) {
+                    pal[0][i] = a[i];
+                    pal[1][i] = b[i];
+                    pal[2][i] = (2 * a[i] + b[i]) / 3.f;
+                    pal[3][i] = (a[i] + 2 * b[i]) / 3.f;
+                }
+                const bool four = c0 > c1;
+                unsigned char enc[4][2];
+                for (unsigned k = 0; k < (four ? 4u : 3u); ++k) {
+                    const float nx = pal[k][0] * 2.f - 1.f;
+                    float ny = pal[k][1] * 2.f - 1.f;
+                    if (flip_y) ny = -ny;
+                    encode_octahedral(nx, ny, enc[k]);
+                }
+                const unsigned bits =
+                    block[4] | (block[5] << 8) | (block[6] << 16) | (static_cast<unsigned>(block[7]) << 24);
+                const unsigned nx_end = std::min(4u, w - static_cast<unsigned>(bx) * 4u);
+                const unsigned ny_end = std::min(4u, h - static_cast<unsigned>(by) * 4u);
+                for (unsigned y = 0; y < ny_end; ++y) {
+                    unsigned char* o = out + ((by * 4 + y) * w + bx * 4) * 4;
+                    for (unsigned x = 0; x < nx_end; ++x, o += 4) {
+                        const unsigned index = (bits >> (2 * (y * 4 + x))) & 3;
+                        if (index == 3 && !four) return false;
+                        o[0] = enc[index][0];
+                        o[1] = enc[index][1];
+                        o[2] = 0;
+                        o[3] = 255;
+                    }
+                }
+            }
+        return true;
+    }
+    if (source == Source::Bc5Unorm || source == Source::Bc5Snorm) {
+        const bool snorm = source == Source::Bc5Snorm;
+        for (std::size_t by = 0; by < bh; ++by)
+            for (std::size_t bx = 0; bx < bw; ++bx) {
+                const unsigned char* block = in + (by * bw + bx) * 16;
+                float tu[8], tv[8];
+                bc4_table(block, snorm, tu);
+                bc4_table(block + 8, snorm, tv);
+                const std::uint64_t bu = bc4_bits(block), bv = bc4_bits(block + 8);
+                const unsigned nx_end = std::min(4u, w - static_cast<unsigned>(bx) * 4u);
+                const unsigned ny_end = std::min(4u, h - static_cast<unsigned>(by) * 4u);
+                for (unsigned y = 0; y < ny_end; ++y) {
+                    unsigned char* o = out + ((by * 4 + y) * w + bx * 4) * 4;
+                    for (unsigned x = 0; x < nx_end; ++x, o += 4) {
+                        const unsigned shift = 3 * (y * 4 + x);
+                        const float u = tu[(bu >> shift) & 7], v = tv[(bv >> shift) & 7];
+                        // SNORM is already signed; only UNORM needs the [0,1] -> [-1,1] remap.
+                        const float nx = snorm ? u : u * 2.f - 1.f;
+                        float ny = snorm ? v : v * 2.f - 1.f;
+                        if (flip_y) ny = -ny;
+                        encode_octahedral(nx, ny, o);
+                        o[2] = 0;
+                        o[3] = 255;
+                    }
+                }
+            }
+        return true;
+    }
     for (unsigned y = 0; y < h; ++y) {
         for (unsigned x = 0; x < w; ++x) {
-            float nx, ny;
-            if (source == Source::Bc1) {
-                float rgb[3];
-                if (!bc1_texel(in + (static_cast<std::size_t>(y / 4) * bw + x / 4) * 8, x % 4, y % 4, rgb)) return false;
-                nx = rgb[0] * 2.f - 1.f;
-                ny = rgb[1] * 2.f - 1.f;
-            } else if (source == Source::Bc5Unorm || source == Source::Bc5Snorm) {
-                const unsigned char* block = in + (static_cast<std::size_t>(y / 4) * bw + x / 4) * 16;
-                const bool snorm = source == Source::Bc5Snorm;
-                const float u = bc4_texel(block, x % 4, y % 4, snorm);
-                const float v = bc4_texel(block + 8, x % 4, y % 4, snorm);
-                // SNORM is already signed; only UNORM needs the [0,1] -> [-1,1] remap.
-                nx = snorm ? u : u * 2.f - 1.f;
-                ny = snorm ? v : v * 2.f - 1.f;
-            } else {
-                const unsigned char* texel = in + (static_cast<std::size_t>(y) * w + x) * 4;
-                nx = static_cast<float>(source == Source::Rgba8 ? texel[0] : texel[2]) / 255.f * 2.f - 1.f;
-                ny = static_cast<float>(texel[1]) / 255.f * 2.f - 1.f;
-            }
+            const unsigned char* texel = in + (static_cast<std::size_t>(y) * w + x) * 4;
+            const float nx = static_cast<float>(source == Source::Rgba8 ? texel[0] : texel[2]) / 255.f * 2.f - 1.f;
+            float ny = static_cast<float>(texel[1]) / 255.f * 2.f - 1.f;
             if (flip_y) ny = -ny;
             unsigned char* o = out + (static_cast<std::size_t>(y) * w + x) * 4;
             encode_octahedral(nx, ny, o);

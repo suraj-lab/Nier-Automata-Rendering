@@ -49,24 +49,51 @@ inline bool extract_level(Source source, const unsigned char* src, std::size_t s
     const std::size_t block_bytes = source == Source::Bc1 ? 8 : 16;
     if (source == Source::Bc1 || source == Source::Bc3) {
         if (src_bytes < static_cast<std::size_t>(bw) * bh * block_bytes) return false;
+        const auto finish = [invert, floor](float v) {
+            const unsigned char b = to_byte(v);
+            const unsigned char r = invert ? static_cast<unsigned char>(255 - b) : b;
+            return r < floor ? floor : r;
+        };
         for (unsigned by = 0; by < bh; ++by)
             for (unsigned bx = 0; bx < bw; ++bx) {
                 const unsigned char* block = src + (static_cast<std::size_t>(by) * bw + bx) * block_bytes;
-                for (unsigned y = 0; y < 4; ++y)
-                    for (unsigned x = 0; x < 4; ++x) {
-                        const unsigned px = bx * 4 + x, py = by * 4 + y;
-                        if (px >= w || py >= h) continue;
-                        float rgba[4];
-                        if (source == Source::Bc1) {
-                            colour_texel(block, x, y, false, rgba);
-                        } else {
-                            colour_texel(block + 8, x, y, true, rgba);
-                            rgba[3] = normal_octahedral::bc4_texel(block, x, y, false);
-                        }
-                        const unsigned char v = to_byte(rgba[channel]);
-                        const unsigned char r = invert ? static_cast<unsigned char>(255 - v) : v;
-                        out[static_cast<std::size_t>(py) * w + px] = r < floor ? floor : r;
+                // Final output byte per palette index, computed once per block; then each texel looks up its index.
+                unsigned char lut[8];
+                std::uint64_t bits;
+                unsigned bits_per_index;
+                if (source == Source::Bc3 && channel == 3) {
+                    float table[8];
+                    normal_octahedral::bc4_table(block, false, table);
+                    for (int k = 0; k < 8; ++k) lut[k] = finish(table[k]);
+                    bits = normal_octahedral::bc4_bits(block);
+                    bits_per_index = 3;
+                } else {
+                    const unsigned char* colour = source == Source::Bc1 ? block : block + 8;
+                    const unsigned c0 = colour[0] | (colour[1] << 8), c1 = colour[2] | (colour[3] << 8);
+                    float a[3], b[3];
+                    normal_octahedral::rgb565(c0, a);
+                    normal_octahedral::rgb565(c1, b);
+                    const bool four = source == Source::Bc3 || c0 > c1;
+                    float pal[4][4];
+                    for (int i = 0; i < 3; ++i) {
+                        pal[0][i] = a[i];
+                        pal[1][i] = b[i];
+                        pal[2][i] = four ? (2.f * a[i] + b[i]) / 3.f : (a[i] + b[i]) / 2.f;
+                        pal[3][i] = four ? (a[i] + 2.f * b[i]) / 3.f : 0.f;
                     }
+                    pal[0][3] = pal[1][3] = pal[2][3] = 1.f;
+                    pal[3][3] = four ? 1.f : 0.f;
+                    for (int k = 0; k < 4; ++k) lut[k] = finish(pal[k][channel]);
+                    bits = colour[4] | (colour[5] << 8) | (colour[6] << 16) | (static_cast<unsigned>(colour[7]) << 24);
+                    bits_per_index = 2;
+                }
+                const unsigned mask = (1u << bits_per_index) - 1;
+                const unsigned x_end = w - bx * 4 < 4 ? w - bx * 4 : 4, y_end = h - by * 4 < 4 ? h - by * 4 : 4;
+                for (unsigned y = 0; y < y_end; ++y) {
+                    unsigned char* o = out + static_cast<std::size_t>(by * 4 + y) * w + bx * 4;
+                    for (unsigned x = 0; x < x_end; ++x)
+                        o[x] = lut[(bits >> (bits_per_index * (y * 4 + x))) & mask];
+                }
             }
         return true;
     }
