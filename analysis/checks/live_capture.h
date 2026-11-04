@@ -41,6 +41,7 @@ inline std::recursive_mutex& mutex() { static std::recursive_mutex m; return m; 
 inline Frame& building() { static Frame f; return f; }
 inline Frame& ready() { static Frame f; return f; }
 inline std::atomic<std::uint64_t> ready_sequence{0};
+inline std::atomic<unsigned> empty_streak{0};  // game frames in a row without scene draws (a loading screen)
 inline std::atomic<bool> permitted{false};    // capture allowed (host alive and Running)
 inline std::atomic<bool> suspended{false};    // F10 original view: no per-frame capture, writes still mirrored
 inline std::atomic<bool> frame_open{false};   // between begin_frame and end_frame
@@ -227,7 +228,12 @@ inline unsigned final_width = 0, final_height = 0;  // the image that reaches th
 inline bool scene_target_enabled = true;
 inline unsigned scene_target_fallbacks = 0;      // empty frames seen this session (reported)
 inline unsigned scene_target_empty_streak = 0;   // consecutive empty frames: three latch the filter off
-inline std::atomic<bool> scene_target_latched{false};  // the worker logs the latch once
+inline std::atomic<unsigned> scene_target_latched{0};     // latches so far; the worker logs each one
+inline std::atomic<unsigned> scene_target_recovered{0};   // and each time the filter came back on
+inline bool scene_target_auto_off = false;        // off because of empty frames (not NIER_REMIX_LIVE_ALL_TARGETS)
+inline bool scene_target_delivered = false;       // the chosen target has carried the world: no latch from then on
+inline unsigned scene_target_recover_streak = 0;  // latched frames in which the pre-latch target got world draws
+inline std::pair<unsigned, unsigned> scene_target_before_latch{0, 0};  // the only target the filter may come back on
 inline bool hud_enabled = true;                  // NIER_REMIX_LIVE_NO_HUD=1: no HUD capture, no replay
 inline bool sky_enabled = true;                  // NIER_REMIX_LIVE_NO_SKY=1: drop the sky dome (pre-1.9 picture)
 
@@ -337,6 +343,9 @@ inline std::atomic<unsigned long long> read_deferred{0};
 // Why decodes were refused, and how many times each geometry may be retried before it is given up on. A transient
 // refusal (the game was mid-write) must not remove an object for the session; a structural one must stop retrying.
 inline std::atomic<unsigned long long> decode_failure[static_cast<unsigned>(live_decode::Failure::Count)];
+// vertex_out_of_range split (frametime2: ~1,600/window since small draws were admitted; the F9 capture's fresh bytes
+// pass the same check for all 475 draws): from a stale snapshot, with a dynamic buffer bound, under 128 indices.
+inline std::atomic<unsigned long long> range_stale{0}, range_dynamic{0}, range_small{0};
 inline std::map<std::uint64_t, unsigned> decode_retries;
 inline constexpr unsigned kDecodeRetries = 3;  // then give up, but only after 3 real attempts
 
@@ -999,21 +1008,53 @@ inline bool end_frame() {
     // alternating between a full and an empty picture. Three in a row, because an empty frame at a level load
     // or a resolution change is normal and those are scattered over a session.
     publish_ui();
+    // Once the chosen target has carried the world, empty frames are a menu, pause or load, not a wrong pick: the
+    // Access Point menu latched three times in 0.2 s and then for good (frametime2 2026-11-04), and the whole Desert
+    // got every shadow and post pass. The Present hook shows the game's own frame for those (remix: world gone).
+    // shortcut: a pause over scene_switch_frames in which a same-aspect pass out-draws the empty world moves the target
+    // until the world wins it back (30 frames of pass draws); freeze the switch on empty frames if a run shows it.
     if (scene_target_enabled && done.items.empty() && done.skipped_pass) {
         ++scene_target_fallbacks;
-        if (++scene_target_empty_streak >= 3) {
+        if (!scene_target_delivered && ++scene_target_empty_streak >= 3) {
             scene_target_enabled = false;
+            scene_target_auto_off = true;
+            scene_target_recover_streak = 0;
+            scene_target_before_latch = {scene_width, scene_height};
             scene_width = scene_height = 0;
-            scene_target_latched.store(true, std::memory_order_release);
+            scene_target_latched.fetch_add(1, std::memory_order_release);
         }
     } else if (!done.items.empty()) {
         scene_target_empty_streak = 0;
+        if (scene_target_enabled && scene_width) scene_target_delivered = true;
+    }
+    // The pause screen also empties three frames in a row (2026-11-04). Latched for good, every shadow atlas and post
+    // pass then reached Remix for the rest of the session (and one crashed it). So the filter comes back once the
+    // target it held before the latch receives world draws for three frames again. Only that target: one chosen while
+    // latched can be a smaller pass that briefly out-draws the world, and once back on it would never empty a frame,
+    // so the world would stay lost (gate 'pause-burst'). A target the rule cannot recognise (live-odd) never draws
+    // again. After three latches the filter stays off, because a rule that keeps choosing wrong would blank every few
+    // frames.
+    if (scene_target_auto_off && scene_target_latched.load(std::memory_order_relaxed) < 3) {
+        const auto it = target_counts().find(scene_target_before_latch);
+        if (scene_target_before_latch.first && it != target_counts().end() && it->second) {
+            if (++scene_target_recover_streak >= 3) {
+                scene_target_enabled = true;
+                scene_width = scene_target_before_latch.first;  // choose_scene_target's hysteresis then holds it
+                scene_height = scene_target_before_latch.second;
+                scene_target_auto_off = false;
+                scene_target_empty_streak = 0;
+                scene_target_recovered.fetch_add(1, std::memory_order_release);
+            }
+        } else {
+            scene_target_recover_streak = 0;
+        }
     }
     choose_scene_target();
     done.scene_w = scene_width;
     done.scene_h = scene_height;
     done.target_fallbacks = scene_target_fallbacks;
     done.sequence = ready_sequence.load() + 1;
+    empty_streak.store(done.items.empty() ? empty_streak.load(std::memory_order_relaxed) + 1 : 0, std::memory_order_relaxed);
     ready() = std::move(done);
     done = Frame{};
     ready_sequence.store(ready().sequence, std::memory_order_release);
@@ -1751,6 +1792,16 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
             const unsigned fi = static_cast<unsigned>(failure);
             if (fi < static_cast<unsigned>(live_decode::Failure::Count))
                 decode_failure[fi].fetch_add(1, std::memory_order_relaxed);
+            if (failure == live_decode::Failure::VertexOutOfRange) {
+                if (stale_used) range_stale.fetch_add(1, std::memory_order_relaxed);
+                if (index_count < 128) range_small.fetch_add(1, std::memory_order_relaxed);
+                bool dynamic = false;
+                for (unsigned i = 0; i < vb_count && !dynamic; ++i) {
+                    D3D11_BUFFER_DESC d{};
+                    if (vbs[i]) { vbs[i]->GetDesc(&d); dynamic = d.Usage == D3D11_USAGE_DYNAMIC; }
+                }
+                if (dynamic) range_dynamic.fetch_add(1, std::memory_order_relaxed);
+            }
         }
         if (ok && skinned && !rigid) {
             if (rigid_bones().size() > 200000) rigid_bones().clear();  // bounded like built_versions; one re-check each

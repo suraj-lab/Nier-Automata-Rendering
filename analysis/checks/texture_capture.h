@@ -45,6 +45,27 @@ inline FormatInfo format_info(DXGI_FORMAT f) {
     }
 }
 
+// Formats whose DX10 DDS header remix-1.6.1 can parse. Its loader (gli, rtx_asset_data_manager.cpp) maps only these to
+// a format with a block size; anything else (A8_UNORM, every TYPELESS) gets block extent 0 and the runtime divides by
+// zero sizing the mips (frametime2-demo2 crash, 2026-11-04, 4096x4096 A8). Set computed from gli at the tag
+// (checks/gli_dds_probe.cpp), intersected with format_info; pinned by test_remix_dds_formats.py.
+inline bool remix_loads(DXGI_FORMAT f) {
+    switch (f) {
+    case DXGI_FORMAT_BC1_UNORM: case DXGI_FORMAT_BC1_UNORM_SRGB: case DXGI_FORMAT_BC2_UNORM: case DXGI_FORMAT_BC2_UNORM_SRGB:
+    case DXGI_FORMAT_BC3_UNORM: case DXGI_FORMAT_BC3_UNORM_SRGB: case DXGI_FORMAT_BC4_UNORM: case DXGI_FORMAT_BC4_SNORM:
+    case DXGI_FORMAT_BC5_UNORM: case DXGI_FORMAT_BC5_SNORM: case DXGI_FORMAT_BC6H_UF16: case DXGI_FORMAT_BC6H_SF16:
+    case DXGI_FORMAT_BC7_UNORM: case DXGI_FORMAT_BC7_UNORM_SRGB:
+    case DXGI_FORMAT_R8G8B8A8_UNORM: case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB: case DXGI_FORMAT_B8G8R8A8_UNORM:
+    case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB: case DXGI_FORMAT_B8G8R8X8_UNORM: case DXGI_FORMAT_R10G10B10A2_UNORM:
+    case DXGI_FORMAT_R11G11B10_FLOAT: case DXGI_FORMAT_R16G16_FLOAT: case DXGI_FORMAT_R16G16_UNORM: case DXGI_FORMAT_R32_FLOAT:
+    case DXGI_FORMAT_R16G16B16A16_FLOAT: case DXGI_FORMAT_R16G16B16A16_UNORM: case DXGI_FORMAT_R32G32_FLOAT:
+    case DXGI_FORMAT_R8G8_UNORM: case DXGI_FORMAT_R16_FLOAT: case DXGI_FORMAT_R16_UNORM: case DXGI_FORMAT_R8_UNORM:
+        return true;
+    default:
+        return false;
+    }
+}
+
 // Tightly packed geometry of one level: block formats store whole 4x4 blocks even at a 1x1 level.
 struct Level { UINT row_bytes = 0, rows = 0; };
 inline Level level_geometry(const FormatInfo& fi, UINT width, UINT height) {

@@ -86,7 +86,7 @@ def main():
 
     # The same good run, broken one way per row: each verdict must flip.
     bad = [enabled, first, 'remix: hud replay draws=56 verts=336 srvs=56 ok=0 failed=1', fps,
-           render('remix: live scene target filter latched off', [])]
+           render('remix: live scene target filter latched off', [1, ''])]
     for i in range(8):
         bad.append(stats(2900, 0, 1200, 0, 0, (2580, 1080), 0, 2000 + 400 * i, 3, (i + 1) * 300 * 10 ** 6, 0, 0, 0))
     bad.append('remix: watchdog worker in \'submit\' for 3000 ms')
@@ -94,6 +94,12 @@ def main():
     for item in ('1.1', '1.2', '1.3', '1.4', '1.5', '1.8', '1.9', '1.10'):
         assert verdict(out, item) == 'FAIL', f'{item}: want FAIL, got {verdict(out, item)}\n{out}'
     assert 'builds never settle' in out, out
+
+    # A pause: the filter latches and comes back on. That is not a failed target choice.
+    paused = good[:4] + [render('remix: live scene target filter latched off', [1, '']),
+                         render('remix: live scene target filter back on', [1])] + good[4:]
+    out = analyze('\n'.join(paused) + '\n')
+    assert verdict(out, '1.1') == 'PASS', f'latch then recovery must not fail 1.1:\n{out}'
 
     # A short clean run cannot pass 1.10.
     out = analyze('\n'.join(good[:8]) + '\n')

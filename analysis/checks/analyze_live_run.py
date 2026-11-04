@@ -65,11 +65,12 @@ def main():
     # 1.1 render-target filter
     # skipped_pass and scene are per frame: a menu or cutscene sample can legitimately show 0, so use the whole run.
     scenes = [m.group(1) for s in stats for m in [re.search(r'scene=(\d+x\d+)', s)] if m and m.group(1) != '0x0']
-    latched = any('filter latched off' in l for l in lines)
+    # A pause latches the filter off and it comes back on (live_capture.h end_frame): only a run that ends latched failed.
+    latched = sum('filter latched off' in l for l in lines) > sum('filter back on' in l for l in lines)
     draws = series(stats, 'draws')
     skipped = max(series(stats, 'skipped_pass'), default=0)
     if latched:
-        row('1.1', 'FAIL', 'the filter latched itself off (3 consecutive empty frames): scene target not recognised')
+        row('1.1', 'FAIL', 'the filter latched itself off (3 consecutive empty frames) and never came back: scene target not recognised')
     elif not scenes or not skipped:
         row('1.1', 'FAIL', f'scene={scenes[-1] if scenes else None} max skipped_pass={skipped}: nothing was filtered')
     else:

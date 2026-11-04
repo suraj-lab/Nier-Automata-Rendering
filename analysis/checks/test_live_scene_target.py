@@ -45,6 +45,23 @@ def instances_per_frame(fake):
     return counts
 
 
+def steady(a, b):
+    """Remix frames 5.. until either run's count first changes (the mock's second mesh, mock frame 40). `presented` counts
+    Remix frames, which drift a frame or two against mock frames, so a fixed end (39) flaked 2 vs 3 at frame 37.
+    A leak that doubles the count from the start still fails at frame 5."""
+    end = 5
+    while end < 39 and a.get(end, 0) == a.get(5, 0) and b.get(end, 0) == b.get(5, 0):
+        end += 1
+    assert end >= 25, f'steady window too short ({end}): {a} {b}'
+    return range(5, end)
+
+
+def tail(per_frame, n=15):
+    """The last n Remix frames: after a pause, wherever it fell. Paused frames render nothing, so Remix frame numbers fall
+    behind mock frame numbers by the pause length and a fixed window (55..73) ran past the end of the run."""
+    return {f: per_frame[f] for f in sorted(per_frame)[-n:]}
+
+
 def meshes(fake):
     return [x for x in fake.splitlines() if x.startswith('CreateMesh')]
 
@@ -85,8 +102,7 @@ def inside():
         assert '960x540 of 1920x1080' in report[0], report[0]
         assert int(re.search(r'; (\d+) draws into other targets', report[0]).group(1)) >= 2, report[0]
         # Frames after the choice is established (frame 1 submits everything, the histogram decides from frame 2).
-        steady = range(5, 39)  # before the second pass appears at mock frame 40
-        for frame in steady:
+        for frame in steady(passes, single):
             assert passes.get(frame, 0) == single.get(frame, 0), \
                 f'frame {frame}: shadow-pass draws reached the scene ({passes.get(frame)} vs {single.get(frame)})'
         # The atlas draws use the same geometry, so a mesh count that grew would mean the decoders ran on them.
@@ -113,6 +129,9 @@ def inside():
         assert len(driven) >= 25, f'an unrecognised scene target must not blank the picture: frames drawn {sorted(driven)[:5]}'
         assert any('filter latched off' in x for x in tr.remix_lines(log)), \
             f'the latch must be logged once: {tr.remix_lines(log)[-6:]}'
+        assert not any('filter back on' in x for x in tr.remix_lines(log)), \
+            f'a target the rule cannot recognise must not turn the filter back on (it would blank again): ' \
+            f'{[x for x in tr.remix_lines(log) if "latch" in x or "back on" in x]}'
         results['odd'] = 'A scene target the rule cannot recognise latches the filter off instead of blanking the frame.'
 
         # Scattered empty frames (loading screens, a resize) are not a wrong pick: only three in a row latch the filter.
@@ -130,6 +149,35 @@ def inside():
         assert not any('filter latched off' in x for x in tr.remix_lines(log)), [x for x in tr.remix_lines(log) if 'latched' in x]
         results['flicker'] = 'Non-consecutive empty frames do not latch the filter off.'
 
+        # NieR's pause screen: fifteen frames with only the other passes, then the world again (2026-11-04: the latch
+        # fired, stayed off, every shadow atlas and post pass reached Remix and one of them crashed it). Since frametime2
+        # (the Access Point menu latched three times in 0.2 s, then for good) a pause after the world was delivered must
+        # not latch at all: the Present hook shows the game's own frame meanwhile, and the shadow-pass draws stay out.
+        _, r, log, fake = tr.run(work, 'pause', {**base, 'MOCK_CAMERA': 'live-passes', 'MOCK_PAUSE': '30,45'})
+        assert fake and 'VIOLATION' not in fake, fake
+        notes = [x for x in tr.remix_lines(log) if 'filter latched off' in x or 'filter back on' in x]
+        assert not notes, f'a pause after the world was delivered latched the filter: {notes}'
+        world = [x for x in tr.remix_lines(log) if x.startswith('remix: world ')]
+        assert len(world) == 2 and 'gone' in world[0] and 'back' in world[1], world
+        paused = instances_per_frame(fake)
+        late = list(tail(paused).values())
+        assert late and max(late) <= ceiling, \
+            f'after the pause the shadow-pass draws still reach Remix: {max(late) if late else None} vs {ceiling}'
+        assert min(late) > 0, 'after the pause the world must be drawn again, not blanked'
+        results['pause'] = 'A pause does not latch the filter; the game frame is shown and the world returns filtered.'
+
+        # frametime2 replayed: three short menu bursts four frames apart. Each latched and recovered, the third latch was
+        # for good, and the rest of the session (the whole Desert) submitted every shadow and post pass.
+        _, r, log, fake = tr.run(work, 'menu-cycles', {**base, 'MOCK_CAMERA': 'live-passes', 'MOCK_PAUSE': '30,34;38,42;46,50'})
+        assert fake and 'VIOLATION' not in fake, fake
+        notes = [x for x in tr.remix_lines(log) if 'filter latched off' in x or 'filter back on' in x]
+        assert not notes, f'menu bursts after the world was delivered latched the filter: {notes}'
+        cycled = instances_per_frame(fake)
+        late = list(tail(cycled).values())
+        assert late and max(late) <= ceiling and min(late) > 0, \
+            f'after three menu bursts the shadow-pass draws reach Remix or the world is gone: {sorted(cycled.items())[55:]}'
+        results['menu-cycles'] = 'Three menu bursts in a row never turn the filter off for good.'
+
         # NieR's depth pre-pass: every opaque mesh is drawn first with a POSITION-only layout into the scene target,
         # then again with its full layout (all four real captures: 38-42% of scene draws, 2622 of 2622 with a full twin
         # later in the frame; analysis/checks/test_prepass_rule_captures.py). The pre-pass copy has no UVs or normals:
@@ -138,7 +186,7 @@ def inside():
         _, r, log, fake = tr.run(work, 'prepass', {**base, 'MOCK_CAMERA': 'live', 'MOCK_PREPASS': '1'})
         assert fake and 'VIOLATION' not in fake, fake
         pre = instances_per_frame(fake)
-        for frame in range(5, 39):  # before the mock's second mesh appears (frame 40); after it, compare the ceiling
+        for frame in steady(pre, single):  # before the mock's second mesh appears; after it, compare the ceiling
             assert pre.get(frame, 0) == single.get(frame, 0), \
                 f'frame {frame}: pre-pass draws reached Remix ({pre.get(frame)} instances vs {single.get(frame)} without)'
         assert max(n for f, n in pre.items() if f >= 45) == max(n for f, n in single.items() if f >= 45), \
@@ -177,6 +225,21 @@ def inside():
         lost = sorted(f for f in range(12, 78) if per_frame.get(f, 0) < 3)
         assert not lost, f'frames that lost the world after a burst: {lost[:10]} ({sorted(per_frame.items())[:6]})'
         results['native-burst'] = 'A pass that briefly out-draws the world does not flip the scene target.'
+
+        # The same with a pause: during it the burst pass out-draws the empty world on some frames. Moving onto that pass
+        # would lose the world for good, because the pass keeps every frame non-empty. The scene target must stay the
+        # world's (it once had to come back from a latch; since frametime2 a pause does not latch at all).
+        _, r, log, fake = tr.run(work, 'pause-burst', {**base, 'MOCK_CAMERA': 'live-passes', 'MOCK_SCENE_FULL': '1',
+                                                       'MOCK_HALF_PASS': '1', 'MOCK_HALF_PASS_BURST': '7',
+                                                       'MOCK_LIVE_DRAWS': '3', 'MOCK_PAUSE': '30,45'})
+        assert fake and 'VIOLATION' not in fake, fake
+        notes = [x for x in tr.remix_lines(log) if 'filter latched off' in x or 'filter back on' in x]
+        assert not notes, f'a pause after the world was delivered latched the filter: {notes}'
+        per_frame = instances_per_frame(fake)
+        lost = sorted(f for f, n in tail(per_frame).items() if n < 3)
+        assert len(per_frame) >= 50, f'too few Remix frames after the pause: {len(per_frame)}'
+        assert not lost, f'the world was lost after the pause: {lost[:10]} ({sorted(per_frame.items())[50:60]})'
+        results['pause-burst'] = 'After a pause the filter returns to the world target, not to a pass that out-drew it.'
 
         # Another layer resets the two draw slots mid-frame, after the render targets are bound (laptop, 2026-10-30: 54 of
         # 540 frames lost most of their world draws). Every frame must still deliver its scene draws.

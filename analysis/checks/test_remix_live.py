@@ -12,6 +12,7 @@ game's own frames without losing one. Never touches the game folder or any other
 """
 import json
 import os
+import re
 import shutil
 import struct
 import subprocess
@@ -29,7 +30,7 @@ import test_nscn_scene as ts  # noqa: E402  (NSCN writer)
 BACKGROUND, SURFACE, REMIX = tmo.BACKGROUND, tmo.SURFACE, (200, 40, 120)
 PROBE = (100, 100)  # left of the menu panel at every size used here
 ENV_KEYS = ('NIER_REMIX', 'NIER_REMIX_SIZE', 'NIER_REMIX_CHEAP_GAME', 'NIER_REMIX_RUNTIME', 'NIER_REMIX_SCENE', 'MOCK_BGRA', 'MOCK_FRAME_MS', 'MOCK_RESIZE_AT', 'MOCK_RESIZE_TO',
-            'MOCK_START', 'MOCK_CAMERA', 'FAKE_REMIX_FAIL', 'FAKE_REMIX_CAMERA_LOG', 'MOCK_SCENE_FULL', 'MOCK_EMPTY_EVERY',
+            'MOCK_START', 'MOCK_CAMERA', 'FAKE_REMIX_FAIL', 'FAKE_REMIX_CAMERA_LOG', 'MOCK_SCENE_FULL', 'MOCK_EMPTY_EVERY', 'MOCK_PAUSE',
             'NIER_REMIX_LIVE_NO_HUD', 'NIER_REMIX_LIVE_NO_SKY', 'MOCK_SKY_ONLY_UNTIL', 'MOCK_PREPASS', 'MOCK_CUTOUT_PS')
 
 
@@ -130,6 +131,8 @@ def inside():
             f'the runtime shows/resizes its window (real one went fullscreen white over the desktop); the host must keep it hidden at size: {[x for x in f if x.startswith("Window")]}'
         assert any(x.startswith('remix: started 1920x1080 startup=5 surfaces=4 sky_skipped=1 untextured=1') for x in lines), lines
         assert 'remix: first frame ready' in lines and 'remix: composited first frame 1920x1080' in lines, lines
+        # Raw Input registrations are listed once Remix runs (a NOLEGACY keyboard entry silences the game's keys).
+        assert any(re.fullmatch(r'remix: raw input at frame 1 devices=\d+', x) for x in lines), lines
         after = (d / 'capture-after.raw').read_bytes()
         assert tmo.near(rgb(after, *PROBE), REMIX), f'Remix frame not composited: {rgb(after, *PROBE)}'
         assert tmo.near(rgb((d / 'capture-open.raw').read_bytes(), x0 + 10, y0 + 20), SURFACE), 'menu must draw over Remix'

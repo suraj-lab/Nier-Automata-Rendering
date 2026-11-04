@@ -74,7 +74,8 @@ bool game_camera(float out[3]) {
     return true;
 }
 
-struct Frame { std::vector<unsigned char> pixels; UINT width = 0, height = 0; DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN; unsigned long long seq = 0; };
+// source: the live capture sequence the frame was rendered from (0 for the static scene).
+struct Frame { std::vector<unsigned char> pixels; UINT width = 0, height = 0; DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN; unsigned long long seq = 0, source = 0; };
 // Guarded by `published`: the newest finished frame, and what the game currently presents.
 std::mutex published;
 Frame ready;
@@ -307,6 +308,7 @@ struct TextureWriter {
     bool started = false;
     bool texture_write_failed = false;
     bool normal_convert_failed = false;
+    bool format_refused[256] = {};  // logged once per DXGI format
 
     void push(std::vector<live_capture::TextureFile> files) {
         if (files.empty()) return;
@@ -368,6 +370,16 @@ struct TextureWriter {
                 logger.load()("remix: live normal texture format not converted; sent as the game wrote it");
             }
         }
+        if (!texture_capture::remix_loads(pixels->format)) {
+            // Remix's DDS loader divides by zero on these (texture_capture::remix_loads); untextured / constants instead.
+            const unsigned f = static_cast<unsigned>(pixels->format);
+            if (f < 256 && !format_refused[f]) {
+                format_refused[f] = true;
+                logger.load()("remix: live texture format %u not loadable by Remix (%ux%u); not written", f, pixels->width,
+                              pixels->height);
+            }
+            return false;
+        }
         if (!texture_capture::write_dds(file.path.c_str(), *pixels)) {
             if (!texture_write_failed) {
                 texture_write_failed = true;
@@ -401,7 +413,7 @@ struct Worker {
     bool big_write_reported = false;
     TextureWriter writer;
     bool pass_reported = false;
-    bool latch_reported = false;
+    unsigned latch_reported = 0, recover_reported = 0;
     Frame back;
     unsigned long long seq = 0;
     std::uint64_t camera_sequence = 0;
@@ -741,10 +753,14 @@ struct Worker {
                 logger.load()("remix: live shadow budget reached (%llu KB); static vertex/index bytes are dropped and re-read only to rebuild",
                               static_cast<unsigned long long>(live_capture::shadow_budget >> 10));
             }
-            if (!latch_reported && live_capture::scene_target_latched.load(std::memory_order_acquire)) {
-                latch_reported = true;
-                logger.load()("remix: live scene target filter latched off after 3 consecutive empty frames; every target is "
-                              "submitted from now on (shadow maps and post passes included)");
+            if (const unsigned n = live_capture::scene_target_latched.load(std::memory_order_acquire); n != latch_reported) {
+                latch_reported = n;
+                logger.load()("remix: live scene target filter latched off after 3 consecutive empty frames (latch %u); every "
+                              "target is submitted until the scene target draws again%s", n, n >= 3 ? " (third latch: for good)" : "");
+            }
+            if (const unsigned n = live_capture::scene_target_recovered.load(std::memory_order_acquire); n != recover_reported) {
+                recover_reported = n;
+                logger.load()("remix: live scene target filter back on (recovery %u): the scene target draws again", n);
             }
             if (!pass_reported && frame.skipped_pass) {
                 pass_reported = true;
@@ -828,7 +844,9 @@ struct Worker {
                                 used += std::snprintf(why + used, sizeof why - static_cast<std::size_t>(used),
                                                       " %s=%llu", live_decode::failure_name(static_cast<live_decode::Failure>(i)), n);
                         }
-                        if (total) logger.load()("remix: decode_failures%s", why);
+                        if (total) logger.load()("remix: decode_failures%s | out_of_range stale=%llu dynamic=%llu small=%llu", why,
+                                                 live_capture::range_stale.exchange(0), live_capture::range_dynamic.exchange(0),
+                                                 live_capture::range_small.exchange(0));
                         if (input_drive::start_us.load())  // cumulative: which DirectInput calls the game makes
                             logger.load()("remix: drive phase=%d mouse_state=%llu mouse_data=%llu key_state=%llu "
                                           "key_data=%llu injected=%llu pad_calls=%llu pad_walk=%llu", input_drive::current().phase,
@@ -940,7 +958,7 @@ struct Worker {
         frame_copy::bgra(static_cast<const unsigned char*>(locked.pBits), locked.Pitch,
                          back.pixels.data(), width, height, rgba(format));
         readback->UnlockRect();
-        back.width = width; back.height = height; back.format = format; back.seq = ++seq;
+        back.width = width; back.height = height; back.format = format; back.seq = ++seq; back.source = live_sequence;
         if (live_capture::visibility_trace_enabled.load(std::memory_order_relaxed) && trace_frames <= 8192)
             logger.load()("remix: visibility render_ready seq=%llu render=%llu", static_cast<unsigned long long>(live_sequence), back.seq);
         const unsigned long long t3 = live_capture::now_us();
@@ -987,6 +1005,18 @@ struct Worker {
                 logger.load()("remix: hidden window at frame %llu visible=%d rect=%ld,%ld %ldx%ld", seq, IsWindowVisible(window) ? 1 : 0,
                               r.left, r.top, r.right - r.left, r.bottom - r.top);
                 EnumWindows(list_window, 0);
+                // Raw Input is per process: a keyboard entry with NOLEGACY (0x30) silences WM_KEYDOWN for the game window,
+                // and NieR reads keys through GetKeyState (Remix GameOverlay, rtx.useNewGuiInputMethod; 2026-11-04).
+                RAWINPUTDEVICE devs[16];
+                UINT n = 16;
+                const int got = static_cast<int>(GetRegisteredRawInputDevices(devs, &n, sizeof(RAWINPUTDEVICE)));  // -1: error
+                logger.load()("remix: raw input at frame %llu devices=%d", seq, got);
+                for (int i = 0; i < got && i < 16; ++i) {
+                    wchar_t cls[64] = L"";
+                    if (devs[i].hwndTarget) GetClassNameW(devs[i].hwndTarget, cls, 64);
+                    logger.load()("remix: raw input page=%x usage=%x flags=%lx target=%p class=%ls", devs[i].usUsagePage,
+                                  devs[i].usUsage, devs[i].dwFlags, static_cast<void*>(devs[i].hwndTarget), cls);
+                }
             }
             if (seq % stats_every == 1 && seq > 1) {
                 const ULONGLONG now = GetTickCount64();
@@ -1209,8 +1239,21 @@ void on_present(IDXGISwapChain* swapchain, Log log) {
         std::thread(worker_main, start_w, start_h).detach();
         std::thread(watchdog).detach();
     }
+    // A loading screen draws no world, and the newest Remix frame is then another place (frametime2 2026-11-04: the
+    // transporter room stayed behind 16 s of loading text). After 10 game frames without scene draws show the game's
+    // own frame, until a Remix frame rendered from a later capture arrives: the frames in flight show the old place.
+    static bool world_gone = false;
+    static unsigned long long gone_at = 0;
+    if (live_enabled && !world_gone && live_capture::empty_streak.load(std::memory_order_relaxed) >= 10) {
+        world_gone = true;
+        gone_at = live_capture::ready_sequence.load(std::memory_order_acquire);
+        log("remix: world gone (10 game frames without scene draws); showing the game's own frame");
+    } else if (world_gone && shown.source > gone_at) {
+        world_gone = false;
+        log("remix: world back; compositing Remix frame %llu (capture %llu)", shown.seq, shown.source);
+    }
     // A frame rendered for another size or byte order is stale (resize in flight): show the game's frame.
-    if (!original_view.load() && shown.seq && shown.width == desc.Width && shown.height == desc.Height && shown.format == desc.Format) {
+    if (!world_gone && !original_view.load() && shown.seq && shown.width == desc.Width && shown.height == desc.Height && shown.format == desc.Format) {
         ID3D11Device* device = nullptr;
         buffer->GetDevice(&device);
         ID3D11DeviceContext* context = nullptr;

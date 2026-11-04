@@ -492,6 +492,11 @@ int wmain(int argc, wchar_t** argv) {
         mip_srv};
     // MOCK_TEX_MIPS: the material albedo (slot 0, what the live path captures) is the four-level texture.
     if (tex_mips) mesh_srvs[0] = mip_srv;
+    // MOCK_TEX_A8=1: the albedo is an 8x8 A8_UNORM texture, a format Remix's DDS loader divides by zero on
+    // (texture_capture::remix_loads; the game bound a 4096x4096 one after a pause, 2026-11-04).
+    static unsigned char a8[64];
+    for (unsigned i = 0; i < 64; ++i) a8[i] = static_cast<unsigned char>(i * 4);
+    if (GetEnvironmentVariableW(L"MOCK_TEX_A8", nullptr, 0) > 0) mesh_srvs[0] = make_srv(8, 8, DXGI_FORMAT_A8_UNORM, a8, 8, 0);
     if (!mesh_srvs[0] || !mesh_srvs[1] || !mesh_srvs[2]) { std::fprintf(out, "FAIL textures\n"); return 3; }
     // The tiled-forward light arrays, bound the way the game binds them, so an F9 capture records them for the laptop
     // probe: points at t20 (48-byte elements, BUFFEREX view, the view starts at element 1), spots at t22 (80 bytes).
@@ -600,6 +605,16 @@ int wmain(int argc, wchar_t** argv) {
     ID3D11Texture2D* hud_depth_tex = nullptr;
     ID3D11DepthStencilView* hud_dsv = nullptr;
     const int empty_every = [] { const char* v = std::getenv("MOCK_EMPTY_EVERY"); return v ? std::atoi(v) : 0; }();
+    // MOCK_PAUSE=a,b: frames a..b-1 draw only the other passes, like NieR's pause screen (2026-11-04), then the world returns.
+    // Up to four ranges, a,b;c,d;...: NieR's Access Point menu emptied three short bursts within 0.2 s (frametime2).
+    int pause_from[4] = {}, pause_to[4] = {};
+    if (const char* v = std::getenv("MOCK_PAUSE"))
+        for (int i = 0, n = 0; i < 4 && std::sscanf(v, "%d,%d%n", &pause_from[i], &pause_to[i], &n) == 2 && v[n] == ';'; ++i) v += n + 1;
+    const auto paused = [&](int f) { for (int i = 0; i < 4; ++i) if (f >= pause_from[i] && f < pause_to[i]) return true; return false; };
+    // MOCK_LOAD=a,b: frames a..b-1 draw no 3D at all, like NieR's loading screen (frametime2 2026-11-04: 16 s), and
+    // frame b-2 is captured as capture-load.raw; then the world returns.
+    int load_from = 0, load_to = 0;
+    if (const char* v = std::getenv("MOCK_LOAD")) std::sscanf(v, "%d,%d", &load_from, &load_to);
     // MOCK_SKY_ONLY_UNTIL=N: before frame N only the sky dome is drawn, like NieR's title screen backdrop.
     const int sky_only_until = [] { const char* v = std::getenv("MOCK_SKY_ONLY_UNTIL"); return v ? std::atoi(v) : 0; }();
     unsigned state_lost = 0;  // frames whose depth view / blend factor did not survive Present
@@ -1059,7 +1074,8 @@ int wmain(int argc, wchar_t** argv) {
                 camera_cb[0] = std::numeric_limits<float>::quiet_NaN();
             context->UpdateSubresource(camera_buffer, 0, nullptr, camera_cb, 0, 0);
             if (!live_mode) for (unsigned draw = 0; draw < 8; ++draw) draw_mesh();
-            if (live_mode && live_cb11 && (frame == 20 || frame == 79)) {
+            const bool loading = frame >= load_from && frame < load_to;
+            if (!loading && live_mode && live_cb11 && (frame == 20 || frame == 79)) {
                 const unsigned refs = live_cb11->AddRef() - 1;
                 live_cb11->Release();
                 (frame == 20 ? cb11_refs_20 : cb11_refs_79) = refs;
@@ -1122,7 +1138,7 @@ int wmain(int argc, wchar_t** argv) {
                     }
                     context->DrawIndexed(192, 0, 0);
                 }
-            } else if (live_mode) {
+            } else if (live_mode && !loading) {
                 D3D11_MAPPED_SUBRESOURCE lm{};
                 if (SUCCEEDED(context->Map(live_cb11, 0, D3D11_MAP_WRITE_DISCARD, 0, &lm))) {
                     float* w = static_cast<float*>(lm.pData);
@@ -1184,7 +1200,8 @@ int wmain(int argc, wchar_t** argv) {
                 // draw of the same frame, not lost because the first draw had none.
                 ID3D11ShaderResourceView* lights_now = frame >= 50 && live_lights_srv_moved ? live_lights_srv_moved : live_lights_srv;
                 { ID3D11ShaderResourceView* none = nullptr; context->PSSetShaderResources(20, 1, &none); }
-                const bool empty_frame = empty_every > 0 && frame % empty_every == 0;  // only the other passes draw
+                const bool empty_frame = (empty_every > 0 && frame % empty_every == 0) ||  // only the other passes draw
+                                         paused(frame);
                 if (live_passes) {
                     // Two draws of the scene mesh into a 256x256 target: a shadow-pass stand-in. They carry the same
                     // geometry, CB11 and texture as the main view, so only the render target tells them apart.
@@ -1379,6 +1396,7 @@ int wmain(int argc, wchar_t** argv) {
         }
         if (frame == 45) request(L"capture-open.raw");
         if (frame == 70) request(L"capture-after.raw");
+        if (load_to && frame == load_to - 2) request(L"capture-load.raw");
         if (frame == resize_at)
             std::fprintf(out, "resize_hr=0x%08lx\n", static_cast<unsigned long>(swapchain->ResizeBuffers(0, resize_w, resize_h, DXGI_FORMAT_UNKNOWN, 0)));
         ID3D11Texture2D* buffer = nullptr;
