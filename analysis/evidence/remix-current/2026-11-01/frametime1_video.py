@@ -4,16 +4,22 @@ live log's 60-frame report windows. Per window: distinct-image rate and longest 
 the worker's `other` ms and the number of new texture outputs. Read-only; needs ffmpeg/ffprobe and numpy.
 
     python3 frametime1_video.py   # decodes the 1.7 GB mp4 to /tmp at 96x60 once (~2 min on 16 threads)
+    python3 frametime1_video.py <mp4> <receipt.json> <HH.MM.SS.cc from the recording's file name>   # another run
 """
-import json, os, re, subprocess
+import json, os, re, subprocess, sys
 import numpy as np
 
 ROOT = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'runtime', 'laptop-port')
 MP4 = os.path.join(ROOT, 'frametime1', 'frametime1.mp4')
 LOG = os.path.join(ROOT, 'frametime1-20261101T203530Z.json')
 T0 = 20 * 3600 + 37 * 60 + 16.16   # recording file name "NieR Automata 2026.11.01 - 20.37.16.16.mp4"
+if len(sys.argv) == 4:
+    MP4, LOG = sys.argv[1], sys.argv[2]
+    h, m, sec = sys.argv[3].split('.', 2)
+    T0 = int(h) * 3600 + int(m) * 60 + float(sec)
 W, H = 96, 60
-RAW, PTS = '/tmp/ft1_small.rgb', '/tmp/ft1_pts.txt'
+tag = os.path.basename(MP4).replace('.mp4', '').replace(' ', '_')
+RAW, PTS = f'/tmp/{tag}_small.rgb', f'/tmp/{tag}_pts.txt'
 CHANGED = 1.0                       # mean |dRGB| per pixel; the diff histogram is bimodal around it
 
 if not os.path.exists(RAW):

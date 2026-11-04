@@ -1,5 +1,132 @@
 # NieR:Automata Rendering — Progress & Resume
 
+## START HERE / PAUSED (2026-11-04 night): keyboard fixed live; frametime2 done; operator studying, no more runs
+
+Laptop restored and hash-verified (`d3d11.dll` original `6ba266d64a8f6776`). Nothing installed. Uncommitted on `main`.
+Suite **84/84** (`runtime/final-20261104z`, 177 s). Current DLL **`90020715cce1d925`** (frametime2 ran `1489b7fd`; the `02b8dc21` below is stale).
+
+- **Run `frametime2`** (AC, Performance, same command as `frametime2-demo` plus `rtx.useNewGuiInputMethod = False`):
+  **keyboard works.** `raw input` at frames 1 and 120 shows only DirectInput's `DIEmWin` (flags 0x100); Remix's
+  0x130 keyboard sink is gone. The user navigated an Access Point, fast-travelled City Ruins -> Desert and pressed F9 twice.
+- **Frame time vs frametime1** (57 vs 64 windows; different route, so not a code-only claim): median fps
+  **14.8** vs 13.6; median readback 52.6 vs 56.9 ms; convert 2.4 vs 3.5; `other` median 4.1 vs 4.2, mean 16.6 vs 18.8.
+  Video (`frametime1_video.py <mp4> <receipt> <HH.MM.SS.cc>`, now takes args): r(longest freeze, new textures)
+  **0.18** (was 0.70). The one bad window (21:00:22-40, `other` 242 ms, 103 textures, `vertex_out_of_range=590`)
+  is the fast-travel loading screen; the game itself kept ~43 fps there.
+- **Seen in the recordings** (`runtime/laptop-port/frametime2/rec-*.mp4`, `sheet-*.jpg`):
+  - the last Remix frame stays visible behind the loading screen (stale frame composited during the load);
+  - bright blue patches on 2B in the Desert, not in the City Ruins;
+  - opaque white/black squares and diamonds floating near 2B in the Desert (effect/marker quads?);
+  - the minimap is a flat square;
+  - grey rectangles in the City Ruins sky;
+  - washed-out white sky near walls.
+  The Desert dunes look good.
+- **F9 captures (20 GB)** stay on the laptop: `C:\Users\suraj\Downloads\NieR-Laptop-Port\kept\20261104T210759\NIER_CAPTURE`
+  (`frame_220084953` 20:58:23 City Ruins, `frame_220097046` 20:58:36). scp -r was too slow. Archive them on the laptop
+  before copying. (Done later: full copy below; the partial is deleted.)
+- **Next (offline):** stale frame during loading, the blue patches on 2B (check which material the captures give it),
+  the floating quads.
+- **Done offline after that: stale frame during loading.** In frametime2 the load drew no scene for 16 s; the Present
+  hook composited the newest Remix frame however old. Now `live_capture::empty_streak` counts game frames without scene
+  draws; at 10 the hook shows the game's own frame (`remix: world gone`). It composites again only once a Remix frame
+  rendered from a later capture arrives (`Frame::source`; `remix: world back`), so no stale flash. Gate
+  `test_live_world_gone.py` (mock `MOCK_LOAD=a,b`, which also writes `capture-load.raw`): red on the old DLL. Its
+  mutants go red too: threshold 1 fails 'short', never-back fails 'load'. Suite **84/84**, DLL `b7c22d0a4b19ba05`.
+  Not yet seen live.
+- **Also found in frametime2:** at 21:00:10-11 (Access Point transition) the scene-target filter latched off three
+  times, and the third is for good. The whole Desert section then submitted shadow and post passes too (`skipped_pass`
+  went from 300-850 per window to 0). pbr-verify1 (18:44:06, 23 of 39 windows unfiltered) and frametime1 also
+  latched. So part of the "small draws the filter used to hide" attribution in `NEXT_STEPS_2026-11-01.md` may be
+  latch damage, not the size threshold.
+- **Fixed offline: no latch once the chosen target has delivered the world** (`scene_target_delivered` in
+  `live_capture.h`). After that, empty frames are a menu, pause or load, and item 1's `world gone` shows the game's
+  frame. A latch still happens for a target that never delivered (gate `odd`).
+  - Mock: `MOCK_PAUSE` takes up to four ranges (`a,b;c,d`).
+  - `test_live_scene_target.py`: `pause` and `pause-burst` now require no latch (they used to pin latch + recovery).
+    New `menu-cycles` replays frametime2's three bursts. With the old rule it fails on instances (5 per frame vs
+    ceiling 3: shadow passes reach Remix), not only on the log notes.
+  - The post-pause checks use the last 15 Remix frames. Paused frames render nothing now, so Remix frame numbers fall
+    behind mock frame numbers.
+  - `shortcut:` in the code: a pause over 30 frames in which a same-aspect pass out-draws the empty world can move the
+    target for 30 frames.
+  - Suite **84/84**, DLL `ed740c4e9ec0caa5`. Not seen live: the next run should show no `latched off` line after the
+    world appears. Whether the Desert blue patches and floating squares go away is the visual test.
+- **`vertex_out_of_range` (item 3), offline findings:**
+  - All 475 draws of the City Ruins capture pass the decoder's range check against their full buffers, so the draws
+    themselves are fine.
+  - The counter first appears at `live-retry` (10-31 23:21), around 150-350 per window.
+  - It jumps tenfold at pbr-verify1, together with `MIN_INDICES=3` (small draws admitted), and has stayed at
+    1,600-1,900 since.
+  - Likely cause: small draws whose live bytes lag behind, probably per-frame dynamic buffers read through stale
+    snapshots. They are refused and retried, never drawn wrong.
+  - New diagnostic: the `decode_failures` line ends with `| out_of_range stale= dynamic= small=` (`range_*` counters
+    in `live_capture.h`). The next run says which. Only the header's failure name is pinned by a gate.
+  - Suite **84/84**, DLL **`90020715cce1d925`** (current).
+- **Terrain `cb1[5]` (item 4):** none of the five local captures has a draw from the terrain family (`0x803cecab88`,
+  `0x803d2ae588`). Needs an F9 capture in the Desert.
+- **City capture overlays:** its 217 scene-target draws are all 147+ indices, so the small-draw overlays aren't in it.
+  One blended, no-depth-write draw (`draw_0474`, ps `0x8027237648`, 6,120 indices, half-float position, UVs from
+  slots 1-3) is a sky/cloud candidate, but the partial copy lacks its textures.
+- **Full F9 captures copied** (laptop on, no game) to `runtime/laptop-port/frametime2/NIER_CAPTURE/`:
+  - `frame_220084953`: 484 draws, 12,255 files, 6,471,544,457 bytes per path;
+  - `frame_220097046`: 769 draws, 19,219 files, 14,140,352,800 bytes per path;
+  - `shaders`: 605 files.
+  All match the laptop's listing. Streamed with `ssh spaghetti "tar -cf - -C <dir> <frame>" | tar -xf -`: 82 s. The
+  capture writer hard-links shared buffers (`buffers/buf_N.bin` has up to 111 links). tar keeps the links, so it
+  takes ~0.7 GB on disk, while `scp -r` copied every link in full (6 GB for 96 % of one frame). The
+  `NIER_CAPTURE.PARTIAL-*` folder is deleted (operator approved).
+- **A structural `vertex_out_of_range`, found in the full captures:** the last draw of both frames (`draw_0483`,
+  `draw_0768`).
+  - ps `0x8024102b48`: `effect=0 alpha=6 roles=-`, one 4096x4096 BC1 texture in slot 0, i.e. a sprite/marker atlas.
+  - 150-156 indices, blended, 64-byte vertices.
+  - The layout reads only slot 0, but slots 1-3 are still bound from earlier draws; slot 1 is 32 bytes.
+  - `live_decode::build` checks every bound slot, so it refuses the draw. The refusal counts as retryable, so it is
+    retried every frame. The fix is to check only the slots the layout reads.
+  - **Do not ship that fix alone:** this draw is never shown today, and decoding it would put sprite quads into the
+    path-traced world. Land it with the overlay rule (exclude this family, or treat it as HUD).
+  - Every other draw in both frames passes the range check against its full buffers.
+- **Next run (needs approval):** same route as frametime2, plus one F9 in
+  the Desert. Check:
+  - `world gone` / `world back` lines at the loading screen, and no stale image in the video;
+  - no `latched off` line after the world appears;
+  - Desert blue patches and squares;
+  - the `out_of_range` split.
+  Optional and separate: `rtx.autoExposure.enabled = False` A/B for the washout (Rayman3-RTX found auto-exposure
+  invalidates brightness comparisons). One key per run.
+
+## START HERE / PAUSED (2026-11-04): keyboard dead in game — cause found in the runtime source, fix staged offline
+
+Laptop restored and hash-verified (`d3d11.dll` original `6ba266d64a8f6776`). Nothing installed. Uncommitted on `main`.
+
+- **Run `frametime2-demo`** (DLL `24b5fc26`, on battery, two attempts): the game ran with Remix live, but the keyboard
+  did nothing in either attempt. Alt+Tab and the shell worked, and our Insert menu never opened. No timing result.
+  Receipt / runtime log: `analysis/runtime/laptop-port/frametime2-demo-20261104T132611Z*`; game log `frametime2-demo/`.
+- **Cause, from the source of the exact runtime (`remix-1.6.1` tag, shallow copy in `analysis/runtime/src/dxvk-remix`):**
+  with `rtx.useNewGuiInputMethod` on (default True), `ImGUI` creates `GameOverlay` (`dxvk_imgui.cpp:655`), which
+  registers the keyboard for the whole process with `RIDEV_INPUTSINK | RIDEV_NOLEGACY` (`rtx_overlay_window.cpp:491-502`).
+  NOLEGACY stops `WM_KEYDOWN` for the game window, and NieR reads keys through `GetKeyState`
+  (`popin-experiment.md`). The mouse entry has no NOLEGACY, which matches the camera still working. This is the
+  "Remix registers Raw Input for its sink window, unchecked" item from 2026-10-27.
+- **Fix (not yet tried live):** `rtx.useNewGuiInputMethod = False` in all three `deploy/rtx/laptop-*.conf` (startup-only
+  option). Gate `test_rtx_conf_input.py` checks the name against `RtxOptions-1.6.md`; both mutants (True, misspelt) go red.
+  Cost: Remix's own dev menu loses input; we do not use it.
+- **Proof in the next log:** at Remix frames 1 and 120 the DLL now logs every Raw Input registration
+  (`remix: raw input page=1 usage=6 flags=... class=...`). With the fix there should be no keyboard entry with flags
+  0x130, and the keyboard should work. Pinned in `test_remix_live.py`.
+- **Also this session:** the log function locks the file for each line (the texture writer, worker and watchdog
+  threads all log); `test_live_scene_target.py` flaked about half the time on committed code, because its fixed
+  frame window (5..39) drifted against the mock's second mesh. It now ends where a count first changes; the pre-pass
+  mutant still fails at frame 5.
+- **Suite in parallel:** `python3 analysis/checks/run_suite_parallel.py analysis/runtime/<dir> -j 24`. It runs 82/82 in
+  **165 s**, twice (serial: ~30 min). Lanes group tests by shared `runtime/<dir>`; each lane gets its own Xvfb display
+  (concurrent `xvfb-run -a` killed each other's `:99`). `build_menu_dll.py` / `menu-preview/build.py` write only
+  changed files, by rename, so parallel rebuilds never hand a gate a half-written DLL. Floor: `test_live_geometry`
+  ~150 s alone.
+- DLL `02b8dc211c3df903`. **Next:** one laptop run with the new conf. Check that the keyboard works and look at the
+  `raw input` lines. Then the frametime comparison planned below (AC power, same save as frametime1).
+- Housekeeping: `test_laptop_port_transport.py` writes `env-*.json` receipts into the real `runtime/laptop-port/`
+  (fake runs, pid 42); ignore them, or point that test at its own dir.
+
 ## START HERE / PAUSED (2026-11-03 night): texture stalls fixed offline, next is one laptop run
 
 Cause of the frametime1 freezes, settled offline: the Remix worker converted new normal/mask textures inline and
