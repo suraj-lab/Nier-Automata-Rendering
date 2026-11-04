@@ -41,10 +41,12 @@ static void logf_line(const char* fmt, ...)
     static FILE* file = module_dir.empty() ? nullptr : _wfopen((module_dir + L"NIER_SCALE.log").c_str(), L"a");
     if (!file) return;
     SYSTEMTIME t; GetLocalTime(&t);
+    _lock_file(file);  // the Remix worker, watchdog and texture writer threads log too; keep each line whole
     fprintf(file, "%02u:%02u:%02u.%03u pid=%lu ", t.wHour, t.wMinute, t.wSecond, t.wMilliseconds,
         static_cast<unsigned long>(GetCurrentProcessId()));
     va_list ap; va_start(ap, fmt); vfprintf(file, fmt, ap); va_end(ap);
     fputc('\n', file); fflush(file);
+    _unlock_file(file);
 }
 
 static bool readable(const void* p, std::size_t n)

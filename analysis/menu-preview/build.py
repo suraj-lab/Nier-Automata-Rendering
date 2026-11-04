@@ -2,6 +2,7 @@
 """Build isolated preview binaries. Never reads/writes the game installation."""
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -9,6 +10,15 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 OUT = ROOT / "analysis/runtime/menu-preview/build"
+
+
+def put(path, data):
+    """Write only if the bytes differ, via rename: parallel gates read these files while a reproducible rebuild runs."""
+    if path.exists() and path.read_bytes() == data:
+        return
+    tmp = path.with_name(f'{path.name}.{os.getpid()}.tmp')
+    tmp.write_bytes(data)
+    os.replace(tmp, path)
 
 
 def generate_style():
@@ -25,7 +35,7 @@ def generate_style():
             if type(value) in (int, float):
                 lines.append(f'inline constexpr float {name} = {float(value)}f;')
     lines += ['}', '}']
-    (OUT / 'style_tokens.h').write_text('\n'.join(lines) + '\n')
+    put(OUT / 'style_tokens.h', ('\n'.join(lines) + '\n').encode())
 
 
 def main():

@@ -3,6 +3,7 @@
 Checks the export table against the original mod and that no D3D/DXGI/d3dcompiler DLL is imported."""
 import hashlib
 import json
+import os
 import pathlib
 import re
 import shutil
@@ -14,7 +15,8 @@ A = C.parent
 PREVIEW = A / 'menu-preview'
 OUT = A / 'runtime' / 'menu-dll'
 sys.path.insert(0, str(PREVIEW))
-import build as preview_build  # noqa: E402  (style token generation + vendor hash checks)
+import build as preview_build  # noqa: E402
+from build import put  # noqa: E402  (style token generation + vendor hash checks)
 
 
 def main():
@@ -29,6 +31,7 @@ def main():
                *(imgui / n for n in ['imgui.cpp', 'imgui_draw.cpp', 'imgui_tables.cpp', 'imgui_widgets.cpp']),
                imgui / 'backends/imgui_impl_win32.cpp', imgui / 'backends/imgui_impl_dx11.cpp']
     dll = OUT / 'd3d11.dll'
+    built = OUT / f'd3d11.{os.getpid()}.tmp.dll'  # linked here, then put() beside the gates that copy d3d11.dll
     cmd = ['x86_64-w64-mingw32-g++', '-std=c++17', '-O2', '-Wall', '-Wextra', '-Werror', '-shared',
            '-static', '-static-libgcc', '-static-libstdc++', '-Wl,--no-insert-timestamp',
            # Reproducible by construction: ld derives the image base from the output path by default, and every
@@ -41,15 +44,21 @@ def main():
            '-DIM_ASSERT(_EXPR)=((void)0)', '-DIMGUI_IMPL_WIN32_DISABLE_GAMEPAD',
            '-I' + str(imgui), '-I' + str(preview_build.OUT), '-I' + str(PREVIEW), '-I' + str(C),
            '-isystem', str(A / 'remix-probe/vendor'),  # pinned remix_c.h; the runtime itself is loaded at run time
-           *map(str, sources), str(C / 'd3d11_log_proxy.def'), '-ldwmapi', '-lgdi32', '-limm32', '-ldxguid', '-o', str(dll)]
+           *map(str, sources), str(C / 'd3d11_log_proxy.def'), '-ldwmapi', '-lgdi32', '-limm32', '-ldxguid', '-o', str(built)]
     p = subprocess.run(cmd, capture_output=True, text=True)
     (OUT / 'build.log').write_text(p.stdout + p.stderr)
     if p.returncode:
+        built.unlink(missing_ok=True)
         print(p.stderr[-4000:])
         return 1
+    put(dll, built.read_bytes())
+    built.unlink()
     fonts = OUT / 'nier_render_fonts'
-    shutil.copytree(PREVIEW / 'vendor/fonts', fonts, dirs_exist_ok=True)  # includes the OFL LICENSE.txt
-    shutil.copy2(imgui / 'LICENSE.txt', OUT / 'LICENSE-ImGui.txt')
+    for src in sorted((PREVIEW / 'vendor/fonts').rglob('*')):  # includes the OFL LICENSE.txt
+        if src.is_file():
+            (fonts / src.relative_to(PREVIEW / 'vendor/fonts')).parent.mkdir(parents=True, exist_ok=True)
+            put(fonts / src.relative_to(PREVIEW / 'vendor/fonts'), src.read_bytes())
+    put(OUT / 'LICENSE-ImGui.txt', (imgui / 'LICENSE.txt').read_bytes())
     exports = subprocess.run(['python3', str(C / 'verify_scale_setter_exports.py'), str(dll)],
                              capture_output=True, text=True)
     raw = subprocess.run(['x86_64-w64-mingw32-objdump', '-p', str(dll)], capture_output=True, text=True, check=True).stdout
@@ -64,7 +73,7 @@ def main():
               'sha256': hashlib.sha256(dll.read_bytes()).hexdigest(),
               'imports': imports, 'forbidden_imports': forbidden,
               'export_check': exports.stdout.strip().splitlines(), 'installed': False}
-    (OUT / 'validation.json').write_text(json.dumps(result, indent=2) + '\n')
+    put(OUT / 'validation.json', (json.dumps(result, indent=2) + '\n').encode())
     print(json.dumps({k: result[k] for k in ('passed', 'sha256', 'imports', 'forbidden_imports')}, indent=1))
     return 0 if result['passed'] else 1
 
