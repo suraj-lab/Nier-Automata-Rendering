@@ -58,6 +58,9 @@ struct State {
                         live_capture::MaterialConstants constants; };
     std::map<std::uint64_t, Incomplete> incomplete;
     unsigned long long refreshed = 0;   // grey_first: materials re-created once their files landed (reported)
+    // L4: geometry -> triangles of meshes built with no material. Counted against `meshes` at report time, so an
+    // evicted or rebuilt mesh drops out without bookkeeping at every destroy site.
+    std::map<std::uint64_t, std::size_t> bare;
     unsigned long long refreshed_blank = 0;   // ... of which the albedo was given up (landed, no file)
     std::vector<std::wstring> texture_paths;  // indexed by (texture id - 1); Remix keeps each c_str()
     // Texture ids whose file the writer thread has finished (written, or given up on: then the path stays empty).
@@ -97,6 +100,7 @@ inline void destroy(const remixapi_Interface& api, State& s) {
     s.last_used.clear();
     s.materials.clear();
     s.incomplete.clear();
+    s.bare.clear();
     s.texture_paths.clear();
     s.landed.clear();
     s.sun = s.sky = nullptr;
@@ -231,6 +235,14 @@ inline remixapi_MaterialHandle material_for(const remixapi_Interface& api, State
 // Item T1: a material sent grey (or without a PBR / normal file) is destroyed and created again under its own hash once
 // every file it names is on disk. The runtime knows a material by hash and ignores a repeat create under a live one, so
 // destroy-then-create is the only way the surface changes; the mesh, which names the hash, is not rebuilt.
+// L4: meshes live right now with no material, and their triangles (what material_scoreboard.py calls "no material").
+inline std::pair<std::size_t, std::size_t> bare_meshes(const State& s) {
+    std::pair<std::size_t, std::size_t> out{0, 0};
+    for (const auto& [geometry, triangles] : s.bare)
+        if (s.meshes.count(geometry)) { ++out.first; out.second += triangles; }
+    return out;
+}
+
 inline void refresh_incomplete_materials(const remixapi_Interface& api, State& s) {
     for (auto it = s.incomplete.begin(); it != s.incomplete.end();) {
         const State::Incomplete m = it->second;
@@ -269,6 +281,8 @@ inline bool build_mesh(const remixapi_Interface& api, State& s, const live_captu
     surface.indices_count = upload.indices.size();
     surface.material = material_for(api, s, upload.texture, upload.alpha_op, upload.alpha_ref, upload.normal,
                                     upload.metallic, upload.roughness, upload.constants);
+    if (surface.material) s.bare.erase(upload.geometry);
+    else s.bare[upload.geometry] = upload.indices.size() / 3;
     remixapi_MeshInfoSkinning skinning{};
     // Skinned (Phase 4): the upload already carries four unpacked indices and three weight floats per slot (plus a
     // 4-float tail), the extents the runtime reads (UPSTREAM_SKINNING_STRIDE.md), so the counts go through as they are.

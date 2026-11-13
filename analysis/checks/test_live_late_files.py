@@ -120,6 +120,7 @@ int main() {
         check("D: one build", meshes.size() == 1);
         check("D: the newer upload's vertices, with the normal",
               meshes.size() == 1 && meshes[0].vertices == 9 && mat_of(meshes[0]).normal);
+        check("D: a mesh with a material is not bare", live_scene::bare_meshes(s).first == 0);
         live_scene::destroy(api, s);
     }
     meshes.clear();
@@ -128,7 +129,11 @@ int main() {
         live_scene::update(api, {upload(50, 1, 0)}, {L(1, L"")}, frame, s, options);
         live_scene::update(api, {}, {L(2, L"C:\\t\\live_2.dds")}, frame, s, options);
         check("F: built once, without a material", meshes.size() == 1 && meshes[0].material == 0);
+        // L4: the stats counter reports exactly that mesh, with its triangles, as the scoreboard's "no material" row.
+        const auto bare = live_scene::bare_meshes(s);
+        check("F: bare_meshes counts the material-less mesh", bare.first == 1 && bare.second > 0);
         live_scene::destroy(api, s);
+        check("F: a destroyed scene has no bare meshes", live_scene::bare_meshes(s).first == 0);
     }
     std::printf("failures=%d\n", failures);
     return failures ? 1 : 0;

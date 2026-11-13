@@ -1047,6 +1047,10 @@ struct Worker {
                                       entry.first, t.draws, t.triangles, t.blended ? "on" : "off", t.src_blend,
                                       t.dest_blend, t.alpha_tested, t.effects);
                     }
+                    {   // L4: what the scoreboard calls "no material" (untextured= counts draws without an id this frame)
+                        const auto bare = live_scene::bare_meshes(live);
+                        logger.load()("remix: live bare_meshes=%zu bare_tris=%zu", bare.first, bare.second);
+                    }
                     logger.load()("remix: live draws=%u instances=%u meshes=%u built=%u evicted=%u identical=%u "
                                   "blended=%u untextured=%u textures=%u hud=%u small_viewport=%u scene=%ux%u skipped_pass=%u "
                                   "fallbacks=%u mesh_bytes=%llu dropped=%u lights=%u light_creates=%u sky=%u prepass=%u alpha_tested=%u light_state=0x%x",
