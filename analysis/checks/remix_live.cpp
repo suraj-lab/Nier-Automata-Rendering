@@ -972,10 +972,19 @@ struct Worker {
                                           input_drive::injected.load(), input_drive::pad_calls.load(),
                                           input_drive::pad_walk.load());
                         // Which layouts produced the no-POSITION refusals: this names the draw family, once per window.
-                        for (const auto& n : live_capture::take_material_notes())
-                            logger.load()("remix: material ps=%llx effect=%d alpha=%d roles=%s slots=%s",
+                        for (const auto& n : live_capture::take_material_notes()) {
+                            // code=: FNV-1a 64 of the shader bytecode, stable across runs (ps= is a pointer), so a note
+                            // can be joined to the capture's shaders/ps_*.dxbc and keyed in a table (L5).
+                            std::vector<unsigned char> code;
+                            unsigned long long fnv = 0;
+                            if (shader_capture::lookup(reinterpret_cast<ID3D11PixelShader*>(static_cast<std::uintptr_t>(n.ps)), code)) {
+                                fnv = 0xcbf29ce484222325ull;
+                                for (const unsigned char b : code) fnv = (fnv ^ b) * 0x100000001b3ull;
+                            }
+                            logger.load()("remix: material ps=%llx effect=%d alpha=%d roles=%s slots=%s code=%016llx",
                                           n.ps, n.effect ? 1 : 0, n.alpha_op, n.roles.empty() ? "-" : n.roles.c_str(),
-                                          n.slots.empty() ? " -" : n.slots.c_str());
+                                          n.slots.empty() ? " -" : n.slots.c_str(), fnv);
+                        }
                         for (const auto& n : live_capture::take_small_notes())
                             logger.load()("remix: small ps=%llx indices=%u instances=%u in_scene=1", n.ps, n.indices,
                                           n.instances);
@@ -990,6 +999,8 @@ struct Worker {
                                       live.incomplete.size(), live.refreshed, live.materials.size(),
                                       live_capture::deferred_readbacks().size(), live_capture::deferred_written,
                                       live_capture::deferred_given_up);
+                    if (live_capture::skip_depth_ps)   // item L7: depth-only draws not submitted
+                        logger.load()("remix: live depth_ps_skipped=%llu", live_capture::depth_ps_skipped.load());
                     if (live_capture::flag_constants)   // item L3: draws whose own flags chose constants over a texture
                         logger.load()("remix: live flag_constants draws=%llu normal_off=%llu",
                                       live_capture::flag_constant_draws, live_capture::flag_normal_off_draws);
@@ -1041,11 +1052,16 @@ struct Worker {
                                   live_capture::redirected_open.load());
                     // Per-shader draw table (items L4/L6/L7): the heaviest shaders by triangles, with the state that decides
                     // what they are - opaque, blended (raw D3D11 src/dest), alpha-tested, or an effect.
-                    for (const auto& entry : live_capture::top_shaders(12)) {
+                    static const std::size_t shader_rows = [] {   // NIER_REMIX_LIVE_SHADER_ROWS: rows of the table (12)
+                        const char* v = std::getenv("NIER_REMIX_LIVE_SHADER_ROWS");
+                        const long n = v ? std::strtol(v, nullptr, 10) : 12;
+                        return static_cast<std::size_t>(n < 1 ? 12 : n > 4096 ? 4096 : n);
+                    }();
+                    for (const auto& entry : live_capture::top_shaders(shader_rows)) {
                         const auto& t = entry.second;
-                        logger.load()("remix: shader ps=%llx draws=%llu tris=%llu blend=%s:%u>%u alpha=%llu effect=%llu",
+                        logger.load()("remix: shader ps=%llx draws=%llu tris=%llu blend=%s:%u>%u alpha=%llu effect=%llu rt=%u",
                                       entry.first, t.draws, t.triangles, t.blended ? "on" : "off", t.src_blend,
-                                      t.dest_blend, t.alpha_tested, t.effects);
+                                      t.dest_blend, t.alpha_tested, t.effects, t.target_format);
                     }
                     {   // L4: what the scoreboard calls "no material" (untextured= counts draws without an id this frame)
                         const auto bare = live_scene::bare_meshes(live);

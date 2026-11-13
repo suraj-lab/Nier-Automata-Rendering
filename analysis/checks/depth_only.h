@@ -1,0 +1,126 @@
+// Is a pixel shader a depth pass rather than a surface? (item L7, PLAN_2026-11-13)
+//
+// NieR draws many objects a second time into the scene target with a shader that writes linear depth: it divides the
+// interpolated clip z by w, linearises with the projection constants and writes that scalar to o0, sampling a texture at
+// most for an alpha cut (runtime/l5-disasm/in/ps_1539331920.asm, ps_1539331648.asm). Submitted, such a draw is a second
+// shell over the real surface with no material of its own (10.2% of the camp's surface triangles). Every one of them has
+// a full surface twin in the same frame on every capture (test_depth_only.py checks that on the real captures).
+//
+// The signature, read from the disassembly (the same text alpha_test.h and material_roles.h read):
+//   1. no texture sample reaches any output (component-level taint through the instruction stream), and
+//   2. the shader divides an interpolated z by the same register's w: div[_sat] rX.c, vN.z, vN.w.
+// (2) is what keeps flat-colour unlit surfaces (no sample, constant or vertex colour) out of this class.
+#pragma once
+#include <array>
+#include <cctype>
+#include <map>
+#include <sstream>
+#include <string>
+#include <vector>
+
+namespace depth_only {
+namespace detail {
+
+// Split operands at top-level commas: l(1.0, 2.0, ...) keeps its commas.
+inline std::vector<std::string> operands(const std::string& rest) {
+    std::vector<std::string> out;
+    std::string cur;
+    int depth = 0;
+    for (const char c : rest) {
+        if (c == '(' || c == '[') ++depth;
+        if (c == ')' || c == ']') --depth;
+        if (c == ',' && depth == 0) { out.push_back(cur); cur.clear(); continue; }
+        cur += c;
+    }
+    out.push_back(cur);
+    for (auto& o : out) {
+        std::size_t a = 0, b = o.size();
+        while (a < b && std::isspace(static_cast<unsigned char>(o[a]))) ++a;
+        while (b > a && std::isspace(static_cast<unsigned char>(o[b - 1]))) --b;
+        o = o.substr(a, b - a);
+    }
+    return out;
+}
+
+// "-|r0.xy|" -> register "r0", components "xy" ("" = all four). Literals, constant buffers, resources: register "".
+struct Ref { std::string reg; std::string comps; };
+inline Ref ref_of(std::string o) {
+    while (!o.empty() && (o[0] == '-' || o[0] == '|')) o.erase(0, 1);
+    while (!o.empty() && o.back() == '|') o.pop_back();
+    if (o.empty() || !(o[0] == 'r' || o[0] == 'o' || o[0] == 'v' || o[0] == 'x')) return {};
+    std::size_t i = 1;
+    while (i < o.size() && std::isdigit(static_cast<unsigned char>(o[i]))) ++i;
+    if (i == 1) return {};   // "ret" and friends never reach here, but a bare letter is not a register
+    Ref r{o.substr(0, i), ""};
+    if (o[0] == 'x') {       // x0[r1.x + 2].xy: indexable temp, the index does not matter for taint
+        const std::size_t close = o.find(']');
+        if (close != std::string::npos) i = close + 1;
+    }
+    if (i < o.size() && o[i] == '.') r.comps = o.substr(i + 1);
+    return r;
+}
+
+inline int lane(char c) { return c == 'x' ? 0 : c == 'y' ? 1 : c == 'z' ? 2 : c == 'w' ? 3 : -1; }
+
+}  // namespace detail
+
+inline bool writes_depth_only(const std::string& asm_text) {
+    using namespace detail;
+    std::map<std::string, std::array<bool, 4>> taint;   // register -> component tainted by a texture sample
+    bool output_tainted = false, output_written = false, z_over_w = false;
+    std::istringstream lines(asm_text);
+    std::string line;
+    while (std::getline(lines, line)) {
+        std::size_t a = 0;
+        while (a < line.size() && std::isspace(static_cast<unsigned char>(line[a]))) ++a;
+        line = line.substr(a);
+        while (!line.empty() && (line.back() == '\r' || line.back() == '\0' || std::isspace(static_cast<unsigned char>(line.back()))))
+            line.pop_back();
+        if (line.empty() || line.rfind("//", 0) == 0 || line.rfind("dcl_", 0) == 0 || line.rfind("ps_", 0) == 0) continue;
+        // opcode: up to the first space, after any "(...)" type suffixes (sample_indexable(texture2d)(float,...))
+        std::size_t space = 0;
+        int depth = 0;
+        for (; space < line.size(); ++space) {
+            if (line[space] == '(') ++depth;
+            if (line[space] == ')') --depth;
+            if (depth == 0 && std::isspace(static_cast<unsigned char>(line[space]))) break;
+        }
+        const std::string op = line.substr(0, space);
+        if (space >= line.size()) continue;   // ret, else, endif, loop...: no operands
+        const std::vector<std::string> ops = operands(line.substr(space + 1));
+        const bool no_dst = op.rfind("discard", 0) == 0 || op.rfind("if", 0) == 0 || op.rfind("break", 0) == 0 ||
+                            op.rfind("continue", 0) == 0 || op.rfind("ret", 0) == 0 || op.rfind("switch", 0) == 0 ||
+                            op.rfind("case", 0) == 0 || op.rfind("call", 0) == 0;
+        if (no_dst || ops.empty()) continue;
+        const std::string base = op.substr(0, op.find('('));
+        // Two destinations: sincos, udiv, imul/umul (hi, lo), the rest one.
+        const std::size_t dsts = (base == "sincos" || base == "udiv" || base == "imul" || base == "umul") ? 2 : 1;
+        if (ops.size() <= dsts) continue;
+        const bool sample = base.rfind("sample", 0) == 0 || base.rfind("ld", 0) == 0 || base.rfind("gather", 0) == 0;
+        bool src_tainted = sample;
+        for (std::size_t k = dsts; k < ops.size() && !src_tainted; ++k) {
+            const Ref r = ref_of(ops[k]);
+            if (r.reg.empty() || r.reg[0] == 'v') continue;
+            const auto it = taint.find(r.reg);
+            if (it == taint.end()) continue;
+            const std::string comps = r.comps.empty() ? "xyzw" : r.comps;
+            for (const char c : comps) if (lane(c) >= 0 && it->second[static_cast<std::size_t>(lane(c))]) src_tainted = true;
+        }
+        if ((base == "div" || base == "div_sat") && ops.size() == 3) {
+            const Ref num = ref_of(ops[1]), den = ref_of(ops[2]);
+            if (!num.reg.empty() && num.reg[0] == 'v' && num.reg == den.reg && num.comps == "z" && den.comps == "w")
+                z_over_w = true;
+        }
+        for (std::size_t k = 0; k < dsts; ++k) {
+            const Ref d = ref_of(ops[k]);
+            if (d.reg.empty()) continue;
+            if (d.reg[0] == 'o') { output_written = true; output_tainted = output_tainted || src_tainted; continue; }
+            auto& t = taint[d.reg];
+            const std::string comps = d.comps.empty() ? "xyzw" : d.comps;
+            for (const char c : comps) if (lane(c) >= 0) t[static_cast<std::size_t>(lane(c))] = src_tainted;
+        }
+    }
+    return output_written && !output_tainted && z_over_w;
+}
+
+}  // namespace depth_only

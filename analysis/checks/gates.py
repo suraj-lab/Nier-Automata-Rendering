@@ -30,7 +30,7 @@ REPO = C.parents[1]
 OUT = A / 'runtime' / 'gates'
 DLL = A / 'runtime' / 'menu-dll' / 'd3d11.dll'
 DLL_SOURCES = ['menu_overlay.cpp', 'remix_live.cpp', 'd3d11_scale_setter.cpp', 'd3d11_log_proxy.def']
-DLL_HEADERS = ['camera_orbit.h', 'live_capture.h', 'live_scene.h', 'live_types.h', 'live_vertex_decode.h', 'normal_octahedral.h',
+DLL_HEADERS = ['camera_orbit.h', 'depth_only.h', 'live_capture.h', 'live_scene.h', 'live_types.h', 'live_vertex_decode.h', 'normal_octahedral.h',
                'visibility_trace.h', 'funnel.h', 'dropout_watch.h', 'visibility_math.h', 'layout_signature.h',
                'texture_capture.h', 'nscn_scene.h', 'alpha_test.h', 'camera_capture.h', 'hud_replay.h',
                'light_convert.h', 'input_layout_hook.h', 'vtable_hook.h', 'input_capture.h', 'input_drive.h',

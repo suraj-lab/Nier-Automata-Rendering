@@ -31,6 +31,7 @@
 #include "shader_capture.h"
 #include "alpha_test.h"
 #include "material_roles.h"
+#include "depth_only.h"
 
 namespace live_capture {
 
@@ -545,6 +546,13 @@ inline bool normal_textures = true;
 inline bool pbr_textures = true;
 // Item L3: evaluate the game's own material switches (cb flags, material_roles.h overrides) per draw and send the
 // constants they select instead of the texture. Default off until the user picks from the sheet; read at load.
+// Item L7: draws whose pixel shader only writes linear depth are a second shell over a surface drawn again later in the
+// frame (every one has a full twin on the real captures); not submitted. Default off until the user picks; read at load.
+inline bool skip_depth_ps = [] {
+    const char* v = std::getenv("NIER_REMIX_LIVE_SKIP_DEPTH_PS");
+    return v && v[0] == '1' && v[1] == '\0';
+}();
+inline std::atomic<unsigned long long> depth_ps_skipped{0};   // draws not submitted by that rule, reported with the stats
 inline bool flag_constants = [] {
     const char* v = std::getenv("NIER_REMIX_LIVE_FLAG_CONSTANTS");
     return v && v[0] == '1' && v[1] == '\0';
@@ -1263,7 +1271,8 @@ inline DisassembleFn disassembler() {
 // What the game's own pixel shader says about a draw, read once per shader from its disassembly: the alpha test, which
 // texture channel is albedo / metal / gloss / normal (material_roles.h, analysis/PBR_MAPPING.md), and whether it is an
 // effects shader (declares the effect buffers t27 / t30: particles, smoke, distortion).
-struct PixelInfo { alpha_test::Result alpha; material_roles::Roles roles; bool effect = false; };
+struct PixelInfo { alpha_test::Result alpha; material_roles::Roles roles; bool effect = false;
+                   bool depth_only = false; };   // L7: writes linear depth, not a surface (depth_only.h)
 // One line per distinct pixel shader, the first time it is seen with a draw: what the material path did with it. For
 // live runs where some surfaces come out wrong (pbr-look1: untextured dunes, chrome rocks, missing foliage), so each
 // can be traced back to a shader, its roles and the fate of each texture. Drained by the worker, bounded.
@@ -1280,13 +1289,14 @@ struct MaterialNote {
 struct ShaderTally {
     unsigned long long draws = 0, triangles = 0, blended = 0, alpha_tested = 0, effects = 0, skipped = 0;
     unsigned src_blend = 0, dest_blend = 0;
+    unsigned target_format = 0;   // last colour target format seen with this shader
 };
 inline std::map<unsigned long long, ShaderTally>& shader_tallies() {
     static std::map<unsigned long long, ShaderTally> m;
     return m;
 }
 inline void tally_shader(unsigned long long ps, unsigned long long triangles, bool blended, unsigned src_blend,
-                         unsigned dest_blend, bool alpha_tested, bool effect, bool skipped) {
+                         unsigned dest_blend, bool alpha_tested, bool effect, bool skipped, unsigned target_format = 0) {
     auto& m = shader_tallies();
     if (m.size() > 4096 && !m.count(ps)) return;
     ShaderTally& t = m[ps];
@@ -1296,6 +1306,7 @@ inline void tally_shader(unsigned long long ps, unsigned long long triangles, bo
     if (alpha_tested) ++t.alpha_tested;
     if (effect) ++t.effects;
     if (skipped) ++t.skipped;
+    if (target_format) t.target_format = target_format;
 }
 // The heaviest shaders, biggest triangle share first, for the stats line.
 inline std::vector<std::pair<unsigned long long, ShaderTally>> top_shaders(std::size_t count) {
@@ -1389,6 +1400,7 @@ inline const PixelInfo* pixel_info(ID3D11DeviceContext* context, unsigned long l
             result.roles = {};
         }
         result.effect = declares_effect_buffers(asm_text);
+        result.depth_only = depth_only::writes_depth_only(asm_text);
     }
     if (text) text->Release();
     ps->Release();
@@ -1446,11 +1458,13 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     bool blended = false;
     bool blend_on = false;                 // the bound blend state as D3D11 reports it, not the "alpha blend" heuristic
     unsigned blend_src = 0, blend_dest = 0;
+    unsigned target_format = 0;            // the bound colour target's DXGI format (L7: depth-like passes write one float)
     {
     const ObserveTimer timer(kObserveState);
     ID3D11RenderTargetView* early_rtv = nullptr;
     context->OMGetRenderTargets(1, &early_rtv, nullptr);
     early_target = target_size(early_rtv);
+    if (early_rtv) { D3D11_RENDER_TARGET_VIEW_DESC rd{}; early_rtv->GetDesc(&rd); target_format = static_cast<unsigned>(rd.Format); }
     trace.event.target_w = early_target.first;
     trace.event.target_h = early_target.second;
     if (early_rtv) early_rtv->Release();
@@ -1606,6 +1620,13 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     // the path-traced scene (user decision 2026-11-01). NIER_REMIX_LIVE_EFFECTS=1 keeps them for comparison.
     unsigned long long pixel_ps = 0;
     const PixelInfo& pixel = *pixel_info(context, &pixel_ps);
+    if (pixel.depth_only && skip_depth_ps) {
+        depth_ps_skipped.fetch_add(1, std::memory_order_relaxed);
+        { std::lock_guard<std::recursive_mutex> lock(mutex()); ++building().skipped_prepass; }
+        trace.event.reason = visibility_trace::Reason::Prepass;
+        release_all(vbs, 4, ib, layout);
+        return;
+    }
     if (pixel.effect && !keep_effects) {
         note_material({pixel_ps, true, {}, {}, 7});
         tally_shader(pixel_ps, index_count / 3, false, 0, 0, false, true, true);
@@ -1878,7 +1899,8 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
         }
         // Per-shader draw table, every draw: the link from a shader to what its draws actually are (L4/L6/L7). Outside the
         // note block, or only the first draw of each shader would be counted.
-        tally_shader(pixel_ps, index_count / 3, blend_on, blend_src, blend_dest, pixel.alpha.discards, pixel.effect, false);
+        tally_shader(pixel_ps, index_count / 3, blend_on, blend_src, blend_dest, pixel.alpha.discards, pixel.effect, false,
+                     target_format);
         for (unsigned slot = 0; slot < 16; ++slot)
             if (views[slot]) views[slot]->Release();  // GetShaderResources added one reference each
     }
