@@ -13,6 +13,7 @@ recording stand-in runtime:
   F. an albedo that was never written: built once, without a material (untextured), never again.
 """
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -152,7 +153,9 @@ def main():
     if r.returncode:
         print(json.dumps({'passed': False, 'error': 'compile failed:\n' + r.stderr[-2500:]}))
         return 1
-    run = subprocess.run([str(work / 'harness')], capture_output=True, text=True)
+    # These cases freeze the hold-back contract, now the NIER_REMIX_LIVE_GREY_FIRST=0 rollback (T1 is the default).
+    run = subprocess.run([str(work / 'harness')], capture_output=True, text=True,
+                         env={**os.environ, 'NIER_REMIX_LIVE_GREY_FIRST': '0'})
     ok = run.returncode == 0
     print(json.dumps({'passed': ok, 'output': (run.stdout + run.stderr)[-2500:]}))
     return 0 if ok else 1

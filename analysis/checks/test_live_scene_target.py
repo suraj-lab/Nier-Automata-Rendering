@@ -201,8 +201,10 @@ def inside():
         # Native render scale next to a same-aspect half-size pass (laptop, 2026-10-30: 2880x1800 world, 1440x900 pass).
         # The scene must be the native-size target; picking the half-size pass drops the world and leaves only the
         # few draws that land there (the user saw a white world with only some objects).
+        # WAIT_FOR_TARGET=0: this run is also the hold-back reference for the 'wait-target' case below.
         _, r, log, fake = tr.run(work, 'native-half', {**base, 'MOCK_CAMERA': 'live-passes', 'MOCK_SCENE_FULL': '1',
-                                                       'MOCK_HALF_PASS': '1', 'MOCK_LIVE_DRAWS': '3'})
+                                                       'MOCK_HALF_PASS': '1', 'MOCK_LIVE_DRAWS': '3',
+                                                       'NIER_REMIX_LIVE_WAIT_FOR_TARGET': '0'})
         assert fake and 'VIOLATION' not in fake, fake
         stats = [x for x in tr.remix_lines(log) if 'live draws=' in x]
         scenes = {re.search(r'scene=(\d+x\d+)', x).group(1) for x in stats}

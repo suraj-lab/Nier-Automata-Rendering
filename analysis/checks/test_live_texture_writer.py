@@ -75,7 +75,7 @@ def inside():
         def run(name, extra):
             tex = work / f'tex-{name}'
             tex.mkdir()
-            env = {'MOCK_NORMAL_TEX': '1', 'MOCK_CAMERA': 'live', 'MOCK_FRAME_MS': '60', 'MOCK_PBR_PS': '1',
+            env = {'NIER_REMIX_LIVE_GREY_FIRST': '0', 'MOCK_NORMAL_TEX': '1', 'MOCK_CAMERA': 'live', 'MOCK_FRAME_MS': '60', 'MOCK_PBR_PS': '1',
                    'MOCK_LATE_TEXTURE': '1', 'NIER_REMIX': '1', 'NIER_REMIX_RUNTIME': tr.win(work / 'fake_remix.dll'),
                    'NIER_REMIX_SCENE': tr.win(scene / 'scene.bin'), 'NIER_REMIX_LIVE': '1', 'NIER_REMIX_LIVE_NORMAL': '1',
                    'NIER_REMIX_LIVE_TEX': tr.win(tex), 'NIER_REMIX_LIVE_STATS_EVERY': '10', **extra}

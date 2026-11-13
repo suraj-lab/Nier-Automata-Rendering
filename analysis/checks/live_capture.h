@@ -549,8 +549,8 @@ inline bool pbr_textures = true;
 // Item L7: draws whose pixel shader only writes linear depth are a second shell over a surface drawn again later in the
 // frame (every one has a full twin on the real captures); not submitted. Default off until the user picks; read at load.
 inline bool skip_depth_ps = [] {
-    const char* v = std::getenv("NIER_REMIX_LIVE_SKIP_DEPTH_PS");
-    return v && v[0] == '1' && v[1] == '\0';
+    const char* v = std::getenv("NIER_REMIX_LIVE_SKIP_DEPTH_PS");   // on by default since 2026-11-13 (user pick); =0 rolls back
+    return !(v && v[0] == '0' && v[1] == '\0');
 }();
 inline std::atomic<unsigned long long> depth_ps_skipped{0};   // draws not submitted by that rule, reported with the stats
 // Before the first frame has chosen a scene target, the filter has nothing to compare with and every pass - shadow
@@ -558,12 +558,12 @@ inline std::atomic<unsigned long long> depth_ps_skipped{0};   // draws not submi
 // from no-colour-target draws and 48 from a half-size pass in the camp replay). NIER_REMIX_LIVE_WAIT_FOR_TARGET=1: those
 // draws still vote for the target but nothing is submitted until it is known (one frame). Default off; read at load.
 inline bool wait_for_target = [] {
-    const char* v = std::getenv("NIER_REMIX_LIVE_WAIT_FOR_TARGET");
-    return v && v[0] == '1' && v[1] == '\0';
+    const char* v = std::getenv("NIER_REMIX_LIVE_WAIT_FOR_TARGET");   // on by default since 2026-11-13 (user pick); =0 rolls back
+    return !(v && v[0] == '0' && v[1] == '\0');
 }();
 inline bool flag_constants = [] {
-    const char* v = std::getenv("NIER_REMIX_LIVE_FLAG_CONSTANTS");
-    return v && v[0] == '1' && v[1] == '\0';
+    const char* v = std::getenv("NIER_REMIX_LIVE_FLAG_CONSTANTS");   // on by default since 2026-11-13 (user pick); =0 rolls back
+    return !(v && v[0] == '0' && v[1] == '\0');
 }();
 inline float roughness_floor_constant = 38.f / 255.f;   // the same floor the gloss mask gets (remix_live.cpp)
 inline unsigned long long flag_constant_draws = 0, flag_normal_off_draws = 0;   // reported with the stats
@@ -575,8 +575,8 @@ inline bool keep_effects = false;
 inline bool gpu_skinning = false;
 // Item T1 switch (same env, read at load for the same reason as live_scene::grey_first).
 inline bool reserve_deferred_ids = [] {
-    const char* v = std::getenv("NIER_REMIX_LIVE_GREY_FIRST");
-    return v && v[0] == '1' && v[1] == '\0';
+    const char* v = std::getenv("NIER_REMIX_LIVE_GREY_FIRST");   // on by default since 2026-11-13 (user pick); =0 rolls back
+    return !(v && v[0] == '0' && v[1] == '\0');
 }();
 struct DeferredReadback {
     ID3D11Resource* resource = nullptr;   // one reference per pending kind, released when its file is written
@@ -1599,8 +1599,14 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     {
         std::lock_guard<std::recursive_mutex> lock(mutex());
         if (!blended) ++target_counts()[target];  // the HUD is blended: it must not vote for the scene target
-        if (scene_target_enabled && ((scene_width && target != std::pair<unsigned, unsigned>{scene_width, scene_height}) ||
-                                     (!scene_width && wait_for_target)) && !ui_pass) {
+        // Waiting for the first target is not a skipped pass: it must not print "draws into other targets" nor count
+        // towards the empty-frame latch (the frame has no world because nothing was decided yet, not because it moved).
+        if (scene_target_enabled && !scene_width && wait_for_target && !ui_pass) {
+            trace.event.reason = visibility_trace::Reason::Pass;
+            release_all(vbs, 4, ib, layout);
+            return;
+        }
+        if (scene_target_enabled && scene_width && target != std::pair<unsigned, unsigned>{scene_width, scene_height} && !ui_pass) {
             ++building().skipped_pass;
             trace.event.reason = visibility_trace::Reason::Pass;
             release_all(vbs, 4, ib, layout);

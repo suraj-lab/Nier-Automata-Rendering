@@ -136,7 +136,8 @@ inline bool env_flag(const char* name) {
     const char* v = std::getenv(name);
     return v && v[0] == '1' && v[1] == '\0';
 }
-inline bool grey_first = env_flag("NIER_REMIX_LIVE_GREY_FIRST");
+// On by default since 2026-11-13 (user pick); NIER_REMIX_LIVE_GREY_FIRST=0 rolls back to holding textures back.
+inline bool grey_first = [] { const char* v = std::getenv("NIER_REMIX_LIVE_GREY_FIRST"); return !(v && v[0] == '0' && v[1] == '\0'); }();
 inline bool hold_untextured = env_flag("NIER_REMIX_LIVE_HOLD_UNTEXTURED");
 inline bool build_log_enabled = env_flag("NIER_REMIX_LIVE_BUILD_LOG");   // diagnostic, see State::build_log   // rollback: wait for every file
 

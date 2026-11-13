@@ -64,7 +64,7 @@ def inside():
         (scene / 'scene.bin').write_bytes(ts.scene_bytes(ts.CAMERA, ts.DRAWS, ts.TEXTURES, ts.TRIS))
         tex = work / 'live-textures'
         tex.mkdir()
-        base = {'NIER_REMIX_RUNTIME': tr.win(work / 'fake_remix.dll'), 'NIER_REMIX_SCENE': tr.win(scene / 'scene.bin'),
+        base = { 'NIER_REMIX_LIVE_GREY_FIRST': '0', 'NIER_REMIX_RUNTIME': tr.win(work / 'fake_remix.dll'), 'NIER_REMIX_SCENE': tr.win(scene / 'scene.bin'),
                 'MOCK_FRAME_MS': '40', 'MOCK_CAMERA': 'live'}
         on = {**base, 'NIER_REMIX': '1', 'NIER_REMIX_LIVE': '1', 'NIER_REMIX_LIVE_TEX': tr.win(tex),
               'FAKE_REMIX_INSTANCE_LOG': '1', 'FAKE_REMIX_CAMERA_LOG': '1'}

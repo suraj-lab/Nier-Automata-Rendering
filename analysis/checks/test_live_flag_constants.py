@@ -51,8 +51,7 @@ def main():
                'NIER_REMIX': '1', 'NIER_REMIX_RUNTIME': tr.win(work / 'fake_remix.dll'),
                'NIER_REMIX_SCENE': tr.win(scene / 'scene.bin'), 'NIER_REMIX_LIVE': '1',
                'NIER_REMIX_LIVE_TEX': tr.win(tex), 'FAKE_REMIX_INSTANCE_LOG': '1', 'NIER_REMIX_LIVE_STATS_EVERY': '10'}
-        if switch:
-            env['NIER_REMIX_LIVE_FLAG_CONSTANTS'] = '1'
+        env['NIER_REMIX_LIVE_FLAG_CONSTANTS'] = '1' if switch else '0'   # on by default since 2026-11-13
         _, result, log, fake = tr.run(work, name, env)
         assert fake and 'VIOLATION' not in fake, fake[-1500:]
         # The world mesh's material: the one named with the shader's own roles (the scene shell keeps its own).

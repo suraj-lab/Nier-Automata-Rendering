@@ -147,7 +147,7 @@ def main():
 
     # One raw mask for both derived files, even when only one GPU readback fits in a frame. This forces an initial
     # deferral (albedo/normal consume earlier frames) and the existing invalidation path must rebuild with BOTH maps.
-    limited, mats = run('pbr-budget-one', {'MOCK_PBR_PS': '1', 'NIER_REMIX_LIVE_NORMAL': '1',
+    limited, mats = run('pbr-budget-one', {'MOCK_PBR_PS': '1', 'NIER_REMIX_LIVE_NORMAL': '1', 'NIER_REMIX_LIVE_GREY_FIRST': '0',
                                           'NIER_REMIX_LIVE_TEX_PER_FRAME': '1'})
     payloads = lambda fs: sorted((f['format'], f['width'], f['height'], f['mips'], f['payload']) for f in fs.values())
     assert payloads(limited) == payloads(pbr_normal_files), 'one-readback budget lost or changed a texture'
