@@ -61,6 +61,11 @@ struct State {
     // L4: geometry -> triangles of meshes built with no material. Counted against `meshes` at report time, so an
     // evicted or rebuilt mesh drops out without bookkeeping at every destroy site.
     std::map<std::uint64_t, std::size_t> bare;
+    // NIER_REMIX_LIVE_BUILD_LOG=1: one entry per built mesh (geometry, pixel shader, triangles, material handle, first
+    // vertex), drained and logged by remix_live.cpp. Diagnostic: links a mesh in the fake runtime's log to its shader.
+    struct Built { std::uint64_t geometry, ps; std::size_t triangles; std::uint64_t material; float v0[3];
+                   unsigned target_w, target_h; };
+    std::vector<Built> build_log;
     unsigned long long refreshed_blank = 0;   // ... of which the albedo was given up (landed, no file)
     std::vector<std::wstring> texture_paths;  // indexed by (texture id - 1); Remix keeps each c_str()
     // Texture ids whose file the writer thread has finished (written, or given up on: then the path stays empty).
@@ -132,7 +137,8 @@ inline bool env_flag(const char* name) {
     return v && v[0] == '1' && v[1] == '\0';
 }
 inline bool grey_first = env_flag("NIER_REMIX_LIVE_GREY_FIRST");
-inline bool hold_untextured = env_flag("NIER_REMIX_LIVE_HOLD_UNTEXTURED");   // rollback: wait for every file
+inline bool hold_untextured = env_flag("NIER_REMIX_LIVE_HOLD_UNTEXTURED");
+inline bool build_log_enabled = env_flag("NIER_REMIX_LIVE_BUILD_LOG");   // diagnostic, see State::build_log   // rollback: wait for every file
 
 // Every file this upload's material names has landed (id 0 = no texture in that role; a registered path has landed).
 inline bool files_landed(const State& s, const live_capture::Upload& u) {
@@ -283,6 +289,11 @@ inline bool build_mesh(const remixapi_Interface& api, State& s, const live_captu
                                     upload.metallic, upload.roughness, upload.constants);
     if (surface.material) s.bare.erase(upload.geometry);
     else s.bare[upload.geometry] = upload.indices.size() / 3;
+    if (build_log_enabled && s.build_log.size() < 65536)
+        s.build_log.push_back({upload.geometry, upload.ps, upload.indices.size() / 3,
+                               static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(surface.material)),
+                               {upload.vertices[0].position[0], upload.vertices[0].position[1], upload.vertices[0].position[2]},
+                               upload.target_w, upload.target_h});
     remixapi_MeshInfoSkinning skinning{};
     // Skinned (Phase 4): the upload already carries four unpacked indices and three weight floats per slot (plus a
     // 4-float tail), the extents the runtime reads (UPSTREAM_SKINNING_STRIDE.md), so the counts go through as they are.

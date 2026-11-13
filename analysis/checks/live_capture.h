@@ -553,6 +553,14 @@ inline bool skip_depth_ps = [] {
     return v && v[0] == '1' && v[1] == '\0';
 }();
 inline std::atomic<unsigned long long> depth_ps_skipped{0};   // draws not submitted by that rule, reported with the stats
+// Before the first frame has chosen a scene target, the filter has nothing to compare with and every pass - shadow
+// atlas, velocity, half-size post - was built as world geometry and kept for the session (found 2026-11-13: 87 meshes
+// from no-colour-target draws and 48 from a half-size pass in the camp replay). NIER_REMIX_LIVE_WAIT_FOR_TARGET=1: those
+// draws still vote for the target but nothing is submitted until it is known (one frame). Default off; read at load.
+inline bool wait_for_target = [] {
+    const char* v = std::getenv("NIER_REMIX_LIVE_WAIT_FOR_TARGET");
+    return v && v[0] == '1' && v[1] == '\0';
+}();
 inline bool flag_constants = [] {
     const char* v = std::getenv("NIER_REMIX_LIVE_FLAG_CONSTANTS");
     return v && v[0] == '1' && v[1] == '\0';
@@ -1384,6 +1392,7 @@ inline const PixelInfo* pixel_info(ID3D11DeviceContext* context, unsigned long l
     if (ps_out) *ps_out = static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(ps));
     if (!ps) return &none;
     auto& infos = pixel_infos();
+    for (ID3D11PixelShader* stale : shader_capture::take_reused()) infos.erase(stale);   // address reused: re-read
     const auto known = infos.find(ps);
     if (known != infos.end()) { ps->Release(); return &known->second; }
     if (infos.size() > 65536) infos.clear();  // bounded; the pointers above are never held past their draw
@@ -1590,7 +1599,8 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     {
         std::lock_guard<std::recursive_mutex> lock(mutex());
         if (!blended) ++target_counts()[target];  // the HUD is blended: it must not vote for the scene target
-        if (scene_target_enabled && scene_width && target != std::pair<unsigned, unsigned>{scene_width, scene_height} && !ui_pass) {
+        if (scene_target_enabled && ((scene_width && target != std::pair<unsigned, unsigned>{scene_width, scene_height}) ||
+                                     (!scene_width && wait_for_target)) && !ui_pass) {
             ++building().skipped_pass;
             trace.event.reason = visibility_trace::Reason::Pass;
             release_all(vbs, 4, ib, layout);
@@ -2224,6 +2234,9 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
             upload.metallic = metallic;
             upload.roughness = roughness;
             upload.constants = flag_values;
+            upload.ps = pixel_ps;
+            upload.target_w = early_target.first;
+            upload.target_h = early_target.second;
             upload.skinned = gpu_skinning && skinned && !rigid;  // bind space + per-frame palette, or baked above
             upload.blended = blended;
             upload.sky = sky_extent;

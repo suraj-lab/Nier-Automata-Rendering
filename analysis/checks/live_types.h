@@ -45,6 +45,8 @@ struct Upload {
     int alpha_op = 7;                  // the pixel shader's alpha test as Remix AlphaTestType (7 = kAlways: none)
     std::uint8_t alpha_ref = 0;        // ... and its 8-bit reference (alpha_test.h)
     MaterialConstants constants;       // item L3: constants the game's flags select instead of a texture
+    std::uint64_t ps = 0;              // the draw's pixel shader (diagnostic: NIER_REMIX_LIVE_BUILD_LOG)
+    unsigned target_w = 0, target_h = 0;   // the draw's colour target (diagnostic, same switch)
 };
 struct Item {                          // one draw call this frame
     std::uint64_t geometry = 0;

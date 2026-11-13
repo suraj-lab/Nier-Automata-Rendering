@@ -892,6 +892,10 @@ struct Worker {
                 }
                 update_pending += live_capture::now_us() - u0;  // counted when a frame is presented (same bucket as n)
                 live_capture::forget(live_scene::take_evicted(live));
+                for (const auto& b : live.build_log)   // NIER_REMIX_LIVE_BUILD_LOG: mesh -> pixel shader
+                    logger.load()("remix: built geometry=%llx ps=%llx tris=%zu mat=%llu v0=%.3f,%.3f,%.3f target=%ux%u", b.geometry,
+                                  b.ps, b.triangles, b.material, b.v0[0], b.v0[1], b.v0[2], b.target_w, b.target_h);
+                live.build_log.clear();
                 if (live_scene::grey_first) {   // item T1: each batch of grey materials that became textured
                     static unsigned long long reported_refreshed = 0;
                     if (live.refreshed != reported_refreshed) {

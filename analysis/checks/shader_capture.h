@@ -18,6 +18,7 @@
 #include <cstring>
 #include <mutex>
 #include <string>
+#include <unordered_map>
 #include <vector>
 #include "vtable_hook.h"
 
@@ -33,9 +34,22 @@ constexpr std::size_t kCreatePixelShader = 15;
 
 inline std::atomic<void*>& next() { static std::atomic<void*> n{nullptr}; return n; }
 inline std::mutex& mutex() { static std::mutex m; return m; }
-inline std::vector<std::pair<ID3D11PixelShader*, std::vector<unsigned char>>>& store() {
-    static std::vector<std::pair<ID3D11PixelShader*, std::vector<unsigned char>>> s;
+// A released shader's address is reused by a later CreatePixelShader: the newest bytecode wins (as input_layout_hook.h
+// does for layouts). The first-match vector this replaces handed a new shader the bytecode of whatever had lived at its
+// address before, so live_capture gave lit surfaces a shadow caster's roles and alpha test (found 2026-11-13, L8).
+inline std::unordered_map<ID3D11PixelShader*, std::vector<unsigned char>>& store() {
+    static std::unordered_map<ID3D11PixelShader*, std::vector<unsigned char>> s;
     return s;
+}
+// Addresses whose shader was replaced since the last take_reused(): callers caching per-pointer facts drop them.
+inline std::vector<ID3D11PixelShader*>& reused() { static std::vector<ID3D11PixelShader*> v; return v; }
+inline std::atomic<bool>& any_reused() { static std::atomic<bool> b{false}; return b; }
+inline std::vector<ID3D11PixelShader*> take_reused() {
+    if (!any_reused().exchange(false, std::memory_order_acq_rel)) return {};
+    std::lock_guard<std::mutex> lock(mutex());
+    std::vector<ID3D11PixelShader*> out;
+    out.swap(reused());
+    return out;
 }
 
 inline std::string& dir() { static std::string d; return d; }
@@ -84,8 +98,14 @@ inline HRESULT STDMETHODCALLTYPE hooked_create_pixel_shader(ID3D11Device* self, 
     if (SUCCEEDED(hr) && out && *out && bytecode && length) {
         write_blob(*out, bytecode, length);
         std::lock_guard<std::mutex> lock(mutex());
-        store().emplace_back(*out, std::vector<unsigned char>(
-            static_cast<const unsigned char*>(bytecode), static_cast<const unsigned char*>(bytecode) + length));
+        std::vector<unsigned char> bytes(static_cast<const unsigned char*>(bytecode),
+                                         static_cast<const unsigned char*>(bytecode) + length);
+        auto [it, inserted] = store().try_emplace(*out, std::move(bytes));
+        if (!inserted) {
+            it->second.assign(static_cast<const unsigned char*>(bytecode), static_cast<const unsigned char*>(bytecode) + length);
+            if (reused().size() < 65536) reused().push_back(*out);
+            any_reused().store(true, std::memory_order_release);
+        }
     }
     return hr;
 }
@@ -100,10 +120,10 @@ inline bool protect(void* address, std::size_t size, unsigned long flags, unsign
 inline bool lookup(ID3D11PixelShader* ps, std::vector<unsigned char>& out) {
     if (!ps) return false;
     std::lock_guard<std::mutex> lock(mutex());
-    for (auto& [k, v] : store()) {
-        if (k == ps) { out = v; return true; }
-    }
-    return false;
+    const auto it = store().find(ps);
+    if (it == store().end()) return false;
+    out = it->second;
+    return true;
 }
 
 // Install once. Returns true if the hook is chainable (mirrors input_layout_hook::install).

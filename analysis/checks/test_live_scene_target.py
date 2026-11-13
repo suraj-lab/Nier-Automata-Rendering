@@ -30,7 +30,7 @@ import test_remix_live as tr
 import test_menu_overlay as tmo
 import test_nscn_scene as ts
 
-tr.ENV_KEYS = tuple(tr.ENV_KEYS) + ('MOCK_RESET_DRAW_MIDFRAME', 'NIER_REMIX_LIVE_STATS_EVERY', 'NIER_REMIX_LIVE', 'NIER_REMIX_LIVE_TEX', 'NIER_REMIX_LIVE_ALL_TARGETS',
+tr.ENV_KEYS = tuple(tr.ENV_KEYS) + ('NIER_REMIX_LIVE_WAIT_FOR_TARGET', 'MOCK_RESET_DRAW_MIDFRAME', 'NIER_REMIX_LIVE_STATS_EVERY', 'NIER_REMIX_LIVE', 'NIER_REMIX_LIVE_TEX', 'NIER_REMIX_LIVE_ALL_TARGETS',
                                      'FAKE_REMIX_INSTANCE_LOG')
 
 
@@ -211,6 +211,22 @@ def inside():
         native = {f for f, n in per_frame.items() if f >= 10 and n >= 3}  # the three scene draws, not the one pass draw
         assert len(native) >= 25, f'native-size world not drawn: {sorted(per_frame.items())[:8]}'
         results['native-half'] = 'A native-size world beats a smaller same-aspect pass for the scene target.'
+
+        # Item L7 (2026-11-13): before the first frame has chosen a target nothing is filtered, so frame 1's passes were
+        # built as world meshes and kept. NIER_REMIX_LIVE_WAIT_FOR_TARGET=1 submits nothing until the target is known.
+        _, r, log, fake_wait = tr.run(work, 'wait-target', {**base, 'MOCK_CAMERA': 'live-passes', 'MOCK_SCENE_FULL': '1',
+                                                           'MOCK_HALF_PASS': '1', 'MOCK_LIVE_DRAWS': '3',
+                                                           'NIER_REMIX_LIVE_WAIT_FOR_TARGET': '1'})
+        assert fake_wait and 'VIOLATION' not in fake_wait, fake_wait
+        # The mock's pass redraws the scene mesh (same buffers, same key), so the leak shows as an extra instance in the
+        # frames before the target is known, not as an extra mesh.
+        off, on = instances_per_frame(fake), instances_per_frame(fake_wait)
+        # The mock alternates its own per-frame count, so the signal is the first captured frame only: before the target
+        # is known the hold-back arm submits the pass draws too, the switch submits none of them.
+        first_off, first_on = off[min(off)], on[min(on)]
+        assert first_on < first_off, f'frame 1 must not carry pass draws while the target is unknown: {first_off} -> {first_on}'
+        assert len([f for f, n in on.items() if n >= 3]) >= 25, 'the world must still be drawn'
+        results['wait-target'] = f'frame 1 submits no pass draws while the target is unknown ({first_off} -> {first_on} instances)'
 
         # The same, but every 7th frame the pass briefly out-draws the world. The scene target must not flip for one
         # frame: on the laptop that dropped accepted draws 246 -> 71 and the whole world vanished (sky=0).
