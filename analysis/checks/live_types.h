@@ -19,6 +19,15 @@ struct Vertex {
     std::uint32_t color;
 };
 
+// Item L3: the values the game's own material switches (cb1[0] flags) put in place of a texture. Negative = not set,
+// the role keeps its texture. Read per draw from the bound constant buffer (live_capture.h).
+struct MaterialConstants {
+    float albedo[3] = {-1.f, -1.f, -1.f};
+    float metallic = -1.f, roughness = -1.f;
+    bool any() const { return albedo[0] >= 0.f || metallic >= 0.f || roughness >= 0.f; }
+    bool has_albedo() const { return albedo[0] >= 0.f; }
+};
+
 // Geometry the worker does not have yet (first sight, or a buffer it depends on was rewritten).
 struct Upload {
     std::uint64_t geometry = 0;
@@ -35,6 +44,7 @@ struct Upload {
     bool sky = false;                  // background shell / sky dome: submitted with the SKY category, not as world
     int alpha_op = 7;                  // the pixel shader's alpha test as Remix AlphaTestType (7 = kAlways: none)
     std::uint8_t alpha_ref = 0;        // ... and its 8-bit reference (alpha_test.h)
+    MaterialConstants constants;       // item L3: constants the game's flags select instead of a texture
 };
 struct Item {                          // one draw call this frame
     std::uint64_t geometry = 0;

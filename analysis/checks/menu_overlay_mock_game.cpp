@@ -358,7 +358,27 @@ int wmain(int argc, wchar_t** argv) {
         "  float r = 1 - mask.y; float a = max(r * r + light.w, 0.001);\n"
         "  return float4(F0 * a + normalize(n) * light.xyz, albedo.a);\n"
         "}\n";
-    const bool mesh_pbr = std::getenv("MOCK_PBR_PS") != nullptr;
+    // MOCK_FLAG_PS=x,y,z,w (item L3): the PBR shader above plus NieR's material switches, as in the lit family
+    // (runtime/pbr-re/lit/ps_1874571568.asm:91-99): cb1[0].y set -> albedo is cb1[4].xyz, .z -> gloss is cb1[5].x,
+    // .w -> metal is cb1[5].y. The values are cb1[0] = the four flags, cb1[4] = (0.2, 0.4, 0.6), cb1[5] = (0.3, 0.8).
+    const char flag_ps_src[] =
+        "Texture2D t0 : register(t0); Texture2D t2 : register(t2); Texture2D t3 : register(t3); Texture2D t4 : register(t4);\n"
+        "SamplerState s : register(s0);\n"
+        "cbuffer C : register(b0) { float4 tint; float4 light; };\n"
+        "cbuffer M : register(b1) { float4 flags; float4 m1, m2, m3; float4 albedo_c; float4 gm; };\n"
+        "float4 main(float4 p : SV_POSITION) : SV_TARGET {\n"
+        "  float2 uv = p.xy * 0.001;\n"
+        "  float4 albedo = t0.Sample(s, uv); float4 mask = t2.Sample(s, uv);\n"
+        "  [branch] if (flags.y != 0) albedo.rgb = albedo_c.rgb;\n"
+        "  [branch] if (flags.z != 0) mask.y = gm.x;\n"
+        "  [branch] if (flags.w != 0) mask.x = gm.y;\n"
+        "  float3 n = t3.Sample(s, uv).xyz - 0.5; float2 d = mad(t4.Sample(s, uv).xy, 2, -1); n.xy += d * mask.w;\n"
+        "  float3 F0 = mad(mask.x, albedo.rgb * tint.rgb - 0.03, 0.03);\n"
+        "  float r = 1 - mask.y; float a = max(r * r + light.w, 0.001);\n"
+        "  return float4(F0 * a + normalize(n) * light.xyz, albedo.a);\n"
+        "}\n";
+    const char* mesh_flags = std::getenv("MOCK_FLAG_PS");
+    const bool mesh_pbr = std::getenv("MOCK_PBR_PS") != nullptr || mesh_flags != nullptr;
     // MOCK_UV_PS: the albedo is sampled at uv * cb1[5].xy, the way NieR's terrain layers repeat their textures; cb1 is
     // bound with (4, 2) there, so the live path must bake that repeat into the mesh UVs.
     const char uv_ps_src[] =
@@ -369,8 +389,8 @@ int wmain(int argc, wchar_t** argv) {
     // MOCK_SMALL_DRAW: a 6-index draw (two triangles of the main mesh) into the scene target, like a grass or leaf card.
     const bool small_draw = std::getenv("MOCK_SMALL_DRAW") != nullptr;
     ID3DBlob* ps_blob = nullptr;
-    const char* mesh_ps_src = mesh_uv ? uv_ps_src : mesh_pbr ? pbr_ps_src : mesh_discards ? cutout_ps_src : ps_src;
-    const SIZE_T mesh_ps_len = mesh_uv ? sizeof uv_ps_src - 1 : mesh_pbr ? sizeof pbr_ps_src - 1
+    const char* mesh_ps_src = mesh_uv ? uv_ps_src : mesh_flags ? flag_ps_src : mesh_pbr ? pbr_ps_src : mesh_discards ? cutout_ps_src : ps_src;
+    const SIZE_T mesh_ps_len = mesh_uv ? sizeof uv_ps_src - 1 : mesh_flags ? sizeof flag_ps_src - 1 : mesh_pbr ? sizeof pbr_ps_src - 1
                              : mesh_discards ? sizeof cutout_ps_src - 1 : sizeof ps_src - 1;
     ID3D11Buffer* uv_cb = nullptr;
     if (mesh_uv) {
@@ -378,6 +398,12 @@ int wmain(int argc, wchar_t** argv) {
         D3D11_BUFFER_DESC cd{}; cd.ByteWidth = sizeof tile_data; cd.Usage = D3D11_USAGE_DEFAULT; cd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
         D3D11_SUBRESOURCE_DATA cdata = {tile_data, 0, 0};
         if (FAILED(device->CreateBuffer(&cd, &cdata, &uv_cb))) { std::fprintf(out, "FAIL uv cb\n"); return 3; }
+    } else if (mesh_flags) {   // bound at b1 where the UV case binds its buffer
+        float flag_data[24] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.2f, 0.4f, 0.6f, 0, 0.3f, 0.8f, 0, 0};
+        std::sscanf(mesh_flags, "%f,%f,%f,%f", &flag_data[0], &flag_data[1], &flag_data[2], &flag_data[3]);
+        D3D11_BUFFER_DESC cd{}; cd.ByteWidth = sizeof flag_data; cd.Usage = D3D11_USAGE_DEFAULT; cd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+        D3D11_SUBRESOURCE_DATA cdata = {flag_data, 0, 0};
+        if (FAILED(device->CreateBuffer(&cd, &cdata, &uv_cb))) { std::fprintf(out, "FAIL flag cb\n"); return 3; }
     }
     if (!compile || FAILED(compile(mesh_ps_src, mesh_ps_len, "ps", nullptr, nullptr, "main", "ps_4_0", 0, 0, &ps_blob, nullptr)))
         { std::fprintf(out, "FAIL mesh ps\n"); return 3; }

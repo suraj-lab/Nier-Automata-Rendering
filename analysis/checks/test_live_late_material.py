@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""FROZEN TARGET for item T1 (PLAN_2026-11-13), parked: not in the suite until the switch is finished.
+"""Gate for item T1 (PLAN_2026-11-13), behind NIER_REMIX_LIVE_GREY_FIRST=1 (default off), which this gate turns on.
 
 Gate: a geometry whose texture was not captured yet gets its material when the texture lands.
 
@@ -76,7 +76,7 @@ def inside():
         tex.mkdir()
         base = {'NIER_REMIX_RUNTIME': tr.win(work / 'fake_remix.dll'), 'NIER_REMIX_SCENE': tr.win(scene / 'scene.bin'),
                 'MOCK_FRAME_MS': '40', 'NIER_REMIX': '1', 'NIER_REMIX_LIVE': '1',
-                'NIER_REMIX_LIVE_TEX': tr.win(tex), 'MOCK_CAMERA': 'live-late',
+                'NIER_REMIX_LIVE_TEX': tr.win(tex), 'MOCK_CAMERA': 'live-late', 'NIER_REMIX_LIVE_GREY_FIRST': '1',
                 }
 
         # The writer delay makes the file land *after* the material that names it was created, which is the case T1 is

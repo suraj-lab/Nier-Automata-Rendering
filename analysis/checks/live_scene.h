@@ -52,6 +52,13 @@ struct State {
     std::map<std::uint64_t, double> fraction;
     std::map<std::uint64_t, std::uint64_t> last_used;
     std::map<std::uint64_t, remixapi_MaterialHandle> materials;  // texture id, plus alpha test above bit 32
+    // grey_first (item T1): materials sent while a file they name was not on disk yet, by material key, with the ids
+    // they were asked for. Re-created under the same hash once every file has landed, so the mesh keeps its identity.
+    struct Incomplete { std::uint32_t texture, normal, metallic, roughness; int alpha_op; std::uint8_t alpha_ref;
+                        live_capture::MaterialConstants constants; };
+    std::map<std::uint64_t, Incomplete> incomplete;
+    unsigned long long refreshed = 0;   // grey_first: materials re-created once their files landed (reported)
+    unsigned long long refreshed_blank = 0;   // ... of which the albedo was given up (landed, no file)
     std::vector<std::wstring> texture_paths;  // indexed by (texture id - 1); Remix keeps each c_str()
     // Texture ids whose file the writer thread has finished (written, or given up on: then the path stays empty).
     std::vector<char> landed;
@@ -89,6 +96,7 @@ inline void destroy(const remixapi_Interface& api, State& s) {
     s.mesh_bytes.clear();
     s.last_used.clear();
     s.materials.clear();
+    s.incomplete.clear();
     s.texture_paths.clear();
     s.landed.clear();
     s.sun = s.sky = nullptr;
@@ -136,8 +144,9 @@ inline bool files_landed(const State& s, const live_capture::Upload& u) {
 inline remixapi_MaterialHandle material_for(const remixapi_Interface& api, State& s, std::uint32_t texture,
                                             int alpha_op = 7, std::uint8_t alpha_ref = 0,
                                             std::uint32_t normal = 0, std::uint32_t metallic = 0,
-                                            std::uint32_t roughness = 0) {
-    if (!texture) return nullptr;
+                                            std::uint32_t roughness = 0,
+                                            const live_capture::MaterialConstants& constants = {}) {
+    if (!texture && !constants.has_albedo()) return nullptr;   // L3: a constant albedo is a material with no texture
     const bool tested = alpha_op != 7;
     // shortcut: the normal id rides in bits 48-63, so two ids that differ only above 65535 would share a material; a
     // session that captures more than 65535 textures needs a struct key instead. PBR ids are mixed in separately below.
@@ -155,15 +164,26 @@ inline remixapi_MaterialHandle material_for(const remixapi_Interface& api, State
     const std::uint64_t pbr_key = pbr ? (std::uint64_t(grey_first || metallic_path ? metallic : 0) << 32 |
                                          (grey_first || roughness_path ? roughness : 0)) : 0;
     if (pbr) key = key * 0x9e3779b97f4a7c15ull ^ (pbr_key + 0x632be59bd9b4e019ull);
+    // Item L3: two draws with one texture and different constants are two materials, in the key and in the hash.
+    std::uint64_t constants_key = 0;
+    if (constants.any()) {
+        std::uint32_t bits[5];
+        std::memcpy(&bits[0], constants.albedo, 12);
+        std::memcpy(&bits[3], &constants.metallic, 4);
+        std::memcpy(&bits[4], &constants.roughness, 4);
+        constants_key = 0xcbf29ce484222325ull;
+        for (const std::uint32_t b : bits) constants_key = (constants_key ^ b) * 0x100000001b3ull;
+        key = key * 0x9e3779b97f4a7c15ull ^ (constants_key + 0x2545f4914f6cdd1dull);
+    }
     const auto known = s.materials.find(key);
     if (known != s.materials.end()) return known->second;
     // A missing albedo file is not a reason to send no material (user decision D2): the surface shows at once in plain
     // grey and the colour pops in when the file lands. A null handle could never be swapped, so it is never sent.
-    if (!grey_first && (texture > s.texture_paths.size() || s.texture_paths[texture - 1].empty())) return nullptr;
+    if (!grey_first && texture && (texture > s.texture_paths.size() || s.texture_paths[texture - 1].empty())) return nullptr;
     const auto on_disk = [&s](std::uint32_t id) {   // "landed" in the state means the file is written, not merely queued
         return id && id <= s.landed.size() && s.landed[id - 1] != 0;
     };
-    const bool has_albedo = grey_first ? on_disk(texture) : true;   // grey_first: a path queued is not a file on disk
+    const bool has_albedo = !texture ? false : grey_first ? on_disk(texture) : true;   // grey_first: queued is not on disk
     const bool has_normal = grey_first ? (normal != 0)
                                        : (normal && normal <= s.texture_paths.size() && !s.texture_paths[normal - 1].empty());
     remixapi_MaterialInfo info;
@@ -180,17 +200,54 @@ inline remixapi_MaterialHandle material_for(const remixapi_Interface& api, State
     // With PBR textures: the top bit set (clear of every range above) and the ids mixed in, so each combination is its
     // own material in the runtime, which knows materials by hash alone.
     if (pbr) hash = (1ull << 63) | ((hash * 0x9e3779b97f4a7c15ull ^ (pbr_key * 0xbf58476d1ce4e5b9ull)) >> 1);
+    // Item L3: constants live in [2^62, 2^63), clear of every range above (PBR has bit 63 set, the rest are small).
+    if (constants_key) hash = (1ull << 62) | ((hash * 0x9e3779b97f4a7c15ull ^ (constants_key * 0x94d049bb133111ebull)) >> 2);
     nscn::detail::make_material_info(info, ext, has_albedo ? s.texture_paths[texture - 1].c_str() : nullptr, hash, tested,
                                      (grey_first ? on_disk(normal) : has_normal) ? path_of(normal) : nullptr,
                                      grey_first ? (on_disk(roughness) ? roughness_path : nullptr) : roughness_path,
                                      grey_first ? (on_disk(metallic) ? metallic_path : nullptr) : metallic_path);
-    if (grey_first && !has_albedo)   // the plan's grey until the albedo file is on disk (D2)
+    if (grey_first && !has_albedo && texture)   // the plan's grey until the albedo file is on disk (D2)
         ext.albedoConstant.x = ext.albedoConstant.y = ext.albedoConstant.z = 0.5f;
+    if (constants.has_albedo()) {   // replaces the texture: albedoConstant does not multiply it
+        info.albedoTexture = nullptr;
+        ext.albedoConstant.x = constants.albedo[0];
+        ext.albedoConstant.y = constants.albedo[1];
+        ext.albedoConstant.z = constants.albedo[2];
+    }
+    if (constants.metallic >= 0.f) { ext.metallicConstant = constants.metallic; ext.metallicTexture = nullptr; }
+    if (constants.roughness >= 0.f) { ext.roughnessConstant = constants.roughness; ext.roughnessTexture = nullptr; }
     if (tested && alpha_test_enabled) { ext.alphaTestType = alpha_op; ext.alphaReferenceValue = alpha_ref; }
     remixapi_MaterialHandle handle = nullptr;
     if (api.CreateMaterial(&info, &handle) || !handle) return nullptr;
     s.materials.emplace(key, handle);
+    if (grey_first) {
+        bool missing = false;
+        for (const std::uint32_t id : {texture, normal, metallic, roughness}) missing |= id && !on_disk(id);
+        if (missing) s.incomplete[key] = {texture, normal, metallic, roughness, alpha_op, alpha_ref, constants};
+    }
     return handle;
+}
+
+// Item T1: a material sent grey (or without a PBR / normal file) is destroyed and created again under its own hash once
+// every file it names is on disk. The runtime knows a material by hash and ignores a repeat create under a live one, so
+// destroy-then-create is the only way the surface changes; the mesh, which names the hash, is not rebuilt.
+inline void refresh_incomplete_materials(const remixapi_Interface& api, State& s) {
+    for (auto it = s.incomplete.begin(); it != s.incomplete.end();) {
+        const State::Incomplete m = it->second;
+        bool ready = true;
+        for (const std::uint32_t id : {m.texture, m.normal, m.metallic, m.roughness})
+            ready &= !id || (id <= s.landed.size() && s.landed[id - 1] != 0);
+        if (!ready) { ++it; continue; }
+        const std::uint64_t key = it->first;
+        it = s.incomplete.erase(it);
+        const auto known = s.materials.find(key);
+        if (known == s.materials.end()) continue;
+        if (known->second) api.DestroyMaterial(known->second);
+        s.materials.erase(known);
+        material_for(api, s, m.texture, m.alpha_op, m.alpha_ref, m.normal, m.metallic, m.roughness, m.constants);
+        ++s.refreshed;
+        if (m.texture && (m.texture > s.texture_paths.size() || s.texture_paths[m.texture - 1].empty())) ++s.refreshed_blank;
+    }
 }
 
 // One upload -> one indexed mesh. Vertices are the compact bind-pose set; indices remap into them.
@@ -211,7 +268,7 @@ inline bool build_mesh(const remixapi_Interface& api, State& s, const live_captu
     surface.indices_values = upload.indices.data();
     surface.indices_count = upload.indices.size();
     surface.material = material_for(api, s, upload.texture, upload.alpha_op, upload.alpha_ref, upload.normal,
-                                    upload.metallic, upload.roughness);
+                                    upload.metallic, upload.roughness, upload.constants);
     remixapi_MeshInfoSkinning skinning{};
     // Skinned (Phase 4): the upload already carries four unpacked indices and three weight floats per slot (plus a
     // 4-float tail), the extents the runtime reads (UPSTREAM_SKINNING_STRIDE.md), so the counts go through as they are.
@@ -296,6 +353,7 @@ inline bool update(const remixapi_Interface& api, std::vector<live_capture::Uplo
                    const std::vector<live_capture::TextureFile>& textures, const live_capture::Frame& frame,
                    State& s, const nscn::Options& options) {
     add_textures(s, textures);
+    if (grey_first) refresh_incomplete_materials(api, s);
     // Newest upload per geometry wins: a rewrite while queued replaces the queued one, so geometry rewritten every
     // frame cannot grow the backlog, and the stale version is never built.
     std::vector<live_capture::Upload> queue = std::move(s.backlog);

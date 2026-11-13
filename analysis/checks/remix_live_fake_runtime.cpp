@@ -39,6 +39,7 @@ std::atomic<bool> fail_next_copy{false};
 unsigned frames = 0, copies = 0, fail_copy_at = 0, materials = 0, meshes = 0, lights = 0;
 UINT last_w = 0, last_h = 0;
 unsigned long long handle = 0x5000;
+std::map<unsigned long long, unsigned long long> material_hashes;  // handle -> hash, so a destroy can be logged by hash
 // Mesh handles are the hash, as in the real runtime. Laptop probe 2026-10-30 (analysis/remix-probe REPROBE_REPLACE):
 // CreateMesh under a hash that is still live keeps the OLD geometry, and re-creating a hash after DestroyMesh crashed
 // the runtime (access violation). Both are contract violations here, so the mock gates see what the runtime does.
@@ -109,10 +110,15 @@ remixapi_ErrorCode REMIXAPI_CALL create_material(const remixapi_MaterialInfo* i,
         base_name(i->normalTexture, normal, sizeof normal);
         base_name(opaque_ext ? e->roughnessTexture : nullptr, rough, sizeof rough);
         base_name(opaque_ext ? e->metallicTexture : nullptr, metal, sizeof metal);
-        note("CreateMaterial path=- normal=%s presented=%u alpha=%d/%u hash=%llu roughness=%s metallic=%s id=%llu",
+        note("CreateMaterial path=- normal=%s presented=%u alpha=%d/%u hash=%llu roughness=%s metallic=%s id=%llu "
+             "aconst=%.3f,%.3f,%.3f mconst=%.3f rconst=%.3f",
              normal[0] ? normal : "-", 0u, opaque_ext ? e->alphaTestType : -1,
              opaque_ext ? unsigned(e->alphaReferenceValue) : 0u, static_cast<unsigned long long>(i->hash),
-             rough[0] ? rough : "-", metal[0] ? metal : "-", handle);
+             rough[0] ? rough : "-", metal[0] ? metal : "-", handle,
+             opaque_ext ? e->albedoConstant.x : -1.f, opaque_ext ? e->albedoConstant.y : -1.f,
+             opaque_ext ? e->albedoConstant.z : -1.f, opaque_ext ? e->metallicConstant : -1.f,
+             opaque_ext ? e->roughnessConstant : -1.f);
+        material_hashes[handle] = static_cast<unsigned long long>(i->hash);
         *h = reinterpret_cast<remixapi_MaterialHandle>(handle++);
         return REMIXAPI_ERROR_CODE_SUCCESS;
     }
@@ -136,11 +142,16 @@ remixapi_ErrorCode REMIXAPI_CALL create_material(const remixapi_MaterialInfo* i,
         char rough[MAX_PATH * 3], metal[MAX_PATH * 3];
         base_name(opaque_ext ? ext->roughnessTexture : nullptr, rough, sizeof rough);
         base_name(opaque_ext ? ext->metallicTexture : nullptr, metal, sizeof metal);
-        note("CreateMaterial path=%s normal=%s presented=%u alpha=%d/%u hash=%llu roughness=%s metallic=%s id=%llu",
+        note("CreateMaterial path=%s normal=%s presented=%u alpha=%d/%u hash=%llu roughness=%s metallic=%s id=%llu "
+             "aconst=%.3f,%.3f,%.3f mconst=%.3f rconst=%.3f",
              slash ? slash + 1 : path, normal[0] ? normal : "-", frames,
              opaque_ext ? ext->alphaTestType : -1, opaque_ext ? unsigned(ext->alphaReferenceValue) : 0u,
-             static_cast<unsigned long long>(i->hash), rough[0] ? rough : "-", metal[0] ? metal : "-", handle);
+             static_cast<unsigned long long>(i->hash), rough[0] ? rough : "-", metal[0] ? metal : "-", handle,
+             opaque_ext ? ext->albedoConstant.x : -1.f, opaque_ext ? ext->albedoConstant.y : -1.f,
+             opaque_ext ? ext->albedoConstant.z : -1.f, opaque_ext ? ext->metallicConstant : -1.f,
+             opaque_ext ? ext->roughnessConstant : -1.f);
     }
+    material_hashes[handle] = static_cast<unsigned long long>(i->hash);
     *h = reinterpret_cast<remixapi_MaterialHandle>(handle++); return REMIXAPI_ERROR_CODE_SUCCESS;
 }
 remixapi_ErrorCode REMIXAPI_CALL create_mesh(const remixapi_MeshInfo* i, remixapi_MeshHandle* h) {
@@ -344,7 +355,14 @@ extern "C" __declspec(dllexport) remixapi_ErrorCode REMIXAPI_CALL remixapi_Initi
     *api = remixapi_Interface{};
     api->Shutdown = [] { return REMIXAPI_ERROR_CODE_SUCCESS; };
     api->CreateMaterial = create_material;
-    api->DestroyMaterial = [](remixapi_MaterialHandle) { return REMIXAPI_ERROR_CODE_SUCCESS; };
+    api->DestroyMaterial = [](remixapi_MaterialHandle m) {
+        const auto id = reinterpret_cast<unsigned long long>(m);
+        const auto known = material_hashes.find(id);
+        if (known == material_hashes.end()) { note("VIOLATION DestroyMaterial of unknown handle id=%llu", id); return REMIXAPI_ERROR_CODE_SUCCESS; }
+        note("DestroyMaterial hash=%llu id=%llu presented=%u", known->second, id, frames);
+        material_hashes.erase(known);
+        return REMIXAPI_ERROR_CODE_SUCCESS;
+    };
     api->CreateMesh = create_mesh;
     api->DestroyMesh = [](remixapi_MeshHandle m) {
         const auto hash = static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(m));

@@ -254,6 +254,7 @@ State configure() {
         if (const std::wstring f = env(L"NIER_REMIX_LIVE_ROUGHNESS_FLOOR"); !f.empty()) {
             const double v = std::wcstod(f.c_str(), nullptr);
             roughness_floor = static_cast<unsigned char>(v <= 0 ? 0 : v >= 1 ? 255 : v * 255.0 + 0.5);
+            live_capture::roughness_floor_constant = roughness_floor / 255.f;   // L3 constants get the same floor
         }
         live_capture::keep_effects = env(L"NIER_REMIX_LIVE_EFFECTS") == L"1";
         if (const std::wstring n = env(L"NIER_REMIX_LIVE_MIN_INDICES"); !n.empty())
@@ -891,6 +892,15 @@ struct Worker {
                 }
                 update_pending += live_capture::now_us() - u0;  // counted when a frame is presented (same bucket as n)
                 live_capture::forget(live_scene::take_evicted(live));
+                if (live_scene::grey_first) {   // item T1: each batch of grey materials that became textured
+                    static unsigned long long reported_refreshed = 0;
+                    if (live.refreshed != reported_refreshed) {
+                        logger.load()("remix: live grey_first swapped=%llu total=%llu blank=%llu incomplete=%zu pending=%zu",
+                                      live.refreshed - reported_refreshed, live.refreshed, live.refreshed_blank,
+                                      live.incomplete.size(), live_capture::deferred_readbacks().size());
+                        reported_refreshed = live.refreshed;
+                    }
+                }
                 if (!live_reported) {
                     live_reported = true;
                     logger.load()("remix: live scene first frame draws=%u meshes=%u instances=%u textures=%u skinned=%u",
@@ -974,6 +984,15 @@ struct Worker {
                             logger.load()("remix: no_position_layout n=%llu sig=%s", entry.count, entry.text);
                     }
                     // Game-thread readbacks, cumulative since start: diff two lines for a rate.
+                    if (live_scene::grey_first)   // item T1: how many grey materials became textured, how many still wait
+                        logger.load()("remix: live grey_first incomplete=%zu refreshed=%llu materials=%zu pending=%zu "
+                                      "written=%llu given_up=%llu",
+                                      live.incomplete.size(), live.refreshed, live.materials.size(),
+                                      live_capture::deferred_readbacks().size(), live_capture::deferred_written,
+                                      live_capture::deferred_given_up);
+                    if (live_capture::flag_constants)   // item L3: draws whose own flags chose constants over a texture
+                        logger.load()("remix: live flag_constants draws=%llu normal_off=%llu",
+                                      live_capture::flag_constant_draws, live_capture::flag_normal_off_draws);
                     logger.load()("remix: live rebuilds first=%llu unknown=%llu buffer=%llu pose=%llu texture=%llu evicted=%llu "
                                   "buffer_skinned=%llu buffer_dynamic=%llu game_frames=%llu game_max_ms=%llu "
                                   "worst_capture_ms=%llu worst_hook_ms=%llu worst_present_ms=%llu build_deferred=%llu "

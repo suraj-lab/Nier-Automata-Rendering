@@ -543,6 +543,14 @@ inline unsigned textures_per_frame = 4;  // NIER_REMIX_LIVE_TEX_PER_FRAME: new G
 inline bool normal_textures = true;
 // NIER_REMIX_LIVE_PBR (default on): metallic and roughness textures derived from the mask channels the shader reads.
 inline bool pbr_textures = true;
+// Item L3: evaluate the game's own material switches (cb flags, material_roles.h overrides) per draw and send the
+// constants they select instead of the texture. Default off until the user picks from the sheet; read at load.
+inline bool flag_constants = [] {
+    const char* v = std::getenv("NIER_REMIX_LIVE_FLAG_CONSTANTS");
+    return v && v[0] == '1' && v[1] == '\0';
+}();
+inline float roughness_floor_constant = 38.f / 255.f;   // the same floor the gloss mask gets (remix_live.cpp)
+inline unsigned long long flag_constant_draws = 0, flag_normal_off_draws = 0;   // reported with the stats
 // NIER_REMIX_LIVE_EFFECTS=1: keep the effects shaders' draws in the scene (default: left out).
 inline bool keep_effects = false;
 // NIER_REMIX_LIVE_GPU_SKIN (Phase 4): a blended skinned draw keeps ONE mesh in bind space and is moved by the frame's
@@ -560,6 +568,7 @@ struct DeferredReadback {
     std::uint32_t id = 0;
     unsigned kind = 0;
 };
+inline unsigned long long deferred_given_up = 0, deferred_written = 0;   // item T1 diagnostics, reported with grey_first
 inline std::vector<DeferredReadback>& deferred_readbacks() {
     static std::vector<DeferredReadback> list;
     return list;
@@ -1140,11 +1149,13 @@ inline void begin_frame(ID3D11DeviceContext* context, unsigned width = 0, unsign
                                                      entry.kind >= 2 ? static_cast<int>((entry.kind - 2) / 2) : -1,
                                                      entry.kind >= 2 && (entry.kind - 2) % 2, entry.id);
                 if (r == TextureResult::Captured) {
+                    ++deferred_written;
                     shared = source;
                     deferred_readbacks().erase(deferred_readbacks().begin() + static_cast<long>(i));
                     continue;
                 }
                 if (r == TextureResult::Unusable) {
+                    ++deferred_given_up;
                     deferred_readbacks().erase(deferred_readbacks().begin() + static_cast<long>(i));
                     continue;
                 }
@@ -1652,6 +1663,7 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
 
     std::uint32_t texture = 0;
     std::uint32_t normal = 0, metallic = 0, roughness = 0;
+    MaterialConstants flag_values;        // item L3: what the shader's flags select instead of a texture
     int albedo_slot = -1;                 // the PS slot the albedo came from (role, or first usable)
     float uv_scale[2] = {1.f, 1.f};       // the shader's own texture repeat at that slot, baked into the mesh UVs
     std::uint64_t uv_bits = 0;            // ... folded into the version, so a changed repeat rebuilds the mesh
@@ -1739,7 +1751,73 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
             resource->Release();
             return r;
         };
-        if (roles.albedo.slot >= 0) {
+        // Item L3: the shader's own switches. A role whose flag is set takes its constant and its texture is not read.
+        bool normal_off = false;
+        if (flag_constants) {
+            const auto lane_value = [&](int cb, int reg, char lane, float& out) {
+                if (cb < 0 || cb >= 14 || reg < 0) return false;
+                const std::size_t k = std::string("xyzw").find(lane);
+                if (k == std::string::npos) return false;
+                ID3D11Buffer* buffer = nullptr;
+                context->PSGetConstantBuffers(static_cast<UINT>(cb), 1, &buffer);
+                if (!buffer) return false;
+                const std::vector<unsigned char>* bytes = buffer_bytes(device, context, buffer);
+                const std::size_t at = static_cast<std::size_t>(reg) * 16 + 4 * k;
+                const bool ok = bytes && at + 4 <= bytes->size();
+                if (ok) std::memcpy(&out, bytes->data() + at, 4);
+                buffer->Release();
+                return ok && std::isfinite(out);
+            };
+            // nullopt: the flag could not be read, and then nothing is overridden (today's behaviour).
+            const auto flag_set = [&](const material_roles::Flag& f) -> std::optional<bool> {
+                float v = 0.f;
+                if (f.cb < 0 || !lane_value(f.cb, f.reg, f.lane, v)) return std::nullopt;
+                return std::strcmp(f.test, "gt") == 0 ? v > 0.f : v != 0.f;
+            };
+            const auto clamp01 = [](float v) { return v < 0.f ? 0.f : v > 1.f ? 1.f : v; };
+            const auto scalar = [&](const material_roles::Constant& c, float& out) {
+                float v = 0.f;
+                if (!c.present || c.lanes.empty() || flag_set(c.flag) != std::optional<bool>(true) ||
+                    !lane_value(c.cb, c.reg, c.lanes[0], v))
+                    return false;
+                out = clamp01(v);
+                return true;
+            };
+            float v = 0.f;
+            if (pbr_textures && scalar(roles.metal.override, v)) flag_values.metallic = v;
+            if (pbr_textures && scalar(roles.gloss.override, v))
+                flag_values.roughness = std::max(roughness_floor_constant, 1.f - v);   // gloss -> roughness, as the mask
+            const material_roles::Constant& a = roles.albedo.override;
+            if (a.present && a.lanes.size() >= 3 && flag_set(a.flag) == std::optional<bool>(true)) {
+                float rgb[3];
+                bool ok = true;
+                for (int k = 0; k < 3 && ok; ++k) ok = lane_value(a.cb, a.reg, a.lanes[static_cast<std::size_t>(k)], rgb[k]);
+                if (ok) for (int k = 0; k < 3; ++k) flag_values.albedo[k] = clamp01(rgb[k]);
+            }
+            if (roles.normal.enable.cb >= 0 && flag_set(roles.normal.enable) == std::optional<bool>(false)) normal_off = true;
+            if (flag_values.any()) {
+                ++flag_constant_draws;
+                // The constants are part of the surface: a change rebuilds the mesh, like a changed UV repeat.
+                std::uint32_t bits[5];
+                std::memcpy(&bits[0], flag_values.albedo, 12);
+                std::memcpy(&bits[3], &flag_values.metallic, 4);
+                std::memcpy(&bits[4], &flag_values.roughness, 4);
+                std::uint64_t h = 0x51ed2705ull;
+                for (const std::uint32_t b : bits) h = hash_value(h ^ b);
+                uv_bits ^= h;
+            }
+            if (normal_off) ++flag_normal_off_draws;
+            if (want_note && (flag_values.any() || normal_off)) {
+                char note[96];
+                std::snprintf(note, sizeof note, " flags:a=%.2f,%.2f,%.2f m=%.2f r=%.2f n=%s", flag_values.albedo[0],
+                              flag_values.albedo[1], flag_values.albedo[2], flag_values.metallic, flag_values.roughness,
+                              normal_off ? "off" : "on");
+                slot_notes += note;
+            }
+        }
+        if (flag_values.has_albedo()) {
+            albedo_slot = roles.albedo.slot;   // the constant replaces the texture (albedoConstant does not multiply)
+        } else if (roles.albedo.slot >= 0) {
             albedo_slot = roles.albedo.slot;
             if (take(roles.albedo.slot, texture, 0) == TextureResult::Deferred) texture_deferred = true;
         } else {
@@ -1783,9 +1861,10 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
             }
         }
         const auto lane = [](const std::string& c) { return c.empty() ? 0u : static_cast<unsigned>(std::string("xyzw").find(c[0])); };
-        if (normal_textures && roles.normal.slot >= 0) take(roles.normal.slot, normal, 1);
-        if (pbr_textures && roles.metal.slot >= 0) take(roles.metal.slot, metallic, 2 + 2 * lane(roles.metal.channels));
-        if (pbr_textures && roles.gloss.slot >= 0)
+        if (normal_textures && roles.normal.slot >= 0 && !normal_off) take(roles.normal.slot, normal, 1);
+        if (pbr_textures && roles.metal.slot >= 0 && flag_values.metallic < 0.f)
+            take(roles.metal.slot, metallic, 2 + 2 * lane(roles.metal.channels));
+        if (pbr_textures && roles.gloss.slot >= 0 && flag_values.roughness < 0.f)
             take(roles.gloss.slot, roughness, 2 + 2 * lane(roles.gloss.channels) + (roles.gloss.invert ? 1 : 0));
         if (want_note) {
             std::string traced;
@@ -2122,6 +2201,7 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
             upload.normal = normal;
             upload.metallic = metallic;
             upload.roughness = roughness;
+            upload.constants = flag_values;
             upload.skinned = gpu_skinning && skinned && !rigid;  // bind space + per-frame palette, or baked above
             upload.blended = blended;
             upload.sky = sky_extent;
