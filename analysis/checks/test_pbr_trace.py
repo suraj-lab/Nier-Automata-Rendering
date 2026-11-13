@@ -85,11 +85,39 @@ mul r0.xyzw, r2.xyzw, v1.xyzw
 mov_sat o0.w, r0.w
 ret
 """
-WANT_SYNTH = {'metal': {'slot': 2, 'channels': 'x'}, 'albedo': {'slot': 0, 'channels': 'xyz'},
+# `override`/`enable` (L3): the synthetic shader tests the flag `cb1[0].y != 0`, and inside that branch replaces the
+# metal lane with the constant `cb1[5].y`. Read by hand from the fixture above: `ne r0.x, l(0), cb1[0].y` -> if_nz ->
+# `mov r7.y, cb1[5].y`, where r7.y is the mask channel the F0 lerp uses (t2.x through the r7.xyzw <- t2.zxyw sample).
+WANT_SYNTH = {'metal': {'slot': 2, 'channels': 'x',
+                        'override': {'flag': {'cb': 1, 'register': 0, 'lane': 'y', 'test': 'ne'},
+                                     'cb': 1, 'register': 5, 'lanes': 'y'}},
+              'albedo': {'slot': 0, 'channels': 'xyz'},
               'gloss': {'slot': 2, 'channels': 'y', 'invert': True}, 'normal': {'slot': 3, 'channels': 'xyz'},
               'detail_normal': {'slot': 4, 'channels': 'xy'}}
-MAIN = dict(WANT_SYNTH)
-CHARACTER = {**WANT_SYNTH, 'metal': {'slot': 1, 'channels': 'x'}, 'gloss': {'slot': 1, 'channels': 'y', 'invert': True}}
+# L3 overrides on the game's own lit shaders (all three `lit/*` here are the same family). Read by hand in
+# runtime/pbr-re/lit/ps_1874571568.asm: `ne r10.xyz, l(0), cb1[0].yzw` at :91, then `mov r1.xyz, cb1[4].xyzx` under
+# cb1[0].y (:93), `mov r7.z, cb1[5].x` under cb1[0].z (:96), `mov r7.y, cb1[5].y` under cb1[0].w (:99); the normal
+# sample sits under `cb1[0].x` (:66-72) and the detail blend under `cb1[2].z` (:73-79). This is what PLAN_2026-11-13
+# section 11.8 claims, now held by a gate rather than by a note.
+LIT_OVERRIDE = {
+    'albedo': {'slot': 0, 'channels': 'xyz', 'override': {'flag': {'cb': 1, 'register': 0, 'lane': 'y', 'test': 'ne'},
+                                                          'cb': 1, 'register': 4, 'lanes': 'xyz'}},
+    'metal': {'slot': 2, 'channels': 'x', 'override': {'flag': {'cb': 1, 'register': 0, 'lane': 'w', 'test': 'ne'},
+                                                       'cb': 1, 'register': 5, 'lanes': 'y'}},
+    'gloss': {'slot': 2, 'channels': 'y', 'invert': True,
+              'override': {'flag': {'cb': 1, 'register': 0, 'lane': 'z', 'test': 'ne'}, 'cb': 1, 'register': 5, 'lanes': 'x'}},
+    'normal': {'slot': 3, 'channels': 'xyz', 'enable': {'cb': 1, 'register': 0, 'lane': 'x', 'test': 'ne'}},
+    'detail_normal': {'slot': 4, 'channels': 'xy', 'enable': {'cb': 1, 'register': 2, 'lane': 'z', 'test': 'ne'}},
+}
+MAIN = {**WANT_SYNTH, **LIT_OVERRIDE}
+CHARACTER = {**WANT_SYNTH, **LIT_OVERRIDE,
+             'metal': {'slot': 1, 'channels': 'x', 'override': {'flag': {'cb': 1, 'register': 0, 'lane': 'w', 'test': 'ne'},
+                                                                'cb': 1, 'register': 4, 'lanes': 'y'}},
+             'gloss': {'slot': 1, 'channels': 'y', 'invert': True,
+                       'override': {'flag': {'cb': 1, 'register': 0, 'lane': 'z', 'test': 'ne'},
+                                    'cb': 1, 'register': 4, 'lanes': 'x'}},
+             'albedo': {'slot': 0, 'channels': 'xyz', 'override': {'flag': {'cb': 1, 'register': 0, 'lane': 'y', 'test': 'ne'},
+                                                                   'cb': 1, 'register': 3, 'lanes': 'xyz'}}}
 REAL = {'lit/ps_1874571568': MAIN, 'lit/ps_1872570064': MAIN, 'lit/ps_1840406672': MAIN,
         'named/ps_550294968008': CHARACTER, 'named/ps_550384631240': {}}
 
@@ -119,6 +147,8 @@ def main():
         got = pbr_trace.roles((real / f'{k}.asm').read_text(errors='replace'))
         assert got == REAL[k], f'{k}: {got} != {REAL[k]}'
     checks.append(f'{len(present)}/{len(REAL)} hand-traced game shaders')
+    n = sum(1 for k in present if 'metal' in REAL[k] and REAL[k]['metal'].get('override'))
+    checks.append(f'{n}/{len(present)} of them carry the cb1 flag overrides (L3)')
     print(json.dumps({'passed': True, 'checks': checks}))
     return 0
 

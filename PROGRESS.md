@@ -1,5 +1,141 @@
 # NieR:Automata Rendering — Progress & Resume
 
+## START HERE (2026-11-13, end of session 2): the game runs unattended, and the first truth pair exists
+
+Uncommitted on `main`. Suite **87/87** (`analysis/runtime/suite-s17`, 192 s). Proxy DLL **`55211a35…`**, installed in
+the game folder through the hash-pinned installer (rollback `backups/live-scene-20261113T115530594912Z`).
+`analysis/PLAN_2026-11-13.md` holds the plan and the live Status column; this is the dated entry.
+
+- **Track G is no longer a risk.** G1: the game starts headless on the 6800 XT (Steam must be running: SteamStub DRM).
+  **G2: three consecutive cold starts reach the Resistance Camp with nobody at the keyboard**
+  (`g2-load4`, `g2-repeat1`, `g2-repeat2`) with `NIER_REMIX_LIVE_MENU_DRIVE`. Two things were needed beyond the plan's
+  sketch: the pad alone never reaches NieR's menus, so a menu press also arrives as a DirectInput key (A -> Enter,
+  d-pad -> arrows, in both the immediate state and the buffered event list); and the confirm dialog defaults to "No",
+  so a LEFT press goes between the confirm and the Enter. **G3**: `NIER_CAPTURE_AT` arms F9's capture without a key;
+  `frame_12935626` (570 draws, 214 textures) came out of a real run, packs and replays (60.0 fps, 900 frames).
+  **G4**: `/tmp/g4-pair.jpg` is the game's own frame against our replay of the same spot.
+- **The truth pair already says something**: our picture is 33% brighter at the median (0.495 against 0.372), 51% higher
+  at the 95th percentile, and 40% less saturated (0.108 against 0.180) than the game. That is now the target for L1's
+  final pass instead of a memory.
+- **L1, L2, L3 steps 1-2 are done** (variant 4 in the four confs; normal maps on by default; the cb1 override tracer
+  ported to C++ and gated). The **fast profile is rejected on data**: `enableSecondaryBounces = False` gives +20-34%
+  but removes the light (23275488: median luma 0.000, 76.8% crushed).
+- **Next in the plan's order: T1** (grey at once, material swap instead of a mesh rebuild) — it is the gate on L3 steps
+  3-5, which touch the same two files. Then L4's table, S1's stack, L3 steps 3-7, L6.
+- Unattended game runs go through `analysis/runtime/game-runs/game_run.py` (screenshots, menu drive, capture timer,
+  save guard). gamescope calls `setsid`, so never wrap it in `timeout`; the runner kills its own process group by a
+  `NIER_RUN_LABEL` marker, and hashes the real save before and after.
+
+## START HERE (2026-11-13, end of session): L1 chosen and applied, L2 on by default, L3 steps 1-2 landed, G1 starts
+
+Uncommitted on `main`. Suite **87/87** (`analysis/runtime/suite-s13`, 235 s). Proxy DLL **`141629a8694f050f`**.
+`analysis/PLAN_2026-11-13.md` is the plan and its Status column is the live state; this is the dated entry.
+
+- **L1 done for now.** Exposure/tone mapping swept (14 runs), user picked "3 or 4", variant 4 applied to all four
+  confs: global tonemap, `dynamicRange 15`, colour grading on, `saturation 1.3`. Performance guard with it:
+  30632051 28.9 (guard 29.0), 41686139 42.8 (42.9), 23275488 49.4 (49.3) — free within 0.3%.
+  **The fast profile is rejected on data**: with the chosen exposure, `enableSecondaryBounces = False` gives +20-34%
+  fps but removes the light (`23275488` median luma 0.000, 76.8% crushed). Sheets `l1-*.jpg` and `l1fast-*.jpg` on the
+  laptop's `Downloads`, runs `l1-*`, `l1b-*`, `l1c-*`, `l1f-*`.
+- **L2 done.** Normal maps on by default; orientation answered from the game's bytecode and Remix's source (no flip),
+  written up in `analysis/replay/research-2026-11-13/normal_handedness.md`; user could not see a difference, which is
+  what the maths predicts. `l2-default-30632051`: 28.6 fps, luma unchanged, `textures` 452 -> 600.
+- **L3 steps 1-2 done.** The parked Python patch is applied and its fixtures were hand-read; the C++ port went to a
+  cloud `worker` against a frozen gate and the lead reran it (3,685/3,685 identical, mutation-checked). New suite gate
+  `checks/test_material_roles_override.py`. A `reviewer` pass found no divergence from the Python and four notes, all
+  closed in the header (literal-only `Flag::test`, a `cb_lane` guard, one-shot `Tracer::run`, and the inherited `if_z`
+  blind spot written where L3 step 3 will read `enable`). Suite 87/87 again after those edits (`runtime/suite-s14`).
+  Next: L3 steps 3-5, which share `live_capture.h`/`live_scene.h` with T1, so **T1 is next** in the plan's order.
+- **G1: the game runs headless on the 6800 XT and needs Steam** (SteamStub DRM). Save backed up with hashes, prefix is a
+  copy, game folder untouched apart from the game's own logs. Steam was started for the runs; a picture of the title
+  screen still needs the Present-hook dump, i.e. G3.
+- Open questions for the user: (a) may the current DLL be installed into the game folder through the hash-pinned
+  installer, for G3/G4; (b) eventually, T1's cutout-in-grey question.
+
+## START HERE (2026-11-13, later): normal maps on by default; L1 measured; the game starts headless with Steam
+
+Uncommitted on `main`. Suite **86/86** (`analysis/runtime/suite-s11`, 183 s). Proxy DLL **`141629a8694f050f`**.
+Work follows `analysis/PLAN_2026-11-13.md`; the Status column there is the live state, this is the dated entry §12.1
+asks for.
+
+- **L2 done, default flipped.** Normal maps are captured by default (`NIER_REMIX_LIVE_NORMAL=0` rolls back). The
+  orientation question is answered from the game's bytecode and Remix's source, not by eye: red runs along the vertex
+  tangent, green along `N x T`, blue along the normal (`ps_550290354696.asm:53-58`); Remix uses `T = dP/du`,
+  `B = dP/dv` and unsigned-octahedral decode, so no flip by default. Note in
+  `analysis/replay/research-2026-11-13/normal_handedness.md`. Replay `l2-default-30632051`: 28.6 fps against 29.0,
+  luma unchanged, diff 5.14 against the no-normals baseline, `textures` 452 -> 600, mesh bytes flat.
+- **L1 measured, pick pending.** Ten single-key runs on `30632051` and four on `41686139` (`l1-*`, `l1b-*`,
+  `analysis/replay/l1_table.py`). Survivors: local exposure 0.5, global tone map with saturation 1.15 and 1.30;
+  `evMax 3/2` changed nothing (auto exposure is not the limit), `highlights/shadows`, `useLegacyACES=False` and dome
+  strength 1.0 were discarded by the plan's own clipping rule. Sheets: `/tmp/l1-30632051.jpg`, `/tmp/l1-41686139.jpg`.
+- **G1: the game starts headless on the RX 6800 XT, and it needs Steam.** Without Steam the game's loader stops at
+  `Waiting for SteamStub DRM to finish`; with Steam running it reaches a rendering state (DXVK device on the 6800 XT,
+  our proxy's `part3 redirect: first slot-0 redirect frame=556`). Steam was started with
+  `DISPLAY=:1 WAYLAND_DISPLAY=wayland-1 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus steam`, because this
+  agent session has no DISPLAY and Xwayland is on `:1`. The real prefix was never written: the runs use a copy,
+  `analysis/runtime/game-runs/prefix-2026-11-13/`, and the save is backed up with hashes in
+  `analysis/runtime/game-runs/save-backup-2026-11-13/` (`SlotData_0.dat` `1b76c94f…`, unchanged). Launch script:
+  `analysis/runtime/game-runs/g1-launch.sh`. **A picture of the title screen is still missing** (gamescopectl cannot
+  reach the headless socket, grim reports no capture protocol): the route is a Present-hook dump, i.e. G3, which
+  needs the current DLL installed.
+- **L1/L2/G1 evidence** is written into the plan sections next to each item; nothing was committed.
+
+
+## START HERE (2026-11-13): UNORM albedo is the default; the look phase is planned, not started
+
+Uncommitted on `main`, nothing installed anywhere, no laptop or game run. Suite **86/86** (`analysis/runtime/suite-s9`,
+182 s). Proxy DLL **`3878183acf807878`**. **Order of work: `analysis/PLAN_2026-11-13.md`** (plan only: the user asked
+that its author does not execute it; it carries the research in section 11 and the method in section 12).
+
+- **Albedo DDS is written untagged (UNORM) by default.** The user compared both and said UNORM looks more accurate to
+  the game. `NIER_REMIX_LIVE_ALBEDO_UNORM=0` rolls back. Gate `checks/test_live_albedo_tag.py`.
+- **Measured for the plan:** no normal map reaches Remix (opt-in, never set in replay; free when on); by triangles,
+  58-62% of what we send has real roughness/metal maps, 9-15% a 32x32 placeholder (chrome), 15-19% constants only,
+  4-16% no material at all (`analysis/replay/material_scoreboard.py`); UNORM over-exposes the camp (median luma
+  0.32 -> 0.53), so exposure is the first look item.
+- **Texture churn is not a steady-state problem:** rebuilds go to 0 per stats window on every capture; the counters
+  are cumulative. The cost is one extra build per mesh at first sight (60% of builds).
+- **Read in the runtime source:** a material is resolved by handle on every draw, and a repeated CreateMaterial is
+  ignored, so a landed texture needs destroy + create of the material, not a mesh rebuild; the exit hang's likely
+  cause is a shader-prewarm wait with no timeout (not confirmed by a stack).
+- **User decisions:** the game may run on this desktop but nobody can interact with it (so runs must be scripted:
+  Track G, not built); a mesh without its texture shows at once in grey; a hand-kept shader table is acceptable; the
+  fast profile is judged after the exposure pass; Steam may be started; the only save is at the Resistance Camp.
+- New tools: `analysis/replay/frame_tools.py` (shot stats, diff, comparison sheets), `material_scoreboard.py`.
+  `test_live_map_redirect.py` now reads the settled `open` counter (one false failure under suite load).
+
+## 2026-11-12 night (offline, replay only): replay baselines re-done, upscaler root cause, shim runtime fixed, soak green
+
+Uncommitted on `main`, nothing installed anywhere, no laptop or game run. Suite **85/85** (`analysis/runtime/suite-s6`,
+188 s). Proxy DLL **`3c487b0ae2a6fcac`**. Current order of work: `analysis/PLAN_2026-11-12.md`; per-run numbers:
+`analysis/replay/README.md`.
+
+- **P1 had already landed** (map redirect): game frame on 30632051 73 -> 9.3 ms in replay.
+- **The upscaler was never running.** `rtx.dlssPreset` defaults to `On`, which writes `upscalerType = DLSS` into the
+  runtime's Derived layer above `rtx.conf`; without NGX the runtime falls back to TAAU at `resolutionScale` 0.5. So every
+  earlier replay, and every earlier laptop run with an XeSS/NIS key in a conf, rendered TAAU. `rtx.dlssPreset = 2`
+  restores the conf's upscaler; XeSS Performance then gives 30632051 25.1 fps, Ultra Performance 31.8, Native AA 8.2.
+- **The camera was a per-frame staging read.** A constant buffer written once, before capture armed, has no mirror, so
+  every game frame waited on a staging copy of it: 41686139's game frame 26.5 -> 4.2 ms, 37.7 -> 42.9 fps. It is read
+  once now and kept (`test_live_read_counters.py::camera-static`).
+- **A shim runtime can load.** remix-1.6.1's `rt/d3d9.dll` loads `d3d9_x64.dll` with a plain `LoadLibraryW`, which cannot
+  see that folder as a dependency directory: the load fails with 126 and the shim ends the process from inside
+  `InitializeLibrary` (reproduced: dead after 13 frames, nothing in our log). `SetDllDirectoryW(runtime folder)` fixes
+  it: the same runtime now runs at 43.9 fps, 700/700 frames. A probe refuses a folder that still cannot load, with one
+  log line, instead of letting the process die (`test_remix_live.py::shim-incomplete`, red on the mutated DLL).
+- **Small meshes were the scene's cost.** 49-52% of scene draws are under 1,000 triangles, so by default they go into the
+  merged dynamic BLAS rebuilt every frame. `rtx.minPrimsInDynamicBLAS = 0`: 30632051 25.1 -> 29.2, 21396979 49.2 -> 52.4,
+  41686139 42.9 -> 43.4, picture unchanged. 300 and 3000 are worse.
+- **No duplicate submissions left.** After the prepass rule, no draw in either capture repeats another's geometry *and*
+  pixel shader *and* constant buffers; the repeats that remain are the same mesh under a different transform. P5 closed.
+- **Soak:** two captures, switch every 300 frames, 60,000 frames, 1,074 s: exit 0, 43.4 fps median, RSS 1.87-1.98 GB with
+  no trend, meshes bounded at 1,835. Switch frames are the worst (p99 84.8 ms, max 202 ms).
+- **Readback is not worth removing:** it is the worker waiting for the path-traced frame, not a copy on the game thread,
+  so a direct present would not raise the frame rate. P8 decided.
+- **Review** (`reviewer` on the whole diff): two correctness findings fixed (a redirect could outlive its mapping; a
+  buffer could be read while the game had it mapped), plus the profiler's races, the probe unloading the real runtime,
+  and small items. Recorded in `PLAN_2026-11-12.md` section E, with what was left alone and why.
+
 ## START HERE / PAUSED (2026-11-04 night): keyboard fixed live; frametime2 done; operator studying, no more runs
 
 Laptop restored and hash-verified (`d3d11.dll` original `6ba266d64a8f6776`). Nothing installed. Uncommitted on `main`.

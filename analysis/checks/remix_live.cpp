@@ -18,6 +18,7 @@
 #include "camera_capture.h"
 #include "draw_probe.h"
 #include "live_capture.h"
+#include "camera_orbit.h"
 #include "draw_capture.h"
 #include "live_scene.h"
 #include "dropout_watch.h"
@@ -42,7 +43,33 @@ bool live_enabled = false;  // NIER_REMIX_LIVE=1: build the scene from the game'
 std::uint64_t live_sequence = 0;        // worker only
 std::wstring live_texture_dir;
 std::size_t live_mesh_budget = std::size_t(512) << 20;
-DWORD tex_write_delay_ms = 0;  // NIER_REMIX_LIVE_TEX_WRITE_DELAY_MS, test switch only
+// NIER_REMIX_LIVE_TEX_WRITE_DELAY_MS, test switch only. Read at load, not by the initialiser below: the session's first
+// textures are captured before that runs, and a delay that arrives late lets the first material name a file already on disk.
+// Item T2: a moving camera for motion tests. Read at load for the same reason as the texture delay.
+float camera_orbit_deg_per_s = 0.f, camera_orbit_units_per_s = 0.f;
+unsigned long long camera_orbit_started = 0;
+
+inline void parse_camera_orbit() {   // "<degrees per second>[:<units per second>]"
+    const wchar_t* v = _wgetenv(L"NIER_REMIX_LIVE_CAMERA_ORBIT");
+    if (!v || !*v) return;
+    const std::wstring text(v);
+    const std::size_t colon = text.find(L':');
+    const std::wstring deg = text.substr(0, colon);
+    camera_orbit_deg_per_s = static_cast<float>(std::wcstod(deg.c_str(), nullptr));
+    camera_orbit_units_per_s = colon == std::wstring::npos ? 0.f
+                                                          : static_cast<float>(std::wcstod(text.c_str() + colon + 1, nullptr));
+}
+
+const bool camera_orbit_configured = [] {
+    parse_camera_orbit();
+    const wchar_t* v = _wgetenv(L"NIER_REMIX_LIVE_CAMERA_ORBIT");
+    return v && *v;
+}();
+
+DWORD tex_write_delay_ms = [] {
+    const wchar_t* v = _wgetenv(L"NIER_REMIX_LIVE_TEX_WRITE_DELAY_MS");
+    return v ? static_cast<DWORD>(std::min<unsigned long long>(_wcstoui64(v, nullptr, 10), 5000)) : 0u;
+}();
 DWORD test_frame_ms = 0;       // NIER_REMIX_TEST_FRAME_MS, test switch only: a worker slower than the game
 // Game presents that showed an OLDER Remix frame than one already shown (live 2026-10-31: the window flipped
 // between the newest and the previous path-traced frame, so the camera snapped back and characters jittered).
@@ -53,6 +80,11 @@ unsigned long long stats_every = 300;  // NIER_REMIX_LIVE_STATS_EVERY
 // if the captured camera jumps on exactly those frames, a pass other than the main view supplied it.
 bool camera_log = false;
 bool normal_octahedral = false, normal_flip_y = false;
+// Albedo DDS files are written untagged (UNORM), not with the game's sRGB tag: the runtime decodes every albedo in its
+// own shader (opaque_surface_material_interaction.slangh:750-753), so an sRGB tag decodes twice and crushes surface
+// detail. Decided on the A/B of 2026-11-13 ("UNORM looks more accurate to the game", runs t2-unorm-30632051 and
+// t2-unorm-41686139 against p6e-30632051 / p6e-41686139). NIER_REMIX_LIVE_ALBEDO_UNORM=0 restores the game's tag.
+bool albedo_unorm = true;
 bool mask_convert_failed = false;  // logged once
 // NIER_REMIX_LIVE_ROUGHNESS_FLOOR (0..1, default 0.15): lowest roughness sent, so near-mirror gloss stays a surface.
 unsigned char roughness_floor = 38;
@@ -113,6 +145,40 @@ void watchdog() {
     }
 }
 
+// Shim runtimes (remix-1.6.1's rt/d3d9.dll) load their implementation, d3d9_x64.dll, from their own folder with a plain
+// LoadLibraryW, which does not search the DLL's own folder for the implementation's dependencies (usd_*.dll, libxess.dll,
+// rtxio.dll, ...). The load then fails and the shim ends the whole process from inside InitializeLibrary: 2026-11-12 the
+// replay died after 13 frames with no line of ours. Verified with a probe under the replay's Wine: the same
+// LoadLibraryW fails with 126 without SetDllDirectoryW(runtime folder) and succeeds with it.
+// The DLL directory stays set for the session so the runtime's later loads resolve too; only a failed load restores it.
+// Returns why the runtime cannot be used, empty when it can.
+std::wstring runtime_incomplete(const std::wstring& runtime) {
+    const std::size_t slash = runtime.find_last_of(L"\\/");
+    if (slash == std::wstring::npos) return std::wstring();
+    const std::wstring dir = runtime.substr(0, slash + 1);
+    const std::wstring implementation = dir + L"d3d9_x64.dll";
+    if (GetFileAttributesW(implementation.c_str()) == INVALID_FILE_ATTRIBUTES) return std::wstring();  // not a shim
+    wchar_t previous[512] = {};
+    const DWORD previous_size = GetDllDirectoryW(512, previous);
+    // shortcut: this is process-wide and stays set for the session, which also drops the current directory from the
+    // search order for the game's own later loads. Upgrade to AddDllDirectory + a LOAD_LIBRARY_SEARCH_USER_DIRS load if
+    // a game is ever found loading a bare name from its working directory.
+    if (!SetDllDirectoryW(dir.c_str())) {
+        wchar_t line[512];
+        _snwprintf_s(line, _TRUNCATE, L"cannot add %ls to the DLL search path (Win32 error %lu)", dir.c_str(), GetLastError());
+        return line;
+    }
+    // Deliberately not freed: the shim's own load then finds the module already in the process and only bumps its
+    // reference count, instead of this probe running the runtime's DllMain detach and unloading it first.
+    HMODULE probe = LoadLibraryW(implementation.c_str());
+    if (probe) return std::wstring();
+    const DWORD error = GetLastError();
+    if (previous_size) SetDllDirectoryW(previous[0] ? previous : nullptr);
+    wchar_t line[512];
+    _snwprintf_s(line, _TRUNCATE, L"%ls (Win32 error %lu)", implementation.c_str(), error);
+    return line;
+}
+
 void fail(const char* why, long code = 0) {
     camera_capture::set_enabled(false);
     live_capture::set_permitted(false);
@@ -161,9 +227,12 @@ State configure() {
             live_capture::build_budget_us = std::min<unsigned long long>(_wcstoui64(us.c_str(), nullptr, 10), 1000000);
         if (const std::wstring ms = env(L"NIER_REMIX_TEST_FRAME_MS"); !ms.empty())  // test switch
             test_frame_ms = static_cast<DWORD>(std::min<unsigned long long>(_wcstoui64(ms.c_str(), nullptr, 10), 2000));
-        if (const std::wstring ms = env(L"NIER_REMIX_LIVE_TEX_WRITE_DELAY_MS"); !ms.empty())  // test switch
-            tex_write_delay_ms = static_cast<DWORD>(std::min<unsigned long long>(_wcstoui64(ms.c_str(), nullptr, 10), 5000));
         live_capture::async_reads = env(L"NIER_REMIX_LIVE_ASYNC_READS") == L"1";
+        live_capture::redirect_maps = env(L"NIER_REMIX_LIVE_MAP_REDIRECT") != L"0";
+        live_capture::observe_profile = env(L"NIER_REMIX_LIVE_PROFILE") == L"1";
+        albedo_unorm = env(L"NIER_REMIX_LIVE_ALBEDO_UNORM") != L"0";
+        if (const std::wstring n = env(L"NIER_REMIX_LIVE_TEARDOWN_AT_MAP"); !n.empty())  // test switch
+            live_capture::teardown_at_map = _wcstoui64(n.c_str(), nullptr, 10);
         if (const std::wstring polls = env(L"NIER_REMIX_LIVE_READ_LATENCY"); !polls.empty())  // test switch
             live_capture::read_latency = static_cast<unsigned>(std::min<unsigned long long>(_wcstoui64(polls.c_str(), nullptr, 10), 1000));
         if (const std::wstring fails = env(L"NIER_REMIX_LIVE_FAIL_VB_READS"); !fails.empty())
@@ -177,8 +246,10 @@ State configure() {
         // Rollback switches for the live test (analysis/ROADMAP.md): no HUD capture/replay; drop the sky dome again.
         live_capture::hud_enabled = env(L"NIER_REMIX_LIVE_NO_HUD") != L"1";
         live_capture::sky_enabled = env(L"NIER_REMIX_LIVE_NO_SKY") != L"1";
-        // NIER_REMIX_LIVE_NORMAL=1: capture the draw's slot-4 g_NormalTexture as the material's normal map too.
-        live_capture::normal_textures = env(L"NIER_REMIX_LIVE_NORMAL") == L"1";
+        // Normal maps are captured by default: the slot the draw's own shader decodes as a normal (material_roles.h),
+        // converted to the unsigned-octahedral form Remix decodes. NIER_REMIX_LIVE_NORMAL=0 is the rollback. Cost is
+        // texture files only: 28.8 against 29.0 fps on 30632051, 43.4 against 42.9 on 41686139 (n1-normal-*).
+        live_capture::normal_textures = env(L"NIER_REMIX_LIVE_NORMAL") != L"0";
         live_capture::pbr_textures = env(L"NIER_REMIX_LIVE_PBR") != L"0";
         if (const std::wstring f = env(L"NIER_REMIX_LIVE_ROUGHNESS_FLOOR"); !f.empty()) {
             const double v = std::wcstod(f.c_str(), nullptr);
@@ -229,6 +300,10 @@ State configure() {
         // NIER_REMIX_LIVE_NO_ALPHA_TEST=1: the renderer-side A/B, since the capture side is measured healthy.
         live_scene::alpha_test_enabled = env(L"NIER_REMIX_LIVE_NO_ALPHA_TEST") != L"1";
         live_scene::hold_enabled = env(L"NIER_REMIX_LIVE_HOLD") != L"0";
+        // Item T1 switches are read at load (live_scene.h / live_capture.h): the first frames are captured before this
+        // initialiser runs, so setting them here would be too late for the session's first mesh.
+
+
         // Test switch: flip the hold every N seconds, so its cost is measured in one view under one machine state
         // (between runs, Remix fps in the same view varied 11-18 with and without the hold).
         if (const std::wstring s = env(L"NIER_REMIX_LIVE_HOLD_TOGGLE_S"); !s.empty())
@@ -379,6 +454,11 @@ struct TextureWriter {
                               pixels->height);
             }
             return false;
+        }
+        if (albedo_unorm && file.channel < 0 && !file.normal && pixels->format != texture_capture::without_srgb(pixels->format)) {
+            auto retagged = std::make_shared<texture_capture::Texture>(*pixels);
+            retagged->format = texture_capture::without_srgb(retagged->format);
+            pixels = retagged;
         }
         if (!texture_capture::write_dds(file.path.c_str(), *pixels)) {
             if (!texture_write_failed) {
@@ -657,6 +737,14 @@ struct Worker {
         stage("scene parse");
         if (!nscn::parse(read_file(scene_path), scene)) { fail("scene file missing or invalid"); return false; }
         stage("runtime load");
+        // A shim runtime (remix-1.6.1's d3d9.dll) loads its implementation, d3d9_x64.dll, from its own folder inside
+        // InitializeLibrary and ends the process when that fails: an incomplete runtime folder killed the replay after
+        // 13 frames with no line of ours (2026-11-12). Probe the implementation first, so this stays a fallback.
+        if (const std::wstring why = runtime_incomplete(runtime_path); !why.empty()) {
+            logger.load()("remix: runtime incomplete: %ls", why.c_str());
+            fail("runtime incomplete");
+            return false;
+        }
         const remixapi_ErrorCode loaded = remixapi_lib_loadRemixDllAndInitialize(runtime_path.c_str(), &api, &module);
         if (loaded) { fail("runtime load", loaded); return false; }
         if (!api.dxvk_CreateD3D9 || !api.dxvk_RegisterD3D9Device || !api.dxvk_CopyRenderingOutput || !api.Startup ||
@@ -709,6 +797,23 @@ struct Worker {
         const auto camera = camera_capture::latest();
         if (camera.sequence != camera_sequence) {
             std::memcpy(scene.camera, camera.camera.data(), sizeof scene.camera);
+            // Item T2: NIER_REMIX_LIVE_CAMERA_ORBIT=<deg/s>[:<units/s>] sweeps the view from the first frame, so motion
+            // vectors, ghosting and upscaler stability can be exercised on a frozen capture (camera_orbit.h, gated).
+            if (camera_orbit_deg_per_s != 0.f || camera_orbit_units_per_s != 0.f) {
+                if (!camera_orbit_started) { camera_orbit_started = live_capture::now_us(); }
+                const double seconds = double(live_capture::now_us() - camera_orbit_started) / 1e6;
+                std::array<float, 14> moved{};
+                std::memcpy(moved.data(), scene.camera, sizeof scene.camera);
+                if (camera_orbit::apply(moved, seconds, camera_orbit_deg_per_s, camera_orbit_units_per_s)) {
+                    std::memcpy(scene.camera, moved.data(), sizeof scene.camera);
+                    static bool logged = false;
+                    if (!logged) {
+                        logged = true;
+                        logger.load()("remix: camera orbit %.1f deg/s dolly %.2f units/s", camera_orbit_deg_per_s,
+                                      camera_orbit_units_per_s);
+                    }
+                }
+            }
             if (!camera_sequence)
                 logger.load()("remix: live camera first sample seq=%llu pos=%.3f,%.3f,%.3f fov=%.2f",
                               static_cast<unsigned long long>(camera.sequence), camera.camera[0], camera.camera[1],
@@ -811,11 +916,13 @@ struct Worker {
                 if (!input_drive::script.empty() && !input_drive::start_us.load(std::memory_order_relaxed) &&
                     live.frame_instances >= drive_min_instances) {
                     input_drive::start_us.store(input_drive::now_us(), std::memory_order_release);
+                    input_drive::menu_active.store(false, std::memory_order_release);  // the menus are behind us
                     logger.load()("remix: drive start phases=%zu instances=%llu", input_drive::script.size(),
                                   live.frame_instances);
                 }
                 t_submit += live_capture::now_us() - s0;
                 if (seq % stats_every == 1) {
+                    const unsigned long long frames_in_window = live_capture::game_frames.load(std::memory_order_relaxed);
                     // One accounting line per window: every draw the hook saw, by the reason it produced no upload, and
                     // every instance by whether it was actually drawn. FO4 prints the same shape as pendingByGate.
                     {
@@ -899,6 +1006,28 @@ struct Worker {
                                   live_capture::created_captures.load(), live_capture::blocking_reads.load(),
                                   live_capture::pending_polls.load(), live_capture::read_waits.load(),
                                   live_capture::stale_skips.load());
+                    if (live_capture::observe_profile) {  // where the draw hook's time goes, us per game frame
+                        const unsigned long long frames = std::max(1ull, frames_in_window);
+                        const unsigned long long all = live_capture::capture_total_us.exchange(0);
+                        unsigned long long phases[4];
+                        for (unsigned i = 0; i < 4; ++i) phases[i] = live_capture::observe_phase_us[i].exchange(0);
+                        // The phases are summed across threads, so they can overrun the total by a sample; clamp.
+                        const unsigned long long sum = phases[0] + phases[1] + phases[2] + phases[3];
+                        logger.load()("remix: live observe us/frame state=%llu ia=%llu key=%llu material=%llu rest=%llu",
+                                      phases[0] / frames, phases[1] / frames, phases[2] / frames, phases[3] / frames,
+                                      (all > sum ? all - sum : 0) / frames);
+                    }
+                    logger.load()("remix: live maps redirected=%llu read_back_kb=%llu open=%u",  // read_back: bytes copied out of driver mappings
+                                  live_capture::redirected_maps.load(), live_capture::mapped_read_bytes.load() >> 10,
+                                  live_capture::redirected_open.load());
+                    // Per-shader draw table (items L4/L6/L7): the heaviest shaders by triangles, with the state that decides
+                    // what they are - opaque, blended (raw D3D11 src/dest), alpha-tested, or an effect.
+                    for (const auto& entry : live_capture::top_shaders(12)) {
+                        const auto& t = entry.second;
+                        logger.load()("remix: shader ps=%llx draws=%llu tris=%llu blend=%s:%u>%u alpha=%llu effect=%llu",
+                                      entry.first, t.draws, t.triangles, t.blended ? "on" : "off", t.src_blend,
+                                      t.dest_blend, t.alpha_tested, t.effects);
+                    }
                     logger.load()("remix: live draws=%u instances=%u meshes=%u built=%u evicted=%u identical=%u "
                                   "blended=%u untextured=%u textures=%u hud=%u small_viewport=%u scene=%ux%u skipped_pass=%u "
                                   "fallbacks=%u mesh_bytes=%llu dropped=%u lights=%u light_creates=%u sky=%u prepass=%u alpha_tested=%u light_state=0x%x",
@@ -1338,11 +1467,19 @@ void begin_game_frame(IDXGISwapChain* swapchain) {
         // Hooks only for a live session: with Remix or live capture off, the game's Map/Unmap/Copy calls stay untouched.
         live_capture::install(context.get());
         // The camera from the CPU mirror of the game's constant-buffer writes: no GPU wait, no frame without a camera.
-        camera_capture::cpu_bytes = [](ID3D11Buffer* buffer, unsigned char* out, std::size_t size) {
+        // A buffer with no mirror yet (written before capture armed, and maybe never again: replay 41686139) is read
+        // once and kept, instead of a staging read on every game frame.
+        camera_capture::cpu_bytes = [](ID3D11DeviceContext* context, ID3D11Buffer* buffer, unsigned char* out, std::size_t size) {
+            ID3D11Device* device = nullptr;
+            context->GetDevice(&device);
+            if (!device) return false;
             std::lock_guard<std::recursive_mutex> lock(live_capture::mutex());
-            const live_capture::Shadow* shadow = live_capture::find_shadow(buffer);
-            if (!shadow || shadow->bytes.size() < size) return false;
-            std::memcpy(out, shadow->bytes.data(), size);
+            // After a teardown nothing may be read into the mirror again (it would pin buffers nobody releases).
+            const std::vector<unsigned char>* bytes = live_capture::permitted.load(std::memory_order_acquire)
+                                                          ? live_capture::buffer_bytes(device, context, buffer) : nullptr;
+            device->Release();
+            if (!bytes || bytes->size() < size) return false;
+            std::memcpy(out, bytes->data(), size);
             return true;
         };
         // Another layer resets the draw slots every frame; repair them when render targets are bound, before drawing.

@@ -27,7 +27,7 @@ import test_nscn_scene as ts
 tr.ENV_KEYS = tuple(tr.ENV_KEYS) + ('NIER_REMIX_LIVE_CAMERA_LOG', 'NIER_REMIX_LIVE', 'NIER_REMIX_LIVE_TEX', 'NIER_REMIX_LIVE_STATS_EVERY',
                                      'NIER_REMIX_LIVE_MAX_WRITE_KB', 'NIER_REMIX_LIVE_SHADOW_KB', 'NIER_REMIX_LIVE_BUDGET_KB',
                                      'NIER_REMIX_LIVE_ASYNC_READS', 'NIER_REMIX_LIVE_READ_LATENCY',
-                                     'MOCK_LATE_IMMUTABLE', 'MOCK_LIVE_REWRITE_SAME', 'MOCK_SHARED_REWRITE', 'NIER_REMIX_LIVE_PRESENCE_MIN', 'FAKE_REMIX_INSTANCE_LOG',
+                                     'MOCK_LATE_IMMUTABLE', 'MOCK_CAMERA_STATIC', 'MOCK_LIVE_REWRITE_SAME', 'MOCK_SHARED_REWRITE', 'NIER_REMIX_LIVE_PRESENCE_MIN', 'FAKE_REMIX_INSTANCE_LOG',
                                      'NIER_REMIX_LIVE_BUILD_BUDGET_US', 'NIER_REMIX_LIVE_TEX_WRITE_DELAY_MS',
                                      'NIER_REMIX_TEST_FRAME_MS')  # tr.run clears only these: a case's switch must not leak
 KEYS = ('reads', 'first', 'trimmed', 'unmirrored', 'const', 'immutable', 'default', 'dynamic', 'read_kb', 'read_ms',
@@ -149,6 +149,16 @@ def inside():
         assert all(int(dict(re.findall(r'(\w+)=(\d+)', x))['camera_gap_max']) <= 2 for x in lines[1:]), \
             f'game frames without a camera: {[x[-80:] for x in lines]}'
         results['camera-log'] = f'{len(cams)} lines; camera_reads={r["camera_reads"]}; {cams[-1]}'
+
+        # 3c. A camera buffer written once, before capture armed, and never again (replay 41686139, 2026-11-12: one
+        #     camera slice per frame, so no write ever reached the mirror and every game frame waited on a staging read
+        #     of it, which locked the game to the path-traced frame rate). It is read once and then kept.
+        r, log = run('camera-static', {'MOCK_CAMERA_STATIC': '1'})
+        lines = [x for x in tr.remix_lines(log) if x.startswith('remix: live rebuilds ')]
+        last = {k: int(v) for k, v in re.findall(r'(\w+)=(\d+)', lines[-1])}
+        assert int(r['camera_reads']) <= 2, f'a camera buffer never rewritten is read back every frame: {r}'
+        assert last['camera_cpu'] >= 60, f'the static camera was not taken from the CPU mirror: {lines[-1]}'
+        results['camera-static'] = f'camera_reads={r["camera_reads"]} camera_cpu={last["camera_cpu"]}'
 
         # 4. An immutable mesh created with initial data at frame 60, after Remix started: it must be built (z = 7.5)
         #    from the bytes kept at creation, with no staging read of any vertex or index buffer from frame 60 on.

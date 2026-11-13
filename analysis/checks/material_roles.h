@@ -17,7 +17,16 @@
 
 namespace material_roles {
 
-struct Channel { int slot = -1; std::string channels; bool invert = false; };  // slot -1: role not found
+// A constant-buffer lane holding "constant lane != 0" (ne) or "constant lane > 0" (gt): the game's material switch.
+// `test` must point at a string literal ("ne" / "gt"): the struct is copied, and nothing owns the text.
+struct Flag { int cb = -1; int reg = -1; char lane = 0; const char* test = ""; };  // cb -1: no flag
+// albedo / metal / gloss: the constant that replaces the role's texture channels under `flag`.
+struct Constant { bool present = false; Flag flag; int cb = -1; int reg = -1; std::string lanes; };
+struct Channel { int slot = -1; std::string channels; bool invert = false;  // slot -1: role not found
+                 Constant override;  // albedo / metal / gloss: absent when the channels are not all overridden alike
+                 // normal / detail_normal: the flag the map's sampling sits under. Only `if_nz` resolves a
+                 // flag (as in pbr_trace.py), so a map sampled under `if_z flag` reads as unconditional here.
+                 Flag enable; };
 // Texture repeat the game applies from a constant at one sampled slot: uv * cb<cb>[<reg>].<lanes> (terrain layers).
 struct UvScale { int cb = -1; int reg = -1; std::string lanes; };  // cb -1: the slot is sampled untransformed / unknown
 struct Roles { Channel albedo, metal, gloss, normal, detail_normal; UvScale uv[8]; };
@@ -263,9 +272,19 @@ inline void merge(Provenance& into, const Provenance& from) { into.insert(from.b
 
 struct UvResult { int kind = -1; int cb = -1; int reg = -1; std::string lanes; };  // kind: -1 not simple, 0 none, 1 scale
 
+using ConstantLane = std::tuple<int, int, char>;   // cb slot, register, lane
+using FlagKey = std::tuple<int, int, char, std::string>;  // the ConstantLane, plus "ne" | "gt"
+using OverrideHit = std::pair<ConstantLane, FlagKey>;     // the constant lane, and the flag that selects it
+
+inline Flag to_flag(const FlagKey& key) {
+    return Flag{std::get<0>(key), std::get<1>(key), std::get<2>(key), std::get<3>(key) == "gt" ? "gt" : "ne"};
+}
+
 struct Found {
     std::set<Provenance> metal, albedo, gloss, normal, detail, cutout;
     std::map<int, UvResult> uv;  // texture slot -> transform of its first sample
+    std::map<SlotChannel, std::set<OverrideHit>> overrides;  // texture channel -> (flag, constant lane)
+    std::set<std::optional<FlagKey>> enable_normal, enable_detail;  // flags the map's sampling sits under
 };
 
 struct Write { std::string op; std::vector<std::string> srcs; std::string mask; int depth = 0; };
@@ -303,6 +322,8 @@ public:
 private:
     std::map<RegisterLane, Provenance> prov_;
     std::map<RegisterLane, Write> wrote_;
+    std::map<RegisterLane, FlagKey> flags_;      // lane -> the comparison that put this material switch in it
+    std::vector<std::optional<FlagKey>> cond_;   // per open block: the flag its true branch sits under
 
     Provenance sources(const std::string& operand, const std::string& lanes) const;
     UvResult uv_transform(const std::string& coord) const;
@@ -384,13 +405,32 @@ inline bool is_metal_f0(const std::vector<double>& values) {
     return false;
 }
 
+// One call per Tracer: the state below accumulates and is not reset between disassemblies (parse() makes a fresh one).
 inline void Tracer::run(const std::string& disassembly) {
     int depth = 0;
+    const auto is_cb = [](const std::string& s) {
+        CbOperand cb;
+        return parse_cb(s, cb);
+    };
     for (const Instruction& ins : instructions(disassembly)) {
         const std::string& op = ins.op;
         const std::vector<std::string>& ops = ins.operands;
-        if (is_open(op)) ++depth;
-        else if (is_close(op)) depth = depth > 0 ? depth - 1 : 0;
+        if (is_open(op)) {
+            ++depth;
+            // The flag an if_nz on a single flag lane gates its true branch with.
+            std::optional<FlagKey> flag;
+            Register cond_reg;
+            if (op == "if_nz" && !ops.empty() && parse_register(ops[0], cond_reg) && cond_reg.swizzle.size() == 1) {
+                const auto it = flags_.find(RegisterLane{cond_reg.kind, cond_reg.number, cond_reg.swizzle[0]});
+                if (it != flags_.end()) flag = it->second;
+            }
+            cond_.push_back(flag);
+        } else if (is_close(op)) {
+            depth = depth > 0 ? depth - 1 : 0;
+            if (!cond_.empty()) cond_.pop_back();
+        } else if (op == "else" && !cond_.empty()) {
+            cond_.back() = std::nullopt;
+        }
         Register dst;
         if (is_no_dest(op) || ops.empty() || !parse_register(ops[0], dst)) continue;
 
@@ -433,6 +473,64 @@ inline void Tracer::run(const std::string& disassembly) {
         std::vector<Literal> lits;
         for (const std::string& s : srcs) lits.push_back(literal(s));
 
+        // The constant lane a destination lane reads: a 4-char swizzle indexes by lane, else by destination position.
+        // Every caller passes an operand that already matched is_cb; the guard is for the next one that does not.
+        const auto cb_lane = [&](const std::string& operand, char lane) {
+            CbOperand cb;
+            if (!parse_cb(operand, cb) || cb.swizzle.empty()) return ConstantLane{cb.slot, cb.reg, lane};
+            const char source = cb.swizzle.size() == 4
+                                    ? cb.swizzle[kLanes.find(lane)]
+                                    : cb.swizzle[std::min(dst.swizzle.find(lane), cb.swizzle.size() - 1)];
+            return ConstantLane{cb.slot, cb.reg, source};
+        };
+        // A texture channel replaced by one constant under a flag, or a map sampled under one.
+        const std::optional<FlagKey> block_flag = cond_.empty() ? std::nullopt : cond_.back();
+        const auto note_override = [&](const std::optional<FlagKey>& flag, char lane, const std::string& constant,
+                                       const Provenance& source) {
+            if (flag && source.size() == 1) found.overrides[*source.begin()].insert({cb_lane(constant, lane), *flag});
+        };
+        if (op == "mov" && n == 1 && is_cb(srcs[0])) {
+            for (const char lane : dst.swizzle) {
+                const auto it = prov_.find(RegisterLane{dst.kind, dst.number, lane});
+                note_override(block_flag, lane, srcs[0], it == prov_.end() ? Provenance{} : it->second);
+            }
+        }
+        if (op == "movc" && n == 3 && is_cb(srcs[1])) {
+            Register flag_reg;
+            if (parse_register(srcs[0], flag_reg) &&
+                flag_reg.swizzle.find_first_not_of(flag_reg.swizzle[0]) == std::string::npos) {
+                const auto it = flags_.find(RegisterLane{flag_reg.kind, flag_reg.number, flag_reg.swizzle[0]});
+                const std::optional<FlagKey> flag = it == flags_.end() ? std::nullopt : std::optional<FlagKey>(it->second);
+                for (const char lane : dst.swizzle) note_override(flag, lane, srcs[1], sources(srcs[2], {lane}));
+            }
+        }
+        // This write may make the register lane hold "constant lane != 0 / > 0"; any other write clears it.
+        std::vector<bool> zero(n, false);
+        for (std::size_t k = 0; k < n; ++k) {
+            if (!has_values(lits[k])) continue;
+            zero[k] = true;
+            for (const double v : *lits[k]) zero[k] = zero[k] && v == 0;
+        }
+        std::map<char, FlagKey> new_flags;
+        if (op == "ne" && n == 2 && ((zero[0] && is_cb(srcs[1])) || (zero[1] && is_cb(srcs[0])))) {
+            for (const char lane : dst.swizzle) {
+                const ConstantLane cl = cb_lane(srcs[zero[0] ? 1 : 0], lane);
+                new_flags[lane] = {std::get<0>(cl), std::get<1>(cl), std::get<2>(cl), "ne"};
+            }
+        }
+        if (op == "lt" && n == 2 && zero[0] && is_cb(srcs[1])) {
+            for (const char lane : dst.swizzle) {
+                const ConstantLane cl = cb_lane(srcs[1], lane);
+                new_flags[lane] = {std::get<0>(cl), std::get<1>(cl), std::get<2>(cl), "gt"};
+            }
+        }
+        for (const char lane : dst.swizzle) {
+            const RegisterLane key{dst.kind, dst.number, lane};
+            flags_.erase(key);
+            const auto it = new_flags.find(lane);
+            if (it != new_flags.end()) flags_[key] = it->second;
+        }
+
         // Role patterns, evaluated with the provenance before this write.
         Register reg;
         if (op == "mad" && n == 3 && has_values(lits[2]) && is_metal_f0(*lits[2])) {
@@ -453,6 +551,7 @@ inline void Tracer::run(const std::string& disassembly) {
         if (op == "add" && n == 2 && has_values(lits[1]) && lits[1]->size() >= 3 && (*lits[1])[0] == -0.5 &&
             (*lits[1])[1] == -0.5 && (*lits[1])[2] == -0.5) {
             found.normal.insert(sources(srcs[0], "xyz"));
+            found.enable_normal.insert(block_flag);
         }
         if (op == "mad" && n == 3 && has_values(lits[1]) && has_values(lits[2])) {
             std::vector<std::size_t> two;
@@ -467,6 +566,7 @@ inline void Tracer::run(const std::string& disassembly) {
                 std::string lanes;
                 for (const std::size_t k : two) lanes += kLanes[k];
                 found.detail.insert(sources(srcs[0], lanes));
+                found.enable_detail.insert(block_flag);
             }
         }
 
@@ -536,6 +636,31 @@ inline std::optional<Pick> one_slot(const std::set<Provenance>& sets, std::size_
     return Pick{slot, width < 3 ? channels : std::string("xyz")};
 }
 
+// A role's texture channels all replaced by one constant under one flag: the draw's constant buffer decides.
+inline std::optional<Constant> one_override(const Pick& role,
+                                            const std::map<SlotChannel, std::set<OverrideHit>>& overrides) {
+    std::vector<OverrideHit> items;
+    for (const char channel : role.channels) {
+        const auto it = overrides.find(SlotChannel{role.slot, channel});
+        if (it == overrides.end() || it->second.size() != 1) return std::nullopt;
+        items.push_back(*it->second.begin());
+    }
+    if (items.empty()) return std::nullopt;
+    const ConstantLane constant = items[0].first;
+    for (const OverrideHit& hit : items) {
+        if (hit.second != items[0].second || std::get<0>(hit.first) != std::get<0>(constant) ||
+            std::get<1>(hit.first) != std::get<1>(constant))
+            return std::nullopt;
+    }
+    Constant out;
+    out.present = true;
+    out.flag = to_flag(items[0].second);
+    out.cb = std::get<0>(constant);
+    out.reg = std::get<1>(constant);
+    for (const OverrideHit& hit : items) out.lanes += std::get<2>(hit.first);
+    return out;
+}
+
 inline Channel to_channel(const std::optional<Pick>& pick, bool invert) {
     Channel c;
     if (pick) {
@@ -578,6 +703,16 @@ inline Roles parse(const std::string& disassembly) {
     out.gloss = detail::to_channel(gloss, true);
     out.normal = detail::to_channel(normal, false);
     out.detail_normal = detail::to_channel(detail_normal, false);
+    // The flag a map's sampling sits under, when every occurrence agrees on one flag.
+    const auto enable_of = [](const std::set<std::optional<detail::FlagKey>>& flags) {
+        if (flags.size() != 1 || !flags.begin()->has_value()) return Flag{};
+        return detail::to_flag(**flags.begin());
+    };
+    if (albedo) out.albedo.override = detail::one_override(*albedo, f.overrides).value_or(Constant{});
+    if (metal) out.metal.override = detail::one_override(*metal, f.overrides).value_or(Constant{});
+    if (gloss) out.gloss.override = detail::one_override(*gloss, f.overrides).value_or(Constant{});
+    if (normal) out.normal.enable = enable_of(f.enable_normal);
+    if (detail_normal) out.detail_normal.enable = enable_of(f.enable_detail);
     for (const auto& [slot, uv] : f.uv)
         if (slot >= 0 && slot < 8 && uv.kind == 1) out.uv[slot] = UvScale{uv.cb, uv.reg, uv.lanes};
     return out;

@@ -30,8 +30,10 @@ import test_nscn_scene as ts  # noqa: E402  (NSCN writer)
 BACKGROUND, SURFACE, REMIX = tmo.BACKGROUND, tmo.SURFACE, (200, 40, 120)
 PROBE = (100, 100)  # left of the menu panel at every size used here
 ENV_KEYS = ('NIER_REMIX', 'NIER_REMIX_SIZE', 'NIER_REMIX_CHEAP_GAME', 'NIER_REMIX_RUNTIME', 'NIER_REMIX_SCENE', 'MOCK_BGRA', 'MOCK_FRAME_MS', 'MOCK_RESIZE_AT', 'MOCK_RESIZE_TO',
-            'MOCK_START', 'MOCK_CAMERA', 'FAKE_REMIX_FAIL', 'FAKE_REMIX_CAMERA_LOG', 'MOCK_SCENE_FULL', 'MOCK_EMPTY_EVERY', 'MOCK_PAUSE',
-            'NIER_REMIX_LIVE_NO_HUD', 'NIER_REMIX_LIVE_NO_SKY', 'MOCK_SKY_ONLY_UNTIL', 'MOCK_PREPASS', 'MOCK_CUTOUT_PS')
+            'MOCK_START', 'MOCK_CAMERA', 'FAKE_REMIX_FAIL', 'FAKE_REMIX_EXIT_ON_INIT', 'NIER_REMIX_LIVE_PROFILE',
+            'NIER_REMIX_LIVE_ALBEDO_UNORM', 'MOCK_TEX_SRGB', 'NIER_REMIX_LIVE_PBR', 'MOCK_PBR_PS', 'FAKE_REMIX_CAMERA_LOG', 'MOCK_SCENE_FULL', 'MOCK_EMPTY_EVERY', 'MOCK_PAUSE',
+            'NIER_REMIX_LIVE_NO_HUD', 'NIER_REMIX_LIVE_NO_SKY', 'MOCK_SKY_ONLY_UNTIL', 'MOCK_PREPASS', 'MOCK_CUTOUT_PS',
+            'NIER_REMIX_LIVE_NORMAL')
 
 
 def rgb(raw, x, y):
@@ -222,7 +224,28 @@ def inside():
         assert any(x.startswith('remix: focus returned to the game from') for x in lines), lines
         assert r['foreground'] == '1', f'the game must end up with focus: {r}'
         results['steal-focus'] = 'Remix window takes focus: host returns it to the game window, logged'
-        results['fallbacks'] = 'missing runtime, relative path, broken scene, copy failing at frame 20: one log line, game frames back, menu intact'
+        # 9. An incomplete shim runtime folder: the shim's d3d9.dll loads its d3d9_x64.dll from its own folder and ends
+        #    the process when that fails (replay 2026-11-12: dead after 13 frames, nothing of ours in the log). The proxy
+        #    probes the implementation first and refuses the runtime instead, so the game keeps presenting.
+        shim = work / 'shim-runtime'
+        shim.mkdir(exist_ok=True)
+        shutil.copyfile(work / 'fake_remix.dll', shim / 'd3d9.dll')
+        (shim / 'd3d9_x64.dll').write_bytes(b'not a dll')
+        d, r, log, fake = run(work, 'shim-incomplete', {**on, 'NIER_REMIX_RUNTIME': win(shim / 'd3d9.dll'),
+                                                        'FAKE_REMIX_EXIT_ON_INIT': '1'})
+        lines = remix_lines(log)
+        assert any(x.startswith('remix: runtime incomplete: ') and 'd3d9_x64.dll' in x for x in lines), lines
+        assert sum('disabled' in x for x in lines) == 1, lines
+        assert not fake or 'VIOLATION' not in fake, fake
+        assert r['presented'] == '80', r
+        assert tmo.near(rgb((d / 'capture-after.raw').read_bytes(), *PROBE), BACKGROUND), 'game frame not shown'
+        results['shim-incomplete'] = f'incomplete shim runtime refused before InitializeLibrary: {lines[-1][:110]}'
+        # Not gated here: a shim that loads its implementation by bare name (remix-1.6.1's rt/d3d9.dll) needs the runtime
+        # folder as the DLL directory. A stub+sibling pair hung the Wine mock in the fake's CreateD3D9 after
+        # registered=0, so that path is verified where it is real: replay `s1-shim3-41686139` runs the 1.6.1 runtime
+        # through its shim at 43.9 fps, 700/700 frames, and this gate pins the refusal that keeps a broken folder from
+        # killing the game.
+        results['fallbacks'] = 'missing runtime, relative path, broken scene, copy failing at frame 20, incomplete shim: one log line, game frames back, menu intact'
     except Exception as error:
         (OUT / 'validation.json').write_text(json.dumps({'passed': False, 'error': str(error)[:3000], 'results': results,
                                                          'work': str(work)}, indent=2) + '\n')

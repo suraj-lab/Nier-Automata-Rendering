@@ -180,6 +180,60 @@ def inside():
         assert near(pixel((d / 'capture-open.raw').read_bytes(), x0 + 10, y0 + 20), BACKGROUND)
         assert (d / 'NIER_RENDER.ini').read_bytes() == b'[Rendering]\r\nPreset=Custom75\r\n'
         results['no-fonts'] = {'passed': True, 'dir': str(d.relative_to(A.parent))}
+
+        # G3/G1: a picture without an input event (NIER_SCREENSHOT_AT). A headless game cannot be screenshotted from
+        # outside (gamescope's key needs input, grim has no screencopy protocol), so the proxy writes the presented
+        # backbuffer as <dir>/shot-<n>.raw: 12-byte header (width, height, DXGI format) + rows, the format
+        # replay/run_replay.py converts. Timed from the first present, and only when the directory is given too.
+        def win(path):
+            return 'Z:' + str(path.resolve()).replace('/', '\\')
+
+        on, off = work / 'shots-on', work / 'shots-off'
+        on.mkdir()
+        off.mkdir()
+        d, r, log = scenario(work, 'screenshot', b'[Rendering]\r\nPreset=Native\r\n', False, (0, 0),
+                             files={'NIER_ENV.ini': ('NIER_SCREENSHOT_AT=0.05\nNIER_SCREENSHOT_DIR=' + win(on) + '\n').encode()})
+        assert r['presented'] == '80', r
+        assert 'menu: screenshot plan 1 shot(s)' in log, log
+        produced = sorted(on.glob('shot-*.raw'))
+        assert len(produced) == 1, (produced, log[-800:])
+        width, height, fmt = struct.unpack_from('<3I', produced[0].read_bytes(), 0)
+        assert (width, height, fmt) == (1920, 1080, 28), (width, height, fmt)
+        assert produced[0].stat().st_size == 12 + width * height * 4, produced[0].stat().st_size
+        assert near(pixel(produced[0].read_bytes(), 960, 540), BACKGROUND), pixel(produced[0].read_bytes(), 960, 540)  # panel closed
+        assert 'menu: screenshot 0 written 1920x1080' in log, log[-600:]
+        results['screenshot'] = {'passed': True, 'bytes': produced[0].stat().st_size,
+                                 'dir': str(produced[0].relative_to(A.parent))}
+        # A time without a directory, and a directory without a time: neither writes anything.
+        for name, ini in (('screenshot-nodir', 'NIER_SCREENSHOT_AT=0.05\n'),
+                          ('screenshot-notime', 'NIER_SCREENSHOT_DIR=' + win(off) + '\n')):
+            d, r, log = scenario(work, name, b'[Rendering]\r\nPreset=Native\r\n', False, (0, 0),
+                                 files={'NIER_ENV.ini': ini.encode()})
+            assert r['presented'] == '80', r
+            assert 'menu: screenshot plan' not in log, (name, log[-400:])
+        assert not list(off.glob('shot-*.raw')), list(off.iterdir())
+        results['screenshot-off'] = {'passed': True}
+
+        # G3: the same capture F9 produces, armed by a timer, so an unattended run needs no key and no focused window.
+        # The mock still presses F9 twice in every scenario, so a working timer shows up as a THIRD frame plus the log
+        # line; that keeps the existing two-capture assertions untouched.
+        # The variable goes into the real environment here: the mock and the proxy are the same process tree, and
+        # NIER_ENV.ini* is applied by the scale setter, which is not guaranteed to have run before the first present.
+        os.environ['NIER_CAPTURE_AT'] = '0.05'
+        try:
+            # fonts=True: the capture path lives in the menu phase, which stays Disabled without the fonts, and a
+            # headless game run installs them (`nier_render_fonts` beside the DLL).
+            d, r, log = scenario(work, 'capture-at', b'[Rendering]\r\nPreset=Native\r\n', True, (0, 0))
+        finally:
+            os.environ.pop('NIER_CAPTURE_AT', None)
+        assert r['presented'] == '80', r
+        assert 'menu: capture plan 1 frame(s)' in log, log[-600:]
+        assert 'menu: capture armed by timer' in log, log[-600:]
+        frames = sorted((d / 'NIER_CAPTURE').glob('frame_*'), key=lambda f: int(f.name[6:]))
+        assert len(frames) == 3, (len(frames), log[-800:])
+        summary = json.loads((frames[-1] / 'frame.json').read_text())
+        assert summary['draws'] == 2 and summary['written'] == 2, (frames[-1], summary)
+        results['capture-at'] = {'passed': True, 'frames': len(frames), 'last_draws': summary['draws']}
     except Exception as error:
         (OUT / 'validation.json').write_text(json.dumps({'passed': False, 'error': str(error)[:2000],
                                                          'results': results, 'work': str(work)}, indent=2) + '\n')

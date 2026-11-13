@@ -252,6 +252,21 @@ inline void capture(ID3D11Device* device, ID3D11DeviceContext* context, Cache& c
     }
 }
 
+// The same format without the sRGB tag. The runtime gamma-decodes every albedo in its own shader
+// (opaque_surface_material_interaction.slangh:750-753), so an sRGB-tagged albedo is decoded twice and comes out washed
+// out. Only the header changes; the compressed/uncompressed bytes are the game's.
+inline DXGI_FORMAT without_srgb(DXGI_FORMAT f) {
+    switch (f) {
+        case DXGI_FORMAT_BC1_UNORM_SRGB: return DXGI_FORMAT_BC1_UNORM;
+        case DXGI_FORMAT_BC2_UNORM_SRGB: return DXGI_FORMAT_BC2_UNORM;
+        case DXGI_FORMAT_BC3_UNORM_SRGB: return DXGI_FORMAT_BC3_UNORM;
+        case DXGI_FORMAT_BC7_UNORM_SRGB: return DXGI_FORMAT_BC7_UNORM;
+        case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB: return DXGI_FORMAT_R8G8B8A8_UNORM;
+        case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB: return DXGI_FORMAT_B8G8R8A8_UNORM;
+        default: return f;
+    }
+}
+
 // DDS with a DX10 header (BC data kept as-is), carrying the game's whole mip chain. Returns false on any write error.
 inline bool write_dds(const wchar_t* path, const Texture& t) {
     FILE* f = _wfopen(path, L"wb");

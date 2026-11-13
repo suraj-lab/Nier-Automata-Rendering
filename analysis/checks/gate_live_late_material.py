@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Frozen gate: a geometry whose texture was not captured yet gets its material when the texture lands.
+"""FROZEN TARGET for item T1 (PLAN_2026-11-13), parked: not in the suite until the switch is finished.
+
+Gate: a geometry whose texture was not captured yet gets its material when the texture lands.
 
 Textures are captured at most `NIER_REMIX_LIVE_TEX_PER_FRAME` per frame (default 4, each is a GPU readback plus a file
 write on the game thread). A draw whose texture is deferred is uploaded with no material, and because its geometry
@@ -12,9 +14,17 @@ What this gate pins, with two geometries and two textures and a capture budget o
   - no geometry is rebuilt every frame (bounded mesh count);
   - with the budget at the default (4) the same run also ends fully textured, so the knob itself is not what fixes it.
 
-The gate is written for the existing capture path; the implementation it demands is a late-material rebuild, i.e. the
-deferred texture must invalidate the geometries that were built without it. `NIER_REMIX_LIVE_TEX_PER_FRAME` must exist:
-0 means "capture no textures this frame", n means n.
+What it demands is **not** a rebuild: the texture that lands must swap the material in place (DestroyMaterial then
+CreateMaterial under the same hash; the runtime makes the handle the hash, `rtx_remix_api.cpp:886`), so the mesh keeps
+its identity, its BLAS and its instance history. The fake runtime now flags a repeat CreateMaterial under a live hash as
+a VIOLATION, which is what the real runtime silently ignores.
+
+How it was got there, so it is not undone by accident: a deferred readback reserves its texture id at first sight
+(`live_capture.h`, `deferred_readbacks()`), the material hash is built from ids only (`live_scene.h`), a material whose
+albedo file is not yet on disk is sent grey (`albedoConstant` 0.5) instead of as a null handle, the build no longer waits
+for files (`hold_untextured`, rollback `NIER_REMIX_LIVE_HOLD_UNTEXTURED=1`), and `refresh_incomplete_materials()` re-creates
+an incomplete material under its own hash once a file lands. `landed` means **on disk** (`State::landed`), not "a path was
+handed over at capture time".
 """
 import hashlib
 import json
@@ -33,7 +43,8 @@ import test_menu_overlay as tmo
 import test_nscn_scene as ts
 
 tr.ENV_KEYS = tuple(tr.ENV_KEYS) + ('NIER_REMIX_LIVE_STATS_EVERY', 'NIER_REMIX_LIVE', 'NIER_REMIX_LIVE_TEX', 'NIER_REMIX_LIVE_TEX_PER_FRAME',
-                                     'FAKE_REMIX_INSTANCE_LOG')
+                                     'FAKE_REMIX_INSTANCE_LOG', 'NIER_REMIX_LIVE_TEX_WRITE_DELAY_MS',
+                                     'NIER_REMIX_LIVE_GREY_FIRST')
 
 
 def meshes_by_hash(fake):
@@ -65,32 +76,50 @@ def inside():
         tex.mkdir()
         base = {'NIER_REMIX_RUNTIME': tr.win(work / 'fake_remix.dll'), 'NIER_REMIX_SCENE': tr.win(scene / 'scene.bin'),
                 'MOCK_FRAME_MS': '40', 'NIER_REMIX': '1', 'NIER_REMIX_LIVE': '1',
-                'NIER_REMIX_LIVE_TEX': tr.win(tex), 'MOCK_CAMERA': 'live-late'}
+                'NIER_REMIX_LIVE_TEX': tr.win(tex), 'MOCK_CAMERA': 'live-late',
+                }
 
-        # One texture per frame: the second texture is deferred, so its geometry is first built without a material.
+        # The writer delay makes the file land *after* the material that names it was created, which is the case T1 is
+        # about; without it the mock's tiny textures are on disk before the material exists and nothing has to be swapped.
         _, r, log, fake = tr.run(work, 'late', {**base, 'NIER_REMIX_LIVE_TEX_PER_FRAME': '1', 'NIER_REMIX_LIVE_STATS_EVERY': '10'})
-        assert fake and 'VIOLATION' not in fake, fake
+        assert fake and 'VIOLATION' not in fake, fake[-1200:]
         built = meshes_by_hash(fake)
         assert len(built) == 2, f'expected the two live geometries, got {len(built)}: {list(built)}'
         for ghash, made in built.items():
-            assert any(m['materials'] >= 1 for m in made), \
-                f'geometry {ghash} never got a material; builds={made}'
-            assert len(made) <= 3, f'geometry {ghash} rebuilt too often: {made}'
-        # Whether a geometry is built before its first texture lands depends on the worker's timing, so the rule is
-        # asserted as an invariant rather than as a required event: every bare build must be repaired later.
-        bare = {g: made for g, made in built.items() if any(m['materials'] == 0 for m in made)}
-        for g, made in bare.items():
-            first_bare = next(m['presented'] for m in made if m['materials'] == 0)
-            repaired = [m for m in made if m['materials'] >= 1 and m['presented'] > first_bare]
-            assert repaired, f'geometry {g} was built without a material and never repaired: {made}'
-        # A repair after a texture lands is a texture rebuild, not a first sight or a buffer write (rebuild reasons line).
+            # A geometry whose albedo had no id at first sight (readback deferred, per-frame budget spent) cannot name a
+            # material yet and is built once, bare; every later build must then be a real content change, never a texture.
+            # That is what this asserts: the geometry ends with a material, and no rebuild comes from a texture (below).
+            assert any(m['materials'] >= 1 for m in made), f'geometry {ghash} never got a material: {made}'
+
+        # The swap itself: CreateMaterial, then DestroyMaterial and CreateMaterial again under the SAME hash, which is the
+        # only way the runtime accepts a changed surface (a repeat create under a live hash is ignored, and now flagged).
+        def material_lines(fake_log):
+            return [l for l in fake_log.splitlines() if l.startswith(('CreateMaterial', 'DestroyMaterial'))]
+
+        by_hash = {}
+        for line in material_lines(fake):
+            kv = dict(re.findall(r'(\w+)=(\S+)', line))
+            by_hash.setdefault(kv['hash'], []).append(line)
+        swapped = {h: lines for h, lines in by_hash.items() if any(x.startswith('DestroyMaterial') for x in lines)}
+        assert swapped, f'no material was ever destroyed and re-created, so a late texture never reached a surface: ' \
+                        f'{material_lines(fake)[-6:]}'
+        for h, lines in swapped.items():
+            assert lines[0].startswith('CreateMaterial'), f'material {h} destroyed before it was created: {lines}'
+            assert sum(1 for x in lines if x.startswith('DestroyMaterial')) == 1, f'material {h}: {lines}'
+            creates = [x for x in lines if x.startswith('CreateMaterial')]
+            assert len(creates) == 2, f'material {h} must be created, then destroyed and created again: {lines}'
+            first, second = (dict(re.findall(r'(\w+)=(\S+)', x)) for x in creates)
+            assert first['hash'] == second['hash'] == h, (first, second)
+            assert first != second, f'material {h} was re-created with identical arguments, so nothing changed: {lines}'
+        # No texture-triggered rebuild may remain: that counter is the visible symptom T1 removes.
         why_lines = [x for x in tr.remix_lines(log) if x.startswith('remix: live rebuilds ')]
         assert why_lines, tr.remix_lines(log)[-6:]
         why = {k: int(v) for k, v in re.findall(r'(\w+)=(\d+)', why_lines[-1])}
-        if bare:
-            assert why['texture'] >= len(bare), f'{len(bare)} texture repairs counted as {why}'
-        results['late'] = ('Every geometry ends with a material; %d were first built bare and all were repaired.'
-                           % len(bare))
+        assert why['texture'] == 0, f'texture-triggered rebuilds must be gone with the material swap: {why}'
+        # A bare first build is allowed only when the albedo had no id yet; when it is repaired, the repair is the swap
+        # above (the same material hash, destroyed and created again), not a new mesh with a new material.
+        results['late'] = (f'{len(built)} geometries, one build each, {len(swapped)} material(s) swapped under a stable hash, '
+                           'no texture rebuild')
 
         # The mechanism behind that: with the budget at zero nothing is captured, so the same run must leave every
         # geometry bare. Without this the invariants above could hold for reasons unrelated to the knob.
@@ -101,9 +130,12 @@ def inside():
         assert fake and 'VIOLATION' not in fake, fake
         starved = meshes_by_hash(fake)
         assert starved, 'the scene must still draw with no textures'
-        assert all(m['materials'] == 0 for made in starved.values() for m in made), \
-            f'textures were captured despite a budget of zero: {starved}'
-        results['starved'] = 'A zero capture budget leaves every geometry untextured, so the knob is the reason.'
+        # Item T1: with no texture at all the surface is still sent, in grey, so the draw is lit and visible instead of
+        # arriving as an untextured null material.
+        assert all(m['materials'] >= 1 for made in starved.values() for m in made), \
+            f'a budget of zero must still send a grey material: {starved}'
+        assert not [l for l in fake.splitlines() if l.startswith('CreateMaterial') and 'live_' in l], 'a texture was written'
+        results['starved'] = 'A zero capture budget leaves every geometry grey with a material and no texture path.'
 
         # Default budget (4 textures per frame): the same run must also end fully textured, so nothing above depends on
         # the knob forcing a deferral.

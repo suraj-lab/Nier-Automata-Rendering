@@ -3,6 +3,10 @@
 #include <d3dcompiler.h>
 #include <atomic>
 #include <algorithm>
+#include <cstdint>
+#include <cwchar>
+#include <string>
+#include <vector>
 #include <mutex>
 #include <cstdio>
 #include <cstring>
@@ -392,7 +396,137 @@ void write_frame() {
 
 bool capture_armed = false;  // render thread only
 
+// G1/G4: a picture of a headless game. Neither gamescope's screenshot key (needs an input event) nor grim (the
+// compositor has no screencopy protocol) can produce one, so the proxy writes the presented backbuffer itself.
+// NIER_SCREENSHOT_AT=<seconds>[,...] after the first present, NIER_SCREENSHOT_DIR=<dir> (an absolute Windows path):
+// <dir>/shot-<index>.raw = 12-byte header (width, height, DXGI format) + rows, the format replay/run_replay.py already
+// converts. Off unless both are set, so a normal launch pays nothing.
+struct ShotPlan {
+    std::vector<double> at;
+    std::wstring dir;
+    std::size_t next = 0;
+    unsigned long long started = 0;
+    bool loaded = false;
+};
+ShotPlan shot_plan;
+
+void load_shot_plan() {
+    shot_plan.loaded = true;
+    if (const wchar_t* dir = _wgetenv(L"NIER_SCREENSHOT_DIR")) shot_plan.dir = dir;
+    const wchar_t* list = _wgetenv(L"NIER_SCREENSHOT_AT");
+    if (!list || shot_plan.dir.empty()) return;
+    const std::wstring text(list);
+    for (std::size_t i = 0; i < text.size();) {
+        const std::size_t comma = text.find(L',', i);
+        const double v = std::wcstod(text.substr(i, comma == std::wstring::npos ? std::wstring::npos : comma - i).c_str(), nullptr);
+        if (v >= 0 && v < 1e6) shot_plan.at.push_back(v);
+        if (comma == std::wstring::npos) break;
+        i = comma + 1;
+    }
+    std::sort(shot_plan.at.begin(), shot_plan.at.end());
+    if (!shot_plan.at.empty())
+        host.log("menu: screenshot plan %u shot(s) into %ls", unsigned(shot_plan.at.size()), shot_plan.dir.c_str());
+}
+
+void write_screenshot(IDXGISwapChain* swapchain) {
+    ID3D11Texture2D* backbuffer = nullptr;
+    if (FAILED(swapchain->GetBuffer(0, __uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&backbuffer))) || !backbuffer) return;
+    D3D11_TEXTURE2D_DESC desc{};
+    backbuffer->GetDesc(&desc);
+    ID3D11Device* device = nullptr;
+    backbuffer->GetDevice(&device);
+    D3D11_TEXTURE2D_DESC staging = desc;
+    staging.Usage = D3D11_USAGE_STAGING;
+    staging.BindFlags = 0;
+    staging.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+    staging.MiscFlags = 0;
+    ID3D11Texture2D* copy = nullptr;
+    ID3D11DeviceContext* context = nullptr;
+    if (device) {
+        device->CreateTexture2D(&staging, nullptr, &copy);
+        device->GetImmediateContext(&context);
+    }
+    unsigned char* pixels = nullptr;
+    UINT pitch = 0;
+    if (copy && context) {
+        context->CopyResource(copy, backbuffer);
+        D3D11_MAPPED_SUBRESOURCE map{};
+        if (SUCCEEDED(context->Map(copy, 0, D3D11_MAP_READ, 0, &map))) {
+            pixels = static_cast<unsigned char*>(map.pData);
+            pitch = map.RowPitch;
+        }
+    }
+    if (pixels) {
+        wchar_t name[64];
+        std::swprintf(name, 64, L"\\shot-%u.raw", unsigned(shot_plan.next));
+        if (FILE* f = _wfopen((shot_plan.dir + name).c_str(), L"wb")) {
+            const std::uint32_t header[3] = {desc.Width, desc.Height, static_cast<std::uint32_t>(desc.Format)};
+            std::fwrite(header, sizeof header, 1, f);
+            std::fwrite(pixels, pitch, desc.Height, f);
+            std::fclose(f);
+            host.log("menu: screenshot %u written %ux%u format=%u", unsigned(shot_plan.next), desc.Width, desc.Height,
+                     unsigned(desc.Format));
+        }
+        context->Unmap(copy, 0);
+    }
+    if (context) context->Release();
+    if (copy) copy->Release();
+    if (device) device->Release();
+    backbuffer->Release();
+}
+
+void poll_screenshots(IDXGISwapChain* swapchain) {
+    if (!shot_plan.loaded) load_shot_plan();
+    if (shot_plan.next >= shot_plan.at.size()) return;
+    const unsigned long long now = live_capture::now_us();
+    if (!shot_plan.started) shot_plan.started = now;
+    const double elapsed = double(now - shot_plan.started) / 1e6;
+    if (elapsed < shot_plan.at[shot_plan.next]) return;
+    write_screenshot(swapchain);
+    ++shot_plan.next;
+}
+
+// G3: NIER_CAPTURE_AT=<seconds>[,...] arms the same capture F9 does, at those times, so an unattended run needs no key
+// press and no focused window. Seconds count from the first presented frame. Off unless set.
+struct CapturePlan {
+    std::vector<double> at;
+    std::size_t next = 0;
+    unsigned long long started = 0;
+    bool loaded = false;
+};
+CapturePlan capture_plan;
+
+void poll_capture_plan() {
+    if (!capture_plan.loaded) {
+        capture_plan.loaded = true;
+        if (const wchar_t* list = _wgetenv(L"NIER_CAPTURE_AT")) {
+            const std::wstring text(list);
+            for (std::size_t i = 0; i < text.size();) {
+                const std::size_t comma = text.find(L',', i);
+                const std::wstring item = text.substr(i, comma == std::wstring::npos ? std::wstring::npos : comma - i);
+                const double v = std::wcstod(item.c_str(), nullptr);
+                if (v >= 0 && v < 1e6) capture_plan.at.push_back(v);
+                if (comma == std::wstring::npos) break;
+                i = comma + 1;
+            }
+            std::sort(capture_plan.at.begin(), capture_plan.at.end());
+            if (!capture_plan.at.empty())
+                host.log("menu: capture plan %u frame(s)", unsigned(capture_plan.at.size()));
+        }
+    }
+    if (capture_plan.next >= capture_plan.at.size()) return;
+    const unsigned long long now = live_capture::now_us();
+    if (!capture_plan.started) capture_plan.started = now;
+    const double elapsed = double(now - capture_plan.started) / 1e6;
+    if (elapsed < capture_plan.at[capture_plan.next]) return;
+    ++capture_plan.next;
+    if (capture_armed) return;   // a key already armed this frame
+    capture_armed = true;
+    host.log("menu: capture armed by timer (%.1fs)", elapsed);
+}
+
 void poll_capture() {
+    poll_capture_plan();
     const bool focused = GetForegroundWindow() == window;
     const bool f9 = focused && (GetAsyncKeyState(VK_F9) & 0x8000);
     static bool f9_was = false;
@@ -512,6 +646,7 @@ HRESULT STDMETHODCALLTYPE present(IDXGISwapChain* self, UINT sync, UINT flags) {
                                  draw_capture::g_next_draw_indexed.load(std::memory_order_acquire),
                                  draw_capture::g_next_draw_indexed_instanced.load(std::memory_order_acquire)); } catch (...) {}
         try { live_capture::end_frame(); camera_capture::end_frame(); remix_live::on_present(self, host.log); } catch (...) {}
+        try { poll_screenshots(self); } catch (...) {}   // NIER_SCREENSHOT_AT: the image the player would see, no menu
     }
     if (game_frame && phase != Phase::Disabled) {
         try {

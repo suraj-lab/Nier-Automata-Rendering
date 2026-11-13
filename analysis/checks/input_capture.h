@@ -122,8 +122,29 @@ inline bool is_mouse(void* device) { return device_type(device) == DI8DEVTYPE_MO
 // NIER_REMIX_LIVE_DRIVE (input_drive.h): add the scripted mouse delta / hold W on calls that succeeded, never while
 // the panel is open. shortcut: buffered keyboard (GetDeviceData) is counted, not driven; drive it if key_data > 0 and
 // key_state == 0 in a live run.
+// A menu press also has to arrive as a keyboard key: NieR's UI takes its confirm from the keyboard device (the pad only
+// moves the cursor), so an A press is Enter, B is Escape, and the d-pad is the arrow keys.
+inline unsigned char menu_key(unsigned short buttons) {
+    if (buttons & input_drive::kA) return DIK_RETURN;
+    if (buttons & input_drive::kB) return DIK_ESCAPE;
+    if (buttons & input_drive::kStart) return DIK_RETURN;
+    if (buttons & input_drive::kBack) return DIK_ESCAPE;
+    if (buttons & input_drive::kUp) return DIK_UP;
+    if (buttons & input_drive::kDown) return DIK_DOWN;
+    if (buttons & input_drive::kLeft) return DIK_LEFT;
+    if (buttons & input_drive::kRight) return DIK_RIGHT;
+    return 0;
+}
+
 inline void drive_state(void* self, DWORD size, void* data) {
     const input_drive::Now n = input_drive::current();
+    const input_drive::Now menu = input_drive::menu_current();
+    const unsigned char key = menu_key(menu.buttons);
+    if (key && device_type(self) == DI8DEVTYPE_KEYBOARD && size >= 256) {
+        static_cast<unsigned char*>(data)[key] = 0x80;
+        input_drive::key_state.fetch_add(1, std::memory_order_relaxed);
+        input_drive::injected.fetch_add(1, std::memory_order_relaxed);
+    }
     if (n.phase < 0) return;
     const unsigned type = device_type(self);
     if (type == DI8DEVTYPE_MOUSE && size >= sizeof(DIMOUSESTATE)) {
@@ -139,7 +160,24 @@ inline void drive_data(void* self, DWORD object_size, DIDEVICEOBJECTDATA* events
     const input_drive::Now n = input_drive::current();
     if (n.phase < 0) return;
     const unsigned type = device_type(self);
-    if (type == DI8DEVTYPE_KEYBOARD) { input_drive::key_data.fetch_add(1, std::memory_order_relaxed); return; }
+    if (type == DI8DEVTYPE_KEYBOARD) {
+        input_drive::key_data.fetch_add(1, std::memory_order_relaxed);
+        const unsigned char key = menu_key(input_drive::menu_current().buttons);
+        if (!key || !events || object_size < sizeof(DIDEVICEOBJECTDATA) || *count + 2 > capacity) return;
+        const auto at = [&](DWORD slot) {
+            return reinterpret_cast<DIDEVICEOBJECTDATA*>(reinterpret_cast<unsigned char*>(events) + slot * object_size);
+        };
+        for (DWORD i = 0; i < 2; ++i) {   // down, then up: a UI that watches edges needs both
+            std::memset(at(*count), 0, object_size);
+            at(*count)->dwOfs = key;
+            at(*count)->dwData = i == 0 ? 0x80 : 0x00;
+            at(*count)->dwTimeStamp = GetTickCount();
+            at(*count)->dwSequence = *count ? at(*count - 1)->dwSequence : 0;
+            ++*count;
+        }
+        input_drive::injected.fetch_add(1, std::memory_order_relaxed);
+        return;
+    }
     if (type != DI8DEVTYPE_MOUSE) return;
     input_drive::mouse_data.fetch_add(1, std::memory_order_relaxed);
     if (!n.dx || !events || object_size < sizeof(DIDEVICEOBJECTDATA) || *count >= capacity) return;
@@ -219,12 +257,20 @@ inline DWORD WINAPI drive_xinput_get_state(DWORD user, XINPUT_STATE* state) {
     if (user != 0 || !state || enabled) return result;
     input_drive::pad_calls.fetch_add(1, std::memory_order_relaxed);
     const int walk = input_drive::current().walk;
-    if (!walk) return result;
+    // Menu presses (NIER_REMIX_LIVE_MENU_DRIVE) come from their own clock and stop when the world script starts.
+    const unsigned short buttons = input_drive::menu_current().buttons;
+    if (!walk && !buttons) return result;
     if (result != ERROR_SUCCESS) std::memset(state, 0, sizeof *state);
     static DWORD packet = 0x100000;  // the game polls for changes by packet number
     state->dwPacketNumber = ++packet;
-    state->Gamepad.sThumbLY = walk > 0 ? 32767 : -32768;
-    input_drive::pad_walk.fetch_add(1, std::memory_order_relaxed);
+    if (walk) {
+        state->Gamepad.sThumbLY = walk > 0 ? 32767 : -32768;
+        input_drive::pad_walk.fetch_add(1, std::memory_order_relaxed);
+    }
+    if (buttons) {
+        state->Gamepad.wButtons = static_cast<WORD>(state->Gamepad.wButtons | buttons);
+        input_drive::pad_buttons.fetch_add(1, std::memory_order_relaxed);
+    }
     return ERROR_SUCCESS;
 }
 

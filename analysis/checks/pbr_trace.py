@@ -84,6 +84,14 @@ def trace(asm):
     found = {'metal': set(), 'albedo': set(), 'gloss': set(), 'normal': set(), 'detail': set(), 'cutout': set()}
     wrote = {}     # ('r', 6, 'x') -> (op, srcs, dest mask, depth) of the instruction that last wrote it
     found['uv'] = {}  # texture slot -> the UV transform of its first sample (uv_transform below)
+    # The game's material switches (PSParamBuffer flags): a constant-buffer lane compared with zero gates either a
+    # constant that replaces a texture channel (if_nz flag / mov dst, cb / endif, or movc dst, flag, cb, texture) or
+    # the sampling of a map (if_nz flag / sample normal map / else flat). A flagged-off map is bound to a white
+    # placeholder, so reading the texture without the flag gives metal 1 and gloss 1: chrome (2026-11-12).
+    flags = {}     # ('r', 5, 'x') -> (cb slot, register, lane, 'ne' | 'gt'): this lane holds "constant lane != 0 / > 0"
+    cond = []      # per open block: the flag of an if_nz on a flag lane (its true branch), else None
+    found['override'] = {}  # (texture slot, channel) -> {(flag, (cb slot, register, lane))}
+    found['enable'] = {'normal': set(), 'detail': set()}  # flags the map's sampling sits under (None: unconditional)
 
     def uv_transform(coord):
         """Scale of a sample coordinate's two lanes, read back to the one instruction that wrote them: a vertex input
@@ -157,8 +165,14 @@ def trace(asm):
     for i, (op, ops, line) in enumerate(ins):
         if op in OPENS:
             depth += 1
+            m = REG.match(ops[0]) if op == 'if_nz' and ops else None
+            cond.append(flags.get((m.group(3), int(m.group(4)), m.group(5))) if m and len(m.group(5)) == 1 else None)
         elif op in CLOSES:
             depth = max(0, depth - 1)
+            if cond:
+                cond.pop()
+        elif op == 'else' and cond:
+            cond[-1] = None
         if op in NO_DEST or not ops:
             continue
         dst = REG.match(ops[0])
@@ -190,6 +204,39 @@ def trace(asm):
                 new[lane] = frozenset().union(*[lane_source(s, lane) for s in srcs])
         # role patterns, evaluated with the provenance *before* this write
         lits = [literal(s) for s in srcs]
+
+        def cb_lane(operand, lane):
+            m = CB.match(operand)
+            sw = m.group(3)
+            return int(m.group(1)), int(m.group(2)), sw[LANES.index(lane)] if len(sw) == 4 else sw[min(dmask.index(lane), len(sw) - 1)]
+
+        def one_channel(provenance):
+            return next(iter(provenance)) if len(provenance) == 1 else None
+
+        def note_override(flag, lane, constant, channel):
+            if flag and channel:
+                found['override'].setdefault(channel, set()).add((flag, cb_lane(constant, lane)))
+
+        if op == 'mov' and cond and cond[-1] and len(srcs) == 1 and CB.match(srcs[0]):
+            for lane in dmask:
+                note_override(cond[-1], lane, srcs[0], one_channel(prov.get((dkind, dn, lane), frozenset())))
+        if op == 'movc' and len(srcs) == 3 and CB.match(srcs[1]) and REG.match(srcs[0]) and len(set(REG.match(srcs[0]).group(5))) == 1:
+            c = REG.match(srcs[0])
+            for lane in dmask:
+                note_override(flags.get((c.group(3), int(c.group(4)), c.group(5)[0])), lane, srcs[1],
+                              one_channel(lane_source(srcs[2], lane)))
+        zero = [bool(l) and all(v == 0 for v in l) for l in lits]
+        new_flags = {}
+        if op == 'ne' and len(srcs) == 2 and ((zero[0] and CB.match(srcs[1])) or (zero[1] and CB.match(srcs[0]))):
+            for lane in dmask:
+                new_flags[lane] = cb_lane(srcs[1] if zero[0] else srcs[0], lane) + ('ne',)
+        if op == 'lt' and len(srcs) == 2 and zero[0] and CB.match(srcs[1]):
+            for lane in dmask:
+                new_flags[lane] = cb_lane(srcs[1], lane) + ('gt',)
+        for lane in dmask:
+            flags.pop((dkind, dn, lane), None)
+            if lane in new_flags:
+                flags[(dkind, dn, lane)] = new_flags[lane]
         if op == 'mad' and len(srcs) == 3 and lits[2] and any(abs(v - 0.03) < 1e-6 or abs(v - 0.08) < 1e-6 for v in lits[2][:3]):
             m_src = REG.match(srcs[0])
             if m_src and len(set(m_src.group(5))) == 1:  # r7.y (Wine) or r7.yyyy (Microsoft): one lane
@@ -202,10 +249,12 @@ def trace(asm):
             found['cutout'].add(sources(srcs[0], 'x'))
         if op == 'add' and len(srcs) == 2 and lits[1] and lits[1][:3] == [-0.5, -0.5, -0.5]:
             found['normal'].add(sources(srcs[0], 'xyz'))
+            found['enable']['normal'].add(cond[-1] if cond else None)
         if op == 'mad' and len(srcs) == 3 and lits[1] and lits[2]:
             two = [k for k, v in enumerate(lits[1]) if v == 2.0]
             if len(two) == 2 and all(lits[2][k] == -1.0 for k in two):
                 found['detail'].add(sources(srcs[0], ''.join(LANES[k] for k in two)))
+                found['enable']['detail'].add(cond[-1] if cond else None)
         for lane, s in new.items():
             # A write inside a branch may not happen: keep what the register held before as well.
             prov[(dkind, dn, lane)] = s | prov.get((dkind, dn, lane), frozenset()) if depth else s
@@ -263,6 +312,21 @@ def roles(asm):
         out['normal'] = n
     if (d := one_slot(f['detail'], 2)):
         out['detail_normal'] = d
+    # A role's texture channels all replaced by one constant under one flag: the draw's constant buffer decides.
+    for role in ('albedo', 'metal', 'gloss'):
+        if role not in out:
+            continue
+        hits = [f['override'].get((out[role]['slot'], c)) for c in out[role]['channels']]
+        if all(h and len(h) == 1 for h in hits):
+            items = [next(iter(h)) for h in hits]
+            flag, (cb, register, _) = items[0]
+            if all(i[0] == flag and i[1][:2] == (cb, register) for i in items):
+                out[role]['override'] = {'flag': dict(zip(('cb', 'register', 'lane', 'test'), flag)), 'cb': cb,
+                                         'register': register, 'lanes': ''.join(i[1][2] for i in items)}
+    for role, key in (('normal', 'normal'), ('detail_normal', 'detail')):
+        fl = f['enable'][key]
+        if role in out and len(fl) == 1 and None not in fl:
+            out[role]['enable'] = dict(zip(('cb', 'register', 'lane', 'test'), next(iter(fl))))
     # Texture repeat the game applies from a constant, per sampled slot (terrain layers: uv * cb1[5].xy). Reported for
     # every slot, because the albedo of a blended (terrain) shader is not a traced role and falls back to slot 0.
     scales = {slot: {'cb': uv[1], 'register': uv[2], 'lanes': uv[3]}

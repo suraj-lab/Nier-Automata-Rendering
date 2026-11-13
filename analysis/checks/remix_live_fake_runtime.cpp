@@ -94,6 +94,28 @@ remixapi_ErrorCode REMIXAPI_CALL create_material(const remixapi_MaterialInfo* i,
         const auto* e = static_cast<const remixapi_MaterialInfoOpaqueEXT*>(i->pNext);
         if (e && e->sType == REMIXAPI_STRUCT_TYPE_MATERIAL_INFO_OPAQUE_EXT) { check_on_disk(e->roughnessTexture); check_on_disk(e->metallicTexture); }
     }
+    if (i && !i->albedoTexture) {
+        // Item T1: the surface is sent in grey until its albedo file is on disk, so this is a real material - log it
+        // (path=-) and hand out a handle, or the mesh would be built with no material at all.
+        const auto* e = static_cast<const remixapi_MaterialInfoOpaqueEXT*>(i->pNext);
+        const bool opaque_ext = e && e->sType == REMIXAPI_STRUCT_TYPE_MATERIAL_INFO_OPAQUE_EXT;
+        const auto base_name = [](const wchar_t* w, char* out, int n) {
+            out[0] = 0;
+            if (!w) return;
+            WideCharToMultiByte(CP_UTF8, 0, w, -1, out, n, nullptr, nullptr);
+            if (const char* cut = std::strrchr(out, '\\')) std::memmove(out, cut + 1, std::strlen(cut + 1) + 1);
+        };
+        char normal[MAX_PATH * 3], rough[MAX_PATH * 3], metal[MAX_PATH * 3];
+        base_name(i->normalTexture, normal, sizeof normal);
+        base_name(opaque_ext ? e->roughnessTexture : nullptr, rough, sizeof rough);
+        base_name(opaque_ext ? e->metallicTexture : nullptr, metal, sizeof metal);
+        note("CreateMaterial path=- normal=%s presented=%u alpha=%d/%u hash=%llu roughness=%s metallic=%s id=%llu",
+             normal[0] ? normal : "-", 0u, opaque_ext ? e->alphaTestType : -1,
+             opaque_ext ? unsigned(e->alphaReferenceValue) : 0u, static_cast<unsigned long long>(i->hash),
+             rough[0] ? rough : "-", metal[0] ? metal : "-", handle);
+        *h = reinterpret_cast<remixapi_MaterialHandle>(handle++);
+        return REMIXAPI_ERROR_CODE_SUCCESS;
+    }
     if (i && i->albedoTexture) {
         char path[MAX_PATH * 3] = "";
         WideCharToMultiByte(CP_UTF8, 0, i->albedoTexture, -1, path, sizeof path, nullptr, nullptr);
@@ -315,6 +337,9 @@ extern "C" __declspec(dllexport) remixapi_ErrorCode REMIXAPI_CALL remixapi_Initi
                                                                                             remixapi_Interface* api) {
     if (const char* f = std::getenv("FAKE_REMIX_FAIL"); f && !std::strncmp(f, "copy:", 5)) fail_copy_at = static_cast<unsigned>(std::atoi(f + 5));
     if (const char* f = std::getenv("FAKE_REMIX_FAIL"); f && !std::strcmp(f, "hang:present")) hang_present = true;
+  // FAKE_REMIX_EXIT_ON_INIT: what the 1.6.1 shim does when its implementation DLL will not load -- ends the process
+  // from inside InitializeLibrary, before any of our code runs again.
+  if (const char* f = std::getenv("FAKE_REMIX_EXIT_ON_INIT")) { (void)f; std::exit(0); }
     note("InitializeLibrary version_minor=%llu", info ? static_cast<unsigned long long>(REMIXAPI_VERSION_GET_MINOR(info->version)) : 0ull);
     *api = remixapi_Interface{};
     api->Shutdown = [] { return REMIXAPI_ERROR_CODE_SUCCESS; };

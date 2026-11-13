@@ -9,8 +9,10 @@ What this pins (Wine mock, fake runtime):
   - a shader with no traceable roles gets no normal map and no PBR textures, even with a BC5 bound at slot 4;
   - a NieR-like shader (MOCK_PBR_PS) gets metallic = mask R and roughness = max(1 - mask G, floor) as R8 DDS files,
     named by its material; the floor defaults to 0.15 (NIER_REMIX_LIVE_ROUGHNESS_FLOOR=0 removes it);
-  - with NIER_REMIX_LIVE_NORMAL=1 its normal map is the slot-3 texture (4x4, converted to octahedral), never the
-    slot-4 detail map (8x8 BC5); NIER_REMIX_LIVE_PBR=0 sends no metallic/roughness.
+  - with its traced normal role its normal map is the slot-3 texture (4x4, converted to octahedral), never the
+    slot-4 detail map (8x8 BC5). Normal maps are on by default; NIER_REMIX_LIVE_NORMAL=0 is the rollback, and the
+    two cases below pin the default in both directions.
+  - NIER_REMIX_LIVE_PBR=0 sends no metallic/roughness.
 """
 import json
 import os
@@ -94,8 +96,9 @@ def main():
     assert all(field(m, 'normal') == '-' and field(m, 'roughness') == '-' and field(m, 'metallic') == '-' for m in mats), mats[:2]
     results['plain'] = 'untraced shader: albedo only; the BC5 at slot 4 is not taken as a normal map'
 
-    # 2. NieR-like shader, normals off: metallic and roughness from the mask, as R8, named by the material.
-    files, mats = run('pbr', {'MOCK_PBR_PS': '1'})
+    # 2. NieR-like shader, normals off explicitly (NIER_REMIX_LIVE_NORMAL=0 is the rollback of the on-by-default
+    #    switch): metallic and roughness from the mask, as R8, named by the material.
+    files, mats = run('pbr', {'MOCK_PBR_PS': '1', 'NIER_REMIX_LIVE_NORMAL': '0'})
     named = [m for m in mats if field(m, 'roughness') != '-']
     assert named, f'no material got PBR textures (shader roles not traced?): {mats[:2]}'
     for m in named:
@@ -120,6 +123,16 @@ def main():
     assert not any((f['width'], f['height']) == (8, 8) and f['format'] in (28, 83) for f in files.values()), \
         [(f['name'], f['width'], f['format']) for f in files.values()]
     results['normal'] = 'normal map from slot 3 (octahedral RGBA8 4x4); the slot-4 detail BC5 is never captured'
+
+    # 3b. Normal maps are on by default: no NIER_REMIX_LIVE_NORMAL at all still sends the slot-3 map. Case 2 above
+    #     proves the =0 rollback, so this pair pins the default in both directions.
+    files, mats = run('pbr-default', {'MOCK_PBR_PS': '1'})
+    named = [m for m in mats if field(m, 'normal') != '-']
+    assert named, f'normal maps must be on by default, no material named one: {mats[:2]}'
+    for m in named:
+        n = files[field(m, 'normal')]
+        assert (n['width'], n['height'], n['format']) == (4, 4, 28), ('default normal must be the slot-3 4x4 map', n['name'])
+    results['normal_default'] = 'a run with no NIER_REMIX_LIVE_NORMAL sends the normal map (on by default)'
 
     # 4. No floor: roughness is exactly 255 - gloss.
     files, mats = run('pbr-nofloor', {'MOCK_PBR_PS': '1', 'NIER_REMIX_LIVE_ROUGHNESS_FLOOR': '0'})

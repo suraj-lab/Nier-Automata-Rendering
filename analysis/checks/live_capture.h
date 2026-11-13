@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdlib>
 // Live scene capture: describes the game's draws for the current frame from CPU shadows and one-time
 // reads, so the Remix worker can rebuild the scene every frame without GPU readback. No Remix API here.
 //
@@ -49,7 +50,16 @@ inline std::atomic<ID3D11DeviceContext*> active_context{nullptr};
 inline std::atomic<bool> visibility_trace_enabled{false}; // opt-in; recording only, never a visibility policy
 inline std::atomic<unsigned long long> visibility_trace_late{0}; // any frame-boundary race makes absence inference unsafe
 // One mapped pointer per resource between Map and Unmap: engines map several buffers at once.
-inline std::map<ID3D11Resource*, void*>& mapped() { static std::map<ID3D11Resource*, void*> m; return m; }
+// `bytes` != 0: a redirected WRITE_DISCARD map. The game was handed `scratch` (ordinary memory) instead of the driver's
+// mapping `real`, and Unmap copies scratch -> real once. Why: the mirror used to read every written buffer back out of
+// the mapping, and under DXVK on the desktop that mapping is write-combined video memory. Replay of a 3,382-draw frame
+// (2026-11-12): 55 ms per game frame inside the constant-buffer maps, against 2 ms for the whole frame with capture off.
+struct Mapping { void* real = nullptr; std::vector<unsigned char> scratch; UINT bytes = 0; };
+inline std::map<ID3D11Resource*, Mapping>& mapped() { static std::map<ID3D11Resource*, Mapping> m; return m; }
+inline bool redirect_maps = true;                       // NIER_REMIX_LIVE_MAP_REDIRECT=0: the old read-back mirror (A/B, rollback)
+inline std::atomic<unsigned> redirected_open{0};        // redirected maps not yet unmapped: these must be flushed whatever happens
+inline std::atomic<unsigned long long> redirected_maps{0}, mapped_read_bytes{0};  // reported with the read counters
+inline unsigned long long teardown_at_map = 0;          // test switch NIER_REMIX_LIVE_TEARDOWN_AT_MAP (0 = off)
 
 
 
@@ -375,6 +385,7 @@ inline std::atomic<unsigned long long> buffer_skinned{0}, buffer_dynamic{0}, gam
 // Where the window's worst game frame went (live 2026-10-31 async1: 100-230 ms worst frames even in windows with no
 // reads or builds): our draw hooks, our work before the real Present, and the real Present call (GPU/queue wait).
 inline unsigned long long frame_capture_us = 0, present_hook_us = 0, present_call_us = 0;  // game thread only
+inline std::atomic<unsigned long long> capture_total_us{0};  // every observe()'s duration; the worker reads and resets it
 inline std::atomic<unsigned long long> worst_capture_us{0}, worst_hook_us{0}, worst_present_us{0};
 // Phase split of the slowest single observe() per stats window (live 2026-10-31: 1.1-1.3 s freezes inside our draw
 // hooks, ~30 s apart, with expiry, texture writes and evictions each ruled out). Exclusive: reads are timed in
@@ -394,10 +405,28 @@ struct CaptureTimer {
     ~CaptureTimer() {
         const unsigned long long total = now_us() - started;
         frame_capture_us += total;
+        capture_total_us.fetch_add(total, std::memory_order_relaxed);
         if (total > slow_total_us.load(std::memory_order_relaxed)) {
             slow_total_us.store(total, std::memory_order_relaxed);
             for (unsigned i = 0; i < kPhaseCount; ++i) slow_phase_us[i].store(phase_us[i], std::memory_order_relaxed);
         }
+    }
+};
+// Where the game thread's draw hook spends its time, in microseconds per frame (NIER_REMIX_LIVE_PROFILE=1). The replay's
+// own REPLAY_PROFILE shows the draw call as one group; this splits it: the D3D11 state getters, the geometry key and
+// filters, and the material/texture block. Everything else (reads, build, submission) is the total minus these.
+inline bool observe_profile = false;
+enum ObservePhase : unsigned { kObserveState, kObserveIa, kObserveKey, kObserveMaterial, kObserveCount };
+inline std::atomic<unsigned long long> observe_phase_us[kObserveCount];  // written by the game thread, reset by the worker
+struct ObserveTimer {
+    unsigned phase;
+    unsigned long long started = 0;
+    explicit ObserveTimer(unsigned p) : phase(observe_profile ? p : kObserveCount) { if (observe_profile) started = now_us(); }
+    ~ObserveTimer() { stop(); }
+    void stop() {  // end this phase here, so a later one can run in the same scope
+        if (phase == kObserveCount) return;
+        observe_phase_us[phase].fetch_add(now_us() - started, std::memory_order_relaxed);
+        phase = kObserveCount;
     }
 };
 inline std::map<std::uint64_t, unsigned>& erased_reason() { static std::map<std::uint64_t, unsigned> m; return m; }
@@ -505,10 +534,13 @@ inline void publish_ui() {
     ui_draw_count.store(static_cast<unsigned>(ready.draws.size()), std::memory_order_release);
 }  // the slot-20 light array is frame-level data: read at most once per frame
 inline unsigned textures_per_frame = 4;  // NIER_REMIX_LIVE_TEX_PER_FRAME: new GPU texture readbacks (0 = none); files written on the worker
-// NIER_REMIX_LIVE_NORMAL: also capture the material's normal map, at the slot the draw's own pixel shader decodes as one
-// (material_roles.h). It used to be slot 4 for every draw: that is g_NormalTexture of the effects shaders, and the
-// 2-channel *detail* normal of the world materials, whose normal map is slot 3 or 2 (analysis/PBR_MAPPING.md).
-inline bool normal_textures = false;
+// NIER_REMIX_LIVE_NORMAL (default on, =0 rolls back): capture the material's normal map, at the slot the draw's own
+// pixel shader decodes as one (material_roles.h). It used to be slot 4 for every draw: that is g_NormalTexture of the
+// effects shaders, and the 2-channel *detail* normal of the world materials, whose normal map is slot 3 or 2
+// (analysis/PBR_MAPPING.md). Orientation: gameplay shaders put red along the vertex tangent and green along N x T,
+// which is +V for a right-handed UV layout, the same convention as Remix's dP/du, dP/dv frame
+// (replay/research-2026-11-13/normal_handedness.md).
+inline bool normal_textures = true;
 // NIER_REMIX_LIVE_PBR (default on): metallic and roughness textures derived from the mask channels the shader reads.
 inline bool pbr_textures = true;
 // NIER_REMIX_LIVE_EFFECTS=1: keep the effects shaders' draws in the scene (default: left out).
@@ -517,6 +549,27 @@ inline bool keep_effects = false;
 // CB11 palette, instead of baking every pose into a new mesh (live: pose was 82% of the rebuilds, 2026-10-30). Off by
 // default: the CPU bake stays the shipped path until the A/B on the laptop is green twice (analysis/PHASE4_PLAN.md).
 inline bool gpu_skinning = false;
+// Item T1 switch (same env, read at load for the same reason as live_scene::grey_first).
+inline bool reserve_deferred_ids = [] {
+    const char* v = std::getenv("NIER_REMIX_LIVE_GREY_FIRST");
+    return v && v[0] == '1' && v[1] == '\0';
+}();
+struct DeferredReadback {
+    ID3D11Resource* resource = nullptr;   // one reference per pending kind, released when its file is written
+    TextureKey key{};
+    std::uint32_t id = 0;
+    unsigned kind = 0;
+};
+inline std::vector<DeferredReadback>& deferred_readbacks() {
+    static std::vector<DeferredReadback> list;
+    return list;
+}
+// One staging copy per resource even when two kinds (metallic and roughness) come from the same mask.
+inline std::map<ID3D11Resource*, std::shared_ptr<const texture_capture::Texture>>& deferred_pixels() {
+    static std::map<ID3D11Resource*, std::shared_ptr<const texture_capture::Texture>> m;
+    return m;
+}
+
 // Deferred textures and the geometries that were built before the texture existed: when the texture is finally
 // captured, those geometries are invalidated so the existing rebuild path makes one new mesh with the material.
 inline std::map<ID3D11Resource*, std::vector<std::uint64_t>>& waiting_materials() {
@@ -578,7 +631,8 @@ inline void set_permitted(bool ok) {
         std::lock_guard<std::recursive_mutex> lock(mutex());
         frame_open.store(false, std::memory_order_release);
         building() = Frame{};
-        mapped().clear();
+        for (auto it = mapped().begin(); it != mapped().end();)  // a redirected map stays: the game still holds its memory
+            it = it->second.bytes ? std::next(it) : mapped().erase(it);
         while (!shadows().empty()) erase_shadow(shadows().begin());  // the game's buffers are no longer pinned
         while (!pending_reads().empty()) drop_pending(pending_reads().begin());
         stale_snapshots().clear();
@@ -647,6 +701,13 @@ inline bool read_into(ID3D11Device* device, ID3D11DeviceContext* context, ID3D11
 inline const std::vector<unsigned char>* buffer_bytes(ID3D11Device* device, ID3D11DeviceContext* context, ID3D11Buffer* buffer) {
     if (!buffer) return nullptr;
     const PhaseTimer timer(kPhaseReads);
+    {
+        // The mirror is borrowed into the mapping for the whole Map..Unmap window, so a redirect makes a mirrored buffer
+        // look unmirrored. Reading it then would copy a buffer the game currently has mapped (undefined contents for a
+        // discard): report "no bytes yet" and let the draw wait or skip instead.
+        const auto mapped_entry = mapped().find(buffer);
+        if (mapped_entry != mapped().end() && mapped_entry->second.bytes) return nullptr;
+    }
     D3D11_BUFFER_DESC desc{};
     Shadow* shadow = find_shadow(buffer);
     if (!shadow || shadow->bytes.empty()) {
@@ -774,6 +835,25 @@ inline void note_write(ID3D11Buffer* buffer, const void* data, std::size_t size,
         shadow_bytes = shadow_bytes - before + shadow->bytes.size();
     }
     std::memcpy(shadow->bytes.data(), data, desc.ByteWidth);
+    if (mapped) mapped_read_bytes.fetch_add(desc.ByteWidth, std::memory_order_relaxed);
+    shadow->written = true;
+    shadow->trimmable = false;
+    ++shadow->generation;
+    shadow->used = ++shadow_clock;
+    shadow->used_frame = frame_number;
+    trim_shadows();
+}
+
+// A redirected map's bytes become the shadow by swap: the game already wrote them into our memory, nothing is copied.
+// `bytes` leaves holding the shadow's previous vector (or nothing).
+inline void adopt_write(ID3D11Buffer* buffer, std::vector<unsigned char>& bytes) {
+    D3D11_BUFFER_DESC desc{};
+    buffer->GetDesc(&desc);
+    if (!desc.ByteWidth || bytes.size() != desc.ByteWidth) return;
+    Shadow* shadow = find_shadow(buffer);
+    if (!shadow) shadow = &new_shadow(buffer, desc, true);
+    shadow_bytes = shadow_bytes - shadow->bytes.size() + bytes.size();
+    shadow->bytes.swap(bytes);
     shadow->written = true;
     shadow->trimmable = false;
     ++shadow->generation;
@@ -827,34 +907,91 @@ inline HRESULT STDMETHODCALLTYPE hooked_create_buffer(ID3D11Device* self, const 
     return hr;
 }
 
+// An outstanding redirect that the game maps again belongs to the mapping it opened: flush it into the memory the game
+// was handed for that map, and forget it. Runs even after a teardown, so no entry can outlive its mapping (a redirect
+// left behind by a failure would otherwise be written into whatever the resource is mapped to next).
+// `redirected_open > 0` keeps this off the common path: it is 0 unless a redirect is outstanding right now.
+inline void flush_leftover_redirect(ID3D11Resource* resource) {
+    if (!resource || !redirected_open.load(std::memory_order_acquire)) return;
+    const auto entry = mapped().find(resource);
+    if (entry == mapped().end() || !entry->second.bytes) return;
+    std::memcpy(entry->second.real, entry->second.scratch.data(), entry->second.bytes);
+    redirected_open.fetch_sub(1, std::memory_order_release);
+    mapped().erase(entry);
+}
+
 inline HRESULT STDMETHODCALLTYPE hooked_map(ID3D11DeviceContext* self, ID3D11Resource* resource, UINT subresource,
                                             D3D11_MAP type, UINT flags, D3D11_MAPPED_SUBRESOURCE* mapped_data) {
     const HRESULT hr = reinterpret_cast<MapFn>(g_next_map.load(std::memory_order_acquire))(self, resource, subresource, type, flags, mapped_data);
+    if (SUCCEEDED(hr) && resource && subresource == 0) try {  // before `permitted`: a leftover entry is flushed anyway
+        std::lock_guard<std::recursive_mutex> lock(mutex());
+        flush_leftover_redirect(resource);
+    } catch (...) {}
     if (permitted.load(std::memory_order_acquire) && SUCCEEDED(hr) && mapped_data && resource && subresource == 0 &&
         (type == D3D11_MAP_WRITE_DISCARD || type == D3D11_MAP_WRITE || type == D3D11_MAP_WRITE_NO_OVERWRITE)) {
         try {
             std::lock_guard<std::recursive_mutex> lock(mutex());
-            mapped()[resource] = mapped_data->pData;
+            flush_leftover_redirect(resource);  // also the entry a teardown left behind: see above
+            Mapping& m = mapped()[resource];
+            m.real = mapped_data->pData;
+            m.bytes = 0;
+            // WRITE_DISCARD only: the game must rewrite everything it uses, so it never needs the old contents, and the
+            // whole buffer can be copied back. In-place modes (WRITE, NO_OVERWRITE) keep the driver's pointer.
+            ID3D11Buffer* buffer = nullptr;
+            if (redirect_maps && type == D3D11_MAP_WRITE_DISCARD && m.real &&
+                SUCCEEDED(resource->QueryInterface(__uuidof(ID3D11Buffer), reinterpret_cast<void**>(&buffer))) && buffer) {
+                D3D11_BUFFER_DESC desc{};
+                buffer->GetDesc(&desc);
+                if (desc.ByteWidth && (desc.ByteWidth <= max_shadow_write || (desc.BindFlags & D3D11_BIND_CONSTANT_BUFFER))) {
+                    // The shadow's own vector when it is resident: no allocation, and what the game leaves unwritten
+                    // keeps this buffer's previous bytes. The shadow is not resident until Unmap gives it back.
+                    Shadow* shadow = find_shadow(buffer);
+                    if (shadow && shadow->bytes.size() == desc.ByteWidth) {
+                        shadow_bytes -= shadow->bytes.size();
+                        m.scratch.swap(shadow->bytes);
+                    } else {
+                        m.scratch.assign(desc.ByteWidth, 0);
+                    }
+                    m.bytes = desc.ByteWidth;
+                    mapped_data->pData = m.scratch.data();
+                    redirected_open.fetch_add(1, std::memory_order_release);
+                    // Test switch: the worker's teardown landing between this Map and its Unmap.
+                    if (redirected_maps.fetch_add(1, std::memory_order_relaxed) + 1 == teardown_at_map) set_permitted(false);
+                }
+            }
+            if (buffer) buffer->Release();
         } catch (...) {}
     }
     return hr;
 }
 
 inline void STDMETHODCALLTYPE hooked_unmap(ID3D11DeviceContext* self, ID3D11Resource* resource, UINT subresource) {
-    if (resource && subresource == 0 && permitted.load(std::memory_order_acquire)) try {
+    // Not gated on `permitted` alone: a redirected map must reach the driver's memory even after a teardown.
+    if (resource && subresource == 0 &&
+        (permitted.load(std::memory_order_acquire) || redirected_open.load(std::memory_order_acquire))) try {
         std::lock_guard<std::recursive_mutex> lock(mutex());
         const auto entry = mapped().find(resource);
         if (entry != mapped().end()) {
-            ID3D11Buffer* buffer = nullptr;
-            if (SUCCEEDED(resource->QueryInterface(__uuidof(ID3D11Buffer), reinterpret_cast<void**>(&buffer))) && buffer) {
-                D3D11_BUFFER_DESC desc{};
-                buffer->GetDesc(&desc);
-                // A mapped buffer pointer always spans ByteWidth (unlike UpdateSubresource's source), so the whole
-                // copy is in bounds. WRITE_DISCARD hands back the full buffer; the other modes write in place.
-                note_write(buffer, entry->second, desc.ByteWidth);
-                buffer->Release();
-            }
+            Mapping m = std::move(entry->second);
             mapped().erase(entry);
+            if (m.bytes) {
+                std::memcpy(m.real, m.scratch.data(), m.bytes);  // the only copy, and it only writes the mapping
+                redirected_open.fetch_sub(1, std::memory_order_release);
+            }
+            ID3D11Buffer* buffer = nullptr;
+            if (permitted.load(std::memory_order_acquire) &&
+                SUCCEEDED(resource->QueryInterface(__uuidof(ID3D11Buffer), reinterpret_cast<void**>(&buffer))) && buffer) {
+                if (m.bytes) {
+                    adopt_write(buffer, m.scratch);
+                } else {
+                    D3D11_BUFFER_DESC desc{};
+                    buffer->GetDesc(&desc);
+                    // A mapped buffer pointer always spans ByteWidth (unlike UpdateSubresource's source), so the whole
+                    // copy is in bounds. The in-place modes (WRITE, NO_OVERWRITE) are read back from the mapping.
+                    note_write(buffer, m.real, desc.ByteWidth);
+                }
+            }
+            if (buffer) buffer->Release();
         }
     } catch (...) {}
     reinterpret_cast<UnmapFn>(g_next_unmap.load(std::memory_order_acquire))(self, resource, subresource);
@@ -920,9 +1057,12 @@ inline void STDMETHODCALLTYPE hooked_copy_region(ID3D11DeviceContext* self, ID3D
 // GPU readbacks are rate-limited per frame; the worker writes the queued DDS files under the session disk cap.
 enum class TextureResult { Captured, Unusable, Deferred };
 
+// `reserved` (item T1): the id this texture was given at first sight, so a deferred readback lands under the id the
+// material was already built with. 0 means "allocate one now", the old behaviour.
 inline TextureResult write_texture(ID3D11Device* device, ID3D11DeviceContext* context, ID3D11Resource* resource,
                                    std::uint32_t& id, std::shared_ptr<const texture_capture::Texture>& source,
-                                   bool normal_slot = false, int channel = -1, bool invert = false) {
+                                   bool normal_slot = false, int channel = -1, bool invert = false,
+                                   std::uint32_t reserved = 0) {
     if (texture_dir.empty() || texture_bytes_written >= texture_disk_budget) return TextureResult::Unusable;
     const PhaseTimer timer(kPhaseTexture);
     if (!source) {
@@ -945,14 +1085,14 @@ inline TextureResult write_texture(ID3D11Device* device, ID3D11DeviceContext* co
         if (!read) return TextureResult::Unusable;
         source = std::make_shared<const texture_capture::Texture>(std::move(pixels));
     }
-    const std::uint32_t assigned = next_texture_id;
+    const std::uint32_t assigned = reserved ? reserved : next_texture_id;
     wchar_t name[64];
     swprintf(name, 64, L"\\live_%u.dds", assigned);
     const std::wstring path = texture_dir + name;
     texture_bytes_written += source->bytes.size();  // conservative per-output disk accounting, unchanged
     all_textures().push_back(TextureFile{assigned, path, source, normal_slot, channel, invert});
     id = assigned;
-    ++next_texture_id;
+    if (!reserved) ++next_texture_id;
     return TextureResult::Captured;
 }
 
@@ -986,6 +1126,39 @@ inline void begin_frame(ID3D11DeviceContext* context, unsigned width = 0, unsign
             game_frames_total.fetch_add(1, std::memory_order_relaxed);
         }
         textures_this_frame = 0;
+        if (reserve_deferred_ids && !deferred_readbacks().empty() && context) {
+            ID3D11Device* device = nullptr;
+            context->GetDevice(&device);
+            std::size_t tried = 0;
+            for (std::size_t i = 0; i < deferred_readbacks().size() && tried < 8;) {
+                const DeferredReadback entry = deferred_readbacks()[i];
+                ++tried;
+                std::uint32_t id = 0;
+                auto& shared = deferred_pixels()[entry.resource];
+                std::shared_ptr<const texture_capture::Texture> source = shared;   // second kind: no second readback
+                const TextureResult r = write_texture(device, context, entry.resource, id, source, entry.kind == 1,
+                                                     entry.kind >= 2 ? static_cast<int>((entry.kind - 2) / 2) : -1,
+                                                     entry.kind >= 2 && (entry.kind - 2) % 2, entry.id);
+                if (r == TextureResult::Captured) {
+                    shared = source;
+                    deferred_readbacks().erase(deferred_readbacks().begin() + static_cast<long>(i));
+                    continue;
+                }
+                if (r == TextureResult::Unusable) {
+                    deferred_readbacks().erase(deferred_readbacks().begin() + static_cast<long>(i));
+                    continue;
+                }
+                ++i;
+            }
+            for (auto it = deferred_pixels().begin(); it != deferred_pixels().end();) {
+                bool pending = false;
+                for (const auto& e : deferred_readbacks()) if (e.resource == it->first) { pending = true; break; }
+                if (pending) { ++it; continue; }
+                it->first->Release();
+                it = deferred_pixels().erase(it);
+            }
+            if (device) device->Release();
+        }
         lights_read = false;
         read_bytes_this_frame = 0;
         build_us_this_frame = 0;
@@ -1090,9 +1263,47 @@ struct MaterialNote {
     std::string slots;    // per role: slot:result:format:bind, result C captured D deferred U unusable - unbound
     int alpha_op = 7;
 };
+// Per pixel shader: how many scene draws reached it, with how many triangles, under which blend state, alpha-tested or
+// not, and whether it was classified an effect. Bounded to 4096 shaders and reporting only, so items L4/L6/L7 have the
+// draw-level link to the shader that the material note alone never had.
+struct ShaderTally {
+    unsigned long long draws = 0, triangles = 0, blended = 0, alpha_tested = 0, effects = 0, skipped = 0;
+    unsigned src_blend = 0, dest_blend = 0;
+};
+inline std::map<unsigned long long, ShaderTally>& shader_tallies() {
+    static std::map<unsigned long long, ShaderTally> m;
+    return m;
+}
+inline void tally_shader(unsigned long long ps, unsigned long long triangles, bool blended, unsigned src_blend,
+                         unsigned dest_blend, bool alpha_tested, bool effect, bool skipped) {
+    auto& m = shader_tallies();
+    if (m.size() > 4096 && !m.count(ps)) return;
+    ShaderTally& t = m[ps];
+    ++t.draws;
+    t.triangles += triangles;
+    if (blended) { ++t.blended; t.src_blend = src_blend; t.dest_blend = dest_blend; }
+    if (alpha_tested) ++t.alpha_tested;
+    if (effect) ++t.effects;
+    if (skipped) ++t.skipped;
+}
+// The heaviest shaders, biggest triangle share first, for the stats line.
+inline std::vector<std::pair<unsigned long long, ShaderTally>> top_shaders(std::size_t count) {
+    std::vector<std::pair<unsigned long long, ShaderTally>> all(shader_tallies().begin(), shader_tallies().end());
+    std::sort(all.begin(), all.end(), [](const auto& a, const auto& b) { return a.second.triangles > b.second.triangles; });
+    if (all.size() > count) all.resize(count);
+    return all;
+}
+
 inline std::mutex& material_notes_mutex() { static std::mutex m; return m; }
 inline std::vector<MaterialNote>& material_notes() { static std::vector<MaterialNote> v; return v; }
 inline std::set<unsigned long long>& noted_shaders() { static std::set<unsigned long long> s; return s; }
+// Whether this draw's shader will produce a note, asked before the note's strings are built: a live 3,382-draw frame
+// spent ~1.1 ms per frame in the material block and most of the note cost was string formatting for shaders already
+// noted (2026-11-12 profile: state=325 ia=421 key=1220 material=1057 us per frame).
+inline bool note_wanted(unsigned long long ps) {
+    std::lock_guard<std::mutex> lock(material_notes_mutex());
+    return noted_shaders().size() < 2000 && !noted_shaders().count(ps);
+}
 inline void note_material(MaterialNote note) {
     std::lock_guard<std::mutex> lock(material_notes_mutex());
     if (noted_shaders().size() >= 2000 || !noted_shaders().insert(note.ps).second) return;
@@ -1141,34 +1352,36 @@ inline bool declares_effect_buffers(const std::string& text) {
 }
 // shortcut: keyed by shader pointer without a reference; a released shader's address reused by another would keep the
 // first one's answer. NieR creates its pixel shaders at load and keeps them; upgrade if live runs show otherwise.
-inline PixelInfo pixel_info(ID3D11DeviceContext* context) {
+// Cached per pixel shader and returned by pointer: Roles holds 13 std::strings (5 channels, 8 UV scales), so returning
+// it by value copied them on every draw -- 1,220 us of a 3,382-draw frame's key phase on 2026-11-12. The cache is a
+// std::map (node-based, so entries do not move) and is only cleared here; a draw uses its pointer immediately.
+inline const PixelInfo* pixel_info(ID3D11DeviceContext* context, unsigned long long* ps_out = nullptr) {
+    static const PixelInfo none{};
     ID3D11PixelShader* ps = nullptr;
     context->PSGetShader(&ps, nullptr, nullptr);
-    if (!ps) return {};
-    PixelInfo result;
-    const auto known = pixel_infos().find(ps);
-    if (known != pixel_infos().end()) {
-        result = known->second;
-    } else {
-        std::vector<unsigned char> bytecode;
-        ID3DBlob* text = nullptr;
-        if (shader_capture::lookup(ps, bytecode) && disassembler() &&
-            SUCCEEDED(disassembler()(bytecode.data(), bytecode.size(), 0, nullptr, &text)) && text) {
-            const std::string asm_text(static_cast<const char*>(text->GetBufferPointer()), text->GetBufferSize());
-            result.alpha = alpha_test::parse(asm_text);
-            try {
-                result.roles = material_roles::parse(asm_text);  // never expected to throw; a surprise means no roles
-            } catch (...) {
-                result.roles = {};
-            }
-            result.effect = declares_effect_buffers(asm_text);
+    if (ps_out) *ps_out = static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(ps));
+    if (!ps) return &none;
+    auto& infos = pixel_infos();
+    const auto known = infos.find(ps);
+    if (known != infos.end()) { ps->Release(); return &known->second; }
+    if (infos.size() > 65536) infos.clear();  // bounded; the pointers above are never held past their draw
+    PixelInfo& result = infos[ps];
+    std::vector<unsigned char> bytecode;
+    ID3DBlob* text = nullptr;
+    if (shader_capture::lookup(ps, bytecode) && disassembler() &&
+        SUCCEEDED(disassembler()(bytecode.data(), bytecode.size(), 0, nullptr, &text)) && text) {
+        const std::string asm_text(static_cast<const char*>(text->GetBufferPointer()), text->GetBufferSize());
+        result.alpha = alpha_test::parse(asm_text);
+        try {
+            result.roles = material_roles::parse(asm_text);  // never expected to throw; a surprise means no roles
+        } catch (...) {
+            result.roles = {};
         }
-        if (text) text->Release();
-        if (pixel_infos().size() > 65536) pixel_infos().clear();  // bounded, like the other caches
-        pixel_infos()[ps] = result;
+        result.effect = declares_effect_buffers(asm_text);
     }
+    if (text) text->Release();
     ps->Release();
-    return result;
+    return &infos[ps];
 }
 
 // ---- draw observation --------------------------------------------------------------------------
@@ -1218,13 +1431,18 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     trace.event.instances = instance_count;
     // The HUD is drawn as short indexed quads (often 6 indices), so the world-geometry minimum cannot apply to it.
     // Both discriminators are cheap: the bound blend state and the bound render target.
+    std::pair<unsigned, unsigned> early_target;
+    bool blended = false;
+    bool blend_on = false;                 // the bound blend state as D3D11 reports it, not the "alpha blend" heuristic
+    unsigned blend_src = 0, blend_dest = 0;
+    {
+    const ObserveTimer timer(kObserveState);
     ID3D11RenderTargetView* early_rtv = nullptr;
     context->OMGetRenderTargets(1, &early_rtv, nullptr);
-    const std::pair<unsigned, unsigned> early_target = target_size(early_rtv);
+    early_target = target_size(early_rtv);
     trace.event.target_w = early_target.first;
     trace.event.target_h = early_target.second;
     if (early_rtv) early_rtv->Release();
-    bool blended = false;
     {
         ID3D11BlendState* blend = nullptr;
         context->OMGetBlendState(&blend, nullptr, nullptr);
@@ -1234,8 +1452,12 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
             const D3D11_RENDER_TARGET_BLEND_DESC& rt = desc.RenderTarget[0];
             blended = desc.AlphaToCoverageEnable == FALSE && rt.BlendEnable && rt.BlendOp == D3D11_BLEND_OP_ADD &&
                       rt.SrcBlend == D3D11_BLEND_SRC_ALPHA && rt.DestBlend == D3D11_BLEND_INV_SRC_ALPHA;
+            blend_on = rt.BlendEnable != FALSE;      // the raw state, for the per-shader tally (items L6/L7)
+            blend_src = static_cast<unsigned>(rt.SrcBlend);
+            blend_dest = static_cast<unsigned>(rt.DestBlend);
             blend->Release();
         }
+    }
     }
     // A scene target the size of the final image (native scale) cannot be told apart from the HUD's by size: then the
     // HUD is not captured rather than taking the scene's blended draws for sprites.
@@ -1252,6 +1474,7 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
         trace.event.reason = visibility_trace::Reason::Small;
         return;
     }
+    ObserveTimer ia_timer(kObserveIa);
     D3D11_PRIMITIVE_TOPOLOGY topology = D3D11_PRIMITIVE_TOPOLOGY_UNDEFINED;
     context->IAGetPrimitiveTopology(&topology);
     if (topology != D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST) {
@@ -1279,6 +1502,8 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
         release_all(vbs, 4, ib, layout);
         return;
     }
+    ia_timer.stop();  // the key and the filters below are their own phase
+    ObserveTimer key_timer(kObserveKey);
 
     // Skinned: drawn as a bind-pose mesh with the frame's bone palette (see below).
     bool skinned = false;
@@ -1368,14 +1593,17 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
 
     // The game's effects shaders (smoke, particles, distortion) reached Remix as solid cutout geometry; they stay out of
     // the path-traced scene (user decision 2026-11-01). NIER_REMIX_LIVE_EFFECTS=1 keeps them for comparison.
-    const PixelInfo pixel = pixel_info(context);
+    unsigned long long pixel_ps = 0;
+    const PixelInfo& pixel = *pixel_info(context, &pixel_ps);
     if (pixel.effect && !keep_effects) {
-        note_material({current_ps(context), true, {}, {}, 7});
+        note_material({pixel_ps, true, {}, {}, 7});
+        tally_shader(pixel_ps, index_count / 3, false, 0, 0, false, true, true);
         trace.event.reason = visibility_trace::Reason::Effect;
         release_all(vbs, 4, ib, layout);
         return;
     }
 
+    key_timer.stop();
     ID3D11Device* device = nullptr;
     context->GetDevice(&device);
     if (!device) { release_all(vbs, 4, ib, layout); return; }
@@ -1429,6 +1657,7 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     std::uint64_t uv_bits = 0;            // ... folded into the version, so a changed repeat rebuilds the mesh
     bool texture_deferred = false;
     {
+        const ObserveTimer timer(kObserveMaterial);
         // Share raw bytes between this draw's roles (metallic/roughness use the same mask); only the queued worker
         // files retain them after the draw, so this adds no session-long pixel cache.
         std::map<ID3D11Resource*, std::shared_ptr<const texture_capture::Texture>> captured_pixels;
@@ -1444,6 +1673,15 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
             const TextureResult result = write_texture(device, context, resource, assigned, captured_pixels[resource], kind == 1,
                                                        kind >= 2 ? static_cast<int>((kind - 2) / 2) : -1,
                                                        kind >= 2 && (kind - 2) % 2);
+            if (result == TextureResult::Deferred && reserve_deferred_ids) {
+                const std::uint32_t reserved = next_texture_id++;
+                resource->AddRef();
+                texture_ids()[key] = TextureEntry{reserved, frame_number};
+                if (deferred_readbacks().size() < 65536)
+                    deferred_readbacks().push_back(DeferredReadback{resource, key, reserved, kind});
+                id = reserved;
+                return TextureResult::Captured;
+            }
             if (result == TextureResult::Deferred) {
                 auto& waiters = waiting_materials();
                 if (waiters.size() > 65536) waiters.clear();  // bounded, like the other caches
@@ -1454,7 +1692,10 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
             resource->AddRef();  // the key keeps the pointer from being reused while the entry exists
             texture_ids()[key] = TextureEntry{assigned, frame_number};
             id = assigned;
-            if (assigned) {  // the texture has landed: rebuild the meshes that were made without it
+            if (assigned && reserve_deferred_ids) {   // item T1: the material swaps, the mesh stays
+                const auto waiter = waiting_materials().find(resource);
+                if (waiter != waiting_materials().end()) waiting_materials().erase(waiter);
+            } else if (assigned) {  // the texture has landed: rebuild the meshes that were made without it
                 const auto waiter = waiting_materials().find(resource);
                 if (waiter != waiting_materials().end()) {
                     for (const std::uint64_t key : waiter->second) {
@@ -1471,10 +1712,11 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
         context->PSGetShaderResources(0, 16, views);
         // Each material input from the slot the draw's own pixel shader uses for it (material_roles.h).
         const material_roles::Roles& roles = pixel.roles;
-        std::string slot_notes;  // for note_material: what happened at each role's slot
+        const bool want_note = note_wanted(pixel_ps);
+        std::string slot_notes;  // for note_material: what happened at each role's slot (only when note_wanted)
         const auto take = [&](int slot, std::uint32_t& id, unsigned kind) {
             if (slot < 0 || slot >= 16 || !views[slot]) {
-                slot_notes += " " + std::to_string(slot) + ":-";
+                if (want_note) slot_notes += " " + std::to_string(slot) + ":-";
                 return TextureResult::Unusable;
             }
             ID3D11Resource* resource = nullptr;
@@ -1487,11 +1729,13 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
                 t2d->GetDesc(&desc);
                 t2d->Release();
             }
-            char note[64];
-            std::snprintf(note, sizeof note, " %d:%c:%u:%x:%ux%u", slot,
-                          r == TextureResult::Captured ? (id ? 'C' : 'U') : r == TextureResult::Deferred ? 'D' : 'U',
-                          static_cast<unsigned>(desc.Format), desc.BindFlags, desc.Width, desc.Height);
-            slot_notes += note;
+            if (want_note) {
+                char note[64];
+                std::snprintf(note, sizeof note, " %d:%c:%u:%x:%ux%u", slot,
+                              r == TextureResult::Captured ? (id ? 'C' : 'U') : r == TextureResult::Deferred ? 'D' : 'U',
+                              static_cast<unsigned>(desc.Format), desc.BindFlags, desc.Width, desc.Height);
+                slot_notes += note;
+            }
             resource->Release();
             return r;
         };
@@ -1531,17 +1775,19 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
                 }
                 cb->Release();
             }
-            char note[64];
-            std::snprintf(note, sizeof note, " uv:%d:cb%d[%d].%s=%.3g,%.3g", albedo_slot, u.cb, u.reg, u.lanes.c_str(),
-                          uv_scale[0], uv_scale[1]);
-            slot_notes += note;
+            if (want_note) {
+                char note[64];
+                std::snprintf(note, sizeof note, " uv:%d:cb%d[%d].%s=%.3g,%.3g", albedo_slot, u.cb, u.reg,
+                              u.lanes.c_str(), uv_scale[0], uv_scale[1]);
+                slot_notes += note;
+            }
         }
         const auto lane = [](const std::string& c) { return c.empty() ? 0u : static_cast<unsigned>(std::string("xyzw").find(c[0])); };
         if (normal_textures && roles.normal.slot >= 0) take(roles.normal.slot, normal, 1);
         if (pbr_textures && roles.metal.slot >= 0) take(roles.metal.slot, metallic, 2 + 2 * lane(roles.metal.channels));
         if (pbr_textures && roles.gloss.slot >= 0)
             take(roles.gloss.slot, roughness, 2 + 2 * lane(roles.gloss.channels) + (roles.gloss.invert ? 1 : 0));
-        {
+        if (want_note) {
             std::string traced;
             const auto add = [&](const char* name, const material_roles::Channel& c) {
                 if (c.slot >= 0) traced += std::string(traced.empty() ? "" : " ") + name + "=" + std::to_string(c.slot) + "." +
@@ -1549,8 +1795,11 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
             };
             add("albedo", roles.albedo); add("metal", roles.metal); add("gloss", roles.gloss);
             add("normal", roles.normal); add("detail", roles.detail_normal);
-            note_material({current_ps(context), false, traced.empty() ? "-" : traced, slot_notes, pixel.alpha.op});
+            note_material({pixel_ps, false, traced.empty() ? "-" : traced, slot_notes, pixel.alpha.op});
         }
+        // Per-shader draw table, every draw: the link from a shader to what its draws actually are (L4/L6/L7). Outside the
+        // note block, or only the first draw of each shader would be counted.
+        tally_shader(pixel_ps, index_count / 3, blend_on, blend_src, blend_dest, pixel.alpha.discards, pixel.effect, false);
         for (unsigned slot = 0; slot < 16; ++slot)
             if (views[slot]) views[slot]->Release();  // GetShaderResources added one reference each
     }

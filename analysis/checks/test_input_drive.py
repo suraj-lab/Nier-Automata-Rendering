@@ -42,7 +42,27 @@ int main() {
     assert(current().phase == -1);
     start_us = now_us();
     assert(current().phase == 0);
-    std::puts("strict parse, phase boundaries, not driving before start or after end");
+    // G2: press phases. `press:<BUTTON>:<seconds>` holds one XInput button for that long; an unknown button refuses
+    // the whole script, because a typo that silently becomes a still phase would leave a run waiting at the title.
+    const auto m = parse("wait:2,press:A:0.2,wait:1,press:DOWN:0.2,press:START:0.1");
+    assert(m.size() == 5);
+    assert(at(m, 0).phase == 0 && at(m, 0).buttons == 0);
+    assert(at(m, 2.0).phase == 1 && at(m, 2.0).buttons == kA && at(m, 2.19).buttons == kA);
+    // Points inside each phase, not on its boundary: 2 + 0.2 + 1 does not land exactly on 3.2 in binary floating point.
+    assert(at(m, 2.25).phase == 2 && at(m, 2.25).buttons == 0 && at(m, 2.25).walk == 0 && at(m, 2.25).dx == 0);
+    assert(at(m, 3.25).buttons == kDown && at(m, 3.25).walk == 0 && at(m, 3.45).buttons == kStart);
+    for (const char* bad : {"press:5", "press::3", "press:A", "press:A:0", "press:Q:1", "press:a:1", "press:A:1:2"})
+        assert(parse(bad).empty());
+    // The menu script has its own clock and is silent until it is activated, and silent again once the world starts.
+    menu_script = m;
+    assert(menu_current().phase == -1);
+    menu_start_us = now_us();
+    assert(menu_current().phase == -1);              // not active yet
+    menu_active = true;
+    assert(menu_current().phase == 0);
+    menu_active = false;                             // the world script takes over
+    assert(menu_current().phase == -1 && menu_current().buttons == 0);
+    std::puts("strict parse, phase boundaries, not driving before start or after end, press phases and menu clock");
     return 0;
 }
 '''

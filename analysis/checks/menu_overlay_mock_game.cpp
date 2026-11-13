@@ -497,6 +497,12 @@ int wmain(int argc, wchar_t** argv) {
     static unsigned char a8[64];
     for (unsigned i = 0; i < 64; ++i) a8[i] = static_cast<unsigned char>(i * 4);
     if (GetEnvironmentVariableW(L"MOCK_TEX_A8", nullptr, 0) > 0) mesh_srvs[0] = make_srv(8, 8, DXGI_FORMAT_A8_UNORM, a8, 8, 0);
+    // MOCK_TEX_SRGB=rgba8|bc1: the albedo arrives sRGB-tagged, as NieR's do. The live path writes it untagged by
+    // default (NIER_REMIX_LIVE_ALBEDO_UNORM), so the DDS header is where that shows.
+    if (const char* srgb = std::getenv("MOCK_TEX_SRGB")) {
+        if (!std::strcmp(srgb, "bc1")) mesh_srvs[0] = make_srv(8, 8, DXGI_FORMAT_BC1_UNORM_SRGB, bc1, 16, 0);
+        else if (!std::strcmp(srgb, "rgba8")) mesh_srvs[0] = make_srv(4, 4, DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, rgba, 16, 0);
+    }
     if (!mesh_srvs[0] || !mesh_srvs[1] || !mesh_srvs[2]) { std::fprintf(out, "FAIL textures\n"); return 3; }
     // The tiled-forward light arrays, bound the way the game binds them, so an F9 capture records them for the laptop
     // probe: points at t20 (48-byte elements, BUFFEREX view, the view starts at element 1), spots at t22 (80 bytes).
@@ -589,6 +595,9 @@ int wmain(int argc, wchar_t** argv) {
     const bool live_untransformed = camera_mode && !std::strcmp(camera_mode, "live-nocb");
     const bool live_skin_poses = camera_mode && !std::strcmp(camera_mode, "live-skin-poses");
     const bool live_skinned = live_skin_poses || (camera_mode && !std::strcmp(camera_mode, "live-skinned"));
+    const bool map_twice = std::getenv("MOCK_MAP_TWICE") != nullptr;
+    ID3D11Buffer* verify_staging = nullptr;
+    unsigned double_maps = 0, map_mismatches = 0, map_verified = 0;
     // MOCK_SKIN_ANIMATE (live-skin-poses): both characters change pose every frame, as an animated character does.
     const bool skin_animate = std::getenv("MOCK_SKIN_ANIMATE") != nullptr;
     const bool live_mode = camera_mode && (!std::strcmp(camera_mode, "live") || live_skinned || live_untransformed || live_offset ||
@@ -899,6 +908,10 @@ int wmain(int argc, wchar_t** argv) {
             D3D11_BUFFER_DESC cbd{}; cbd.ByteWidth = 96; cbd.Usage = D3D11_USAGE_DYNAMIC;
             cbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER; cbd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
             if (FAILED(device->CreateBuffer(&cbd, nullptr, &live_cb11))) { std::fprintf(out, "FAIL skinned cb11\n"); return 3; }
+            if (std::getenv("MOCK_VERIFY_MAPS")) {
+                D3D11_BUFFER_DESC vd = cbd; vd.Usage = D3D11_USAGE_STAGING; vd.BindFlags = 0; vd.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+                if (FAILED(device->CreateBuffer(&vd, nullptr, &verify_staging))) { std::fprintf(out, "FAIL verify staging\n"); return 3; }
+            }
             skinned_ready = true;
         }
         if (!live_skinned) {
@@ -1072,7 +1085,10 @@ int wmain(int argc, wchar_t** argv) {
             camera_cb[11] = second ? -60.f : -30.f;
             if (!std::strcmp(camera_mode, "invalid") || (!std::strcmp(camera_mode, "invalid-late") && second))
                 camera_cb[0] = std::numeric_limits<float>::quiet_NaN();
-            context->UpdateSubresource(camera_buffer, 0, nullptr, camera_cb, 0, 0);
+            // MOCK_CAMERA_STATIC: the camera buffer is written on frame 1 only, before live capture is
+            // armed (replay 41686139: one camera slice for the whole frame, so it was never rewritten).
+            if (!std::getenv("MOCK_CAMERA_STATIC") || frame < 2)
+                context->UpdateSubresource(camera_buffer, 0, nullptr, camera_cb, 0, 0);
             if (!live_mode) for (unsigned draw = 0; draw < 8; ++draw) draw_mesh();
             const bool loading = frame >= load_from && frame < load_to;
             if (!loading && live_mode && live_cb11 && (frame == 20 || frame == 79)) {
@@ -1097,13 +1113,33 @@ int wmain(int argc, wchar_t** argv) {
             }
             if (live_skinned && skinned_ready) {
                 D3D11_MAPPED_SUBRESOURCE lm{};
+                float w[24] = {};
+                w[0] = w[5] = w[10] = 1.f;              // bone 0: identity
+                if (live_skin_poses) w[3] = skin_animate ? frame * 0.25f : (frame < 40 ? 0.f : 10.f);
+                w[12] = w[17] = w[22] = 1.f; w[15] = 5.f; // bone 1: translated on x
+                // MOCK_MAP_TWICE: a second discard map of the palette before its Unmap (DXVK allows it; the first
+                // pointer gets junk, the second the real bones).
+                void* first_pointer = nullptr;
+                if (map_twice && SUCCEEDED(context->Map(live_cb11, 0, D3D11_MAP_WRITE_DISCARD, 0, &lm))) {
+                    std::memset(lm.pData, 0xCD, sizeof w);
+                    first_pointer = lm.pData;
+                }
                 if (SUCCEEDED(context->Map(live_cb11, 0, D3D11_MAP_WRITE_DISCARD, 0, &lm))) {
-                    float* w = static_cast<float*>(lm.pData);
-                    std::memset(w, 0, 96);
-                    w[0] = w[5] = w[10] = 1.f;              // bone 0: identity
-                    if (live_skin_poses) w[3] = skin_animate ? frame * 0.25f : (frame < 40 ? 0.f : 10.f);
-                    w[12] = w[17] = w[22] = 1.f; w[15] = 5.f; // bone 1: translated on x
+                    std::memcpy(lm.pData, w, sizeof w);
                     context->Unmap(live_cb11, 0);
+                    if (first_pointer) ++double_maps;
+                } else if (first_pointer) {
+                    std::memcpy(first_pointer, w, sizeof w);  // the second map failed: the first one carries the bones
+                    context->Unmap(live_cb11, 0);
+                }
+                // MOCK_VERIFY_MAPS: the driver's buffer holds what was written, whatever the proxy did with the mapping.
+                if (verify_staging) {
+                    D3D11_MAPPED_SUBRESOURCE rm{};
+                    context->CopyResource(verify_staging, live_cb11);
+                    if (SUCCEEDED(context->Map(verify_staging, 0, D3D11_MAP_READ, 0, &rm))) {
+                        ++(std::memcmp(rm.pData, w, sizeof w) ? map_mismatches : map_verified);
+                        context->Unmap(verify_staging, 0);
+                    }
                 }
                 const UINT sstride = 28, soff = 0;
                 context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -1507,6 +1543,8 @@ int wmain(int argc, wchar_t** argv) {
     if (live_box) std::fprintf(out, "unbound_refs=%u\n", unbound_refs);
     if (live_mode) std::fprintf(out, "cb11_refs_20=%u cb11_refs_79=%u\n", cb11_refs_20, cb11_refs_79);
     if (unbound_dynamic) unbound_dynamic->Release();
+    if (verify_staging) verify_staging->Release();
+    if (map_twice || verify_staging) std::fprintf(out, "double_maps=%u\nmap_mismatches=%u\nmap_verified=%u\n", double_maps, map_mismatches, map_verified);
     if (camera_mode) std::fprintf(out, "camera_reads=%u geometry_reads=%u peak_camera_reads=%u reads_after_failure=%u reads_after_failed_present=%u failure_observed=%u reads_while_bypassed=%u\n",
                                  camera_reads, geometry_reads, peak_camera_reads,
                                  failure_observed ? camera_reads - reads_at_failure : 0, reads_after_failed_present,

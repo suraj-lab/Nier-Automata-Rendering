@@ -27,7 +27,7 @@ inline Snapshot published;
 // The CPU copy of a constant buffer, when another layer already mirrors the game's writes (live capture does: every
 // constant-buffer write is kept). Live 2026-10-31: the camera came from up to 4 blocking staging reads per frame,
 // and a frame whose reads did not decode published no camera, so Remix kept rendering the old view ("camera stuck").
-inline bool (*cpu_bytes)(ID3D11Buffer*, unsigned char* out, std::size_t size) = nullptr;
+inline bool (*cpu_bytes)(ID3D11DeviceContext*, ID3D11Buffer*, unsigned char* out, std::size_t size) = nullptr;
 inline std::atomic<unsigned long long> cpu_reads{0}, samples{0}, gap_max{0};
 inline unsigned long long gap = 0;  // game frames since the last published camera (game thread only)
 
@@ -87,7 +87,7 @@ inline bool read_cb0(ID3D11DeviceContext* context, std::array<float, 14>& result
     ++attempts;
     if (cpu_bytes) {
         std::array<unsigned char, 128> bytes{};
-        if (cpu_bytes(source, bytes.data(), bytes.size())) {
+        if (cpu_bytes(context, source, bytes.data(), bytes.size())) {
             source->Release();
             cpu_reads.fetch_add(1, std::memory_order_relaxed);
             return camera_decode::decode(bytes.data(), bytes.size(), result);

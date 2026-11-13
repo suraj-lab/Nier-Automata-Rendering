@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdlib>
 // Worker-side live scene: owns every Remix mesh/material for the per-frame draw stream, draws one
 // instance per game draw, and evicts least-recently-used meshes above a byte budget.
 #include <algorithm>
@@ -109,6 +110,18 @@ inline void add_textures(State& s, const std::vector<live_capture::TextureFile>&
     }
 }
 
+// Item T1 (PLAN_2026-11-13), default OFF. With the switch on, a surface is shown at once in grey and its material is
+// swapped when the file lands, instead of the mesh being held back and rebuilt. With it off every path is exactly what the
+// sibling gates froze; only gate_live_late_material turns it on.
+// Read at load, not by the Remix initialiser: the first frames are captured before that runs, and a flag that arrives late
+// would leave the very first mesh of the session built bare (the case the T1 gate caught).
+inline bool env_flag(const char* name) {
+    const char* v = std::getenv(name);
+    return v && v[0] == '1' && v[1] == '\0';
+}
+inline bool grey_first = env_flag("NIER_REMIX_LIVE_GREY_FIRST");
+inline bool hold_untextured = env_flag("NIER_REMIX_LIVE_HOLD_UNTEXTURED");   // rollback: wait for every file
+
 // Every file this upload's material names has landed (id 0 = no texture in that role; a registered path has landed).
 inline bool files_landed(const State& s, const live_capture::Upload& u) {
     for (const std::uint32_t id : {u.texture, u.normal, u.metallic, u.roughness})
@@ -136,16 +149,23 @@ inline remixapi_MaterialHandle material_for(const remixapi_Interface& api, State
                         (std::uint64_t(normal) << 48);
     const wchar_t* metallic_path = path_of(metallic);
     const wchar_t* roughness_path = path_of(roughness);
-    const bool pbr = metallic_path || roughness_path;
+    const bool pbr = grey_first ? (metallic || roughness) : (metallic_path || roughness_path);
     // A texture whose file has not landed yet is sent without it, under a key that says so: it becomes its own material
     // when the file arrives (the arrival rebuilds the mesh, which asks again).
-    const std::uint64_t pbr_key = pbr ? (std::uint64_t(metallic_path ? metallic : 0) << 32 | (roughness_path ? roughness : 0)) : 0;
+    const std::uint64_t pbr_key = pbr ? (std::uint64_t(grey_first || metallic_path ? metallic : 0) << 32 |
+                                         (grey_first || roughness_path ? roughness : 0)) : 0;
     if (pbr) key = key * 0x9e3779b97f4a7c15ull ^ (pbr_key + 0x632be59bd9b4e019ull);
     const auto known = s.materials.find(key);
     if (known != s.materials.end()) return known->second;
-    if (texture > s.texture_paths.size() || s.texture_paths[texture - 1].empty()) return nullptr;
-    // Ids are global, so the normal's path comes from the same vector. No path yet: send the material without it.
-    const bool has_normal = normal && normal <= s.texture_paths.size() && !s.texture_paths[normal - 1].empty();
+    // A missing albedo file is not a reason to send no material (user decision D2): the surface shows at once in plain
+    // grey and the colour pops in when the file lands. A null handle could never be swapped, so it is never sent.
+    if (!grey_first && (texture > s.texture_paths.size() || s.texture_paths[texture - 1].empty())) return nullptr;
+    const auto on_disk = [&s](std::uint32_t id) {   // "landed" in the state means the file is written, not merely queued
+        return id && id <= s.landed.size() && s.landed[id - 1] != 0;
+    };
+    const bool has_albedo = grey_first ? on_disk(texture) : true;   // grey_first: a path queued is not a file on disk
+    const bool has_normal = grey_first ? (normal != 0)
+                                       : (normal && normal <= s.texture_paths.size() && !s.texture_paths[normal - 1].empty());
     remixapi_MaterialInfo info;
     remixapi_MaterialInfoOpaqueEXT ext;
     // 3000000+: the captured scene owns 1000000+ (opaque) and 2000000+ (cutout); both can exist after a fallback.
@@ -160,9 +180,12 @@ inline remixapi_MaterialHandle material_for(const remixapi_Interface& api, State
     // With PBR textures: the top bit set (clear of every range above) and the ids mixed in, so each combination is its
     // own material in the runtime, which knows materials by hash alone.
     if (pbr) hash = (1ull << 63) | ((hash * 0x9e3779b97f4a7c15ull ^ (pbr_key * 0xbf58476d1ce4e5b9ull)) >> 1);
-    nscn::detail::make_material_info(info, ext, s.texture_paths[texture - 1].c_str(), hash, tested,
-                                     has_normal ? s.texture_paths[normal - 1].c_str() : nullptr, roughness_path,
-                                     metallic_path);
+    nscn::detail::make_material_info(info, ext, has_albedo ? s.texture_paths[texture - 1].c_str() : nullptr, hash, tested,
+                                     (grey_first ? on_disk(normal) : has_normal) ? path_of(normal) : nullptr,
+                                     grey_first ? (on_disk(roughness) ? roughness_path : nullptr) : roughness_path,
+                                     grey_first ? (on_disk(metallic) ? metallic_path : nullptr) : metallic_path);
+    if (grey_first && !has_albedo)   // the plan's grey until the albedo file is on disk (D2)
+        ext.albedoConstant.x = ext.albedoConstant.y = ext.albedoConstant.z = 0.5f;
     if (tested && alpha_test_enabled) { ext.alphaTestType = alpha_op; ext.alphaReferenceValue = alpha_ref; }
     remixapi_MaterialHandle handle = nullptr;
     if (api.CreateMaterial(&info, &handle) || !handle) return nullptr;
@@ -288,7 +311,8 @@ inline bool update(const remixapi_Interface& api, std::vector<live_capture::Uplo
     // have landed (the writer thread, remix_live.cpp): no bare build plus a rebuild, and Remix never names a missing file.
     std::size_t builds = 0;
     for (auto& upload : queue) {
-        if (builds < kBuildsPerCall && files_landed(s, upload)) {
+        if (builds < kBuildsPerCall &&
+            (grey_first ? (!hold_untextured || files_landed(s, upload)) : files_landed(s, upload))) {
             ++builds;
             if (!build_mesh(api, s, upload) && ++s.refused[upload.geometry] <= kRetries)
                 s.evicted_keys.push_back(upload.geometry);  // capture uploads it again; a persistent refusal stops here

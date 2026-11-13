@@ -210,6 +210,18 @@ def expect(pairs, flip=False):
 
 
 def verify(out):
+    # Orientation, pinned on the functions themselves: Remix's material shader decodes a tangent-space normal of
+    # +y along its bitangent, which genTangSpace aligns with dP/dv (math.slangh:415-497). NieR's own lit shaders put
+    # red along the vertex tangent and green along -(T x N) = N x T, i.e. +V for a right-handed UV layout
+    # (ps_550290354696.asm:57-62). So the unflipped encode must round-trip green to +y, and the flip must negate it.
+    for x, y in ((0.6, 0.0), (0.0, 0.6), (-0.5, -0.4), (0.3, 0.35), (0.0, 0.0)):
+        r, g = encode(x, y)
+        dx, dy, dz = decode(r, g)
+        assert abs(dx - x) < 8e-3 and abs(dy - y) < 8e-3, ('orientation (default, no flip)', (x, y), (dx, dy))
+        r, g = encode(x, -y)
+        fx, fy, _ = decode(r, g)
+        assert abs(fx - x) < 8e-3 and abs(fy + y) < 8e-3, ('orientation (flip_y)', (x, y), (fx, fy))
+        assert dz >= 0 and abs(dx * dx + dy * dy + dz * dz - 1) < 8e-3, ('unit hemisphere', (x, y))
     # BC1: the converter refuses a transparent texel, so the whole 4x4 is refused... unless the block is 4-colour.
     got = out['bc1']['bytes']
     cols = bc1_reference()[0]
