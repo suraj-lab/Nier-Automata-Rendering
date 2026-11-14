@@ -8,7 +8,9 @@
 // a lot (41686139: t0 alpha 0.05-0.43, t1 1.0 everywhere). Sample per triangle if a sheet shows seams in the wrong place.
 // With alpha 0 and s 1 the weights are the raw vertex colour (the first version of this rule).
 #pragma once
+#include <cmath>
 #include <cstdint>
+#include <vector>
 #include "live_types.h"
 
 namespace terrain_layers {
@@ -42,6 +44,34 @@ inline void assign(live_capture::Upload& u, const std::uint32_t ids[3], const fl
         u.layer_texture[k] = ids[k];
         for (int a = 0; a < 2; ++a) u.layer_scale[k][a] = scales[0][a] != 0.f ? scales[k][a] / scales[0][a] : 1.f;
     }
+}
+
+// A blended terrain overlay (f5be3a42...: lines 59-84) writes a coverage alpha, not a colour alpha:
+//   alpha = max(2 / (1 + exp(-w * (z * (t0.a * B * f - 0.5) + 0.5))) - 1, 0),  z, w = cb1[10].z, .w, B = COLOR.b,
+// f = facing powers (1 on a floor). Remix gets the overlay as a solid surface, so triangles the game leaves (nearly)
+// transparent are dropped instead: coverage below 0.5 -> layer 255, no surface. Applied after assign().
+// shortcut: f = 1 (floors); a wall-like overlay would need the vertex normal against cb0[0]/cb0[1].
+inline constexpr std::uint8_t kDropped = 255;
+inline float coverage(float a_times_b, float z, float w) {
+    const float x = -w * (z * (a_times_b - 0.5f) + 0.5f);
+    const float a = 2.f / (1.f + std::exp(x)) - 1.f;
+    return a > 0.f ? a : 0.f;
+}
+inline void drop_uncovered(live_capture::Upload& u, float t0_alpha, float z, float w) {
+    if (u.triangle_layer.empty() || !(w > 0.f) || u.indices.size() != u.triangle_layer.size() * 3) return;
+    std::vector<std::uint8_t> layers = u.triangle_layer;
+    std::size_t kept = 0;
+    for (std::size_t t = 0; t < layers.size(); ++t) {
+        float b = 0.f;
+        for (std::size_t c = 0; c < 3; ++c) {
+            const std::uint32_t index = u.indices[t * 3 + c];
+            const std::uint32_t col = index < u.vertices.size() ? u.vertices[index].color : 0u;
+            b += static_cast<float>((col >> 16) & 0xffu) / 255.f;
+        }
+        if (coverage(t0_alpha * b / 3.f, z, w) < 0.5f) layers[t] = kDropped;
+        else ++kept;
+    }
+    if (kept) u.triangle_layer.swap(layers);   // never drop a whole mesh: an empty mesh is no mesh
 }
 
 }  // namespace terrain_layers

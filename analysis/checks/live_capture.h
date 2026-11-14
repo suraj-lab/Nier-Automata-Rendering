@@ -576,6 +576,12 @@ inline bool skip_overlays = [] {
     return v && v[0] == '1' && v[1] == '\0';
 }();
 inline std::atomic<unsigned long long> overlays_skipped{0};
+// Diagnostic: NIER_REMIX_LIVE_SKIP_CODE=<16 hex digits> drops every draw of the pixel shader with that bytecode FNV-1a
+// (the `code=` of the material notes), to see on screen what one shader draws. Read at load; 0 = off.
+inline unsigned long long skip_code = [] {
+    const char* v = std::getenv("NIER_REMIX_LIVE_SKIP_CODE");
+    return v ? std::strtoull(v, nullptr, 16) : 0ull;
+}();
 inline bool flag_constants = [] {
     const char* v = std::getenv("NIER_REMIX_LIVE_FLAG_CONSTANTS");   // on by default since 2026-11-13 (user pick); =0 rolls back
     return !(v && v[0] == '0' && v[1] == '\0');
@@ -1310,7 +1316,8 @@ inline DisassembleFn disassembler() {
 // effects shader (declares the effect buffers t27 / t30: particles, smoke, distortion).
 struct PixelInfo { alpha_test::Result alpha; material_roles::Roles roles; bool effect = false;
                    bool depth_only = false;   // L7: writes linear depth, not a surface (depth_only.h)
-                   bool tint_cb8_cb4 = false; };   // L8: albedo is multiplied by cb8[0].xyz * cb4[0].xyz (hair: line 249/345)   // L7: writes linear depth, not a surface (depth_only.h)
+                   bool tint_cb8_cb4 = false;   // L8: albedo is multiplied by cb8[0].xyz * cb4[0].xyz (hair: line 249/345)
+                   unsigned long long code = 0; };   // FNV-1a 64 of the bytecode (stable across runs), as in the notes   // L7: writes linear depth, not a surface (depth_only.h)
 // One line per distinct pixel shader, the first time it is seen with a draw: what the material path did with it. For
 // live runs where some surfaces come out wrong (pbr-look1: untextured dunes, chrome rocks, missing foliage), so each
 // can be traced back to a shader, its roles and the fate of each texture. Drained by the worker, bounded.
@@ -1444,6 +1451,8 @@ inline const PixelInfo* pixel_info(ID3D11DeviceContext* context, unsigned long l
         }
         result.effect = declares_effect_buffers(asm_text);
         result.depth_only = depth_only::writes_depth_only(asm_text);
+        result.code = 0xcbf29ce484222325ull;
+        for (const unsigned char b : bytecode) result.code = (result.code ^ b) * 0x100000001b3ull;
         // The game's per-instance x per-mesh tint, as the hair shader forms it (ps c2a9d2f6...: `mul r2.xyz, cb8[0].xyzx,
         // cb4[0].xyzx`, then `mul r5.xyz, r2.xyzx, r1.xyzx` with r1 the albedo, texture or the flag's constant).
         // shortcut: only the non-instanced cb8[0] form; shaders indexing cb8 per instance had white tints on both
@@ -1685,6 +1694,11 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     // the path-traced scene (user decision 2026-11-01). NIER_REMIX_LIVE_EFFECTS=1 keeps them for comparison.
     unsigned long long pixel_ps = 0;
     const PixelInfo& pixel = *pixel_info(context, &pixel_ps);
+    if (skip_code && pixel.code == skip_code) {
+        trace.event.reason = visibility_trace::Reason::Effect;
+        release_all(vbs, 4, ib, layout);
+        return;
+    }
     if (skip_overlays && !ui_pass) {
         const material_roles::Roles& r = pixel.roles;
         const bool roles = r.albedo.slot >= 0 || r.metal.slot >= 0 || r.gloss.slot >= 0;
@@ -1764,6 +1778,7 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     float layer_scale[3][2] = {{1.f, 1.f}, {1.f, 1.f}, {1.f, 1.f}};   // ... and their absolute UV repeats
     float layer_alpha[2] = {0.5f, 0.5f};          // ... t0 / t1 mean alpha (0.5 until known)
     float layer_sharpness = 1.f;                   // ... cb1[1].w
+    float overlay_zw[2] = {0.f, 0.f};              // ... cb1[10].zw, the blended overlay's coverage curve (0 = none)
     int albedo_slot = -1;                 // the PS slot the albedo came from (role, or first usable)
     float uv_scale[2] = {1.f, 1.f};       // the shader's own texture repeat at that slot, baked into the mesh UVs
     std::uint64_t uv_bits = 0;            // ... folded into the version, so a changed repeat rebuilds the mesh
@@ -2008,9 +2023,17 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
                 sharp.cb = 1; sharp.reg = 1; sharp.lanes = "ww";
                 float sw[2] = {1.f, 1.f};
                 if (repeat(sharp, sw)) layer_sharpness = sw[0];
+                material_roles::UvScale cover;
+                cover.cb = 1; cover.reg = 10; cover.lanes = "zw";
+                if (blended && !repeat(cover, overlay_zw)) overlay_zw[0] = overlay_zw[1] = 0.f;
                 for (int k = 0; k < 2; ++k) {
                     const auto known = texture_alpha_mean().find(layer_texture[k]);
                     if (known != texture_alpha_mean().end()) layer_alpha[k] = known->second;
+                    // A layer read later (deferred readback) changes its alpha from the 0.5 placeholder: folded into
+                    // the version, so the mesh is rebuilt once with the real height blend instead of keeping a guess.
+                    std::uint32_t abits = 0;
+                    std::memcpy(&abits, &layer_alpha[k], sizeof abits);
+                    layer_bits = hash_value(layer_bits ^ abits ^ (static_cast<std::uint64_t>(k) << 40));
                 }
             }
             if (layer_texture[1] || layer_texture[2]) uv_bits ^= layer_bits;   // a changed layer set rebuilds the mesh
@@ -2375,6 +2398,7 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
             }
             upload.indices = std::move(decoded.indices);
             terrain_layers::assign(upload, layer_texture, layer_scale, layer_alpha, layer_sharpness);   // L5b: no-op unless terrain
+            if (blended) terrain_layers::drop_uncovered(upload, layer_alpha[0], overlay_zw[0], overlay_zw[1]);   // L5b overlay
             upload.bones = std::move(decoded.bones);
             upload.weights = std::move(decoded.weights);
             if (built_versions().size() > 200000) { built_versions().clear(); content_hashes().clear(); sky_geometries().clear(); }  // bounded; one rebuild each

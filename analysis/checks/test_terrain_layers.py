@@ -115,6 +115,22 @@ int main() {
         check("height: green stays layer 0 below t1's alpha (even at 1.0), R above t0's alpha goes to layer 1",
               u.triangle_layer == std::vector<std::uint8_t>({0, 1, 0, 0}));
     }
+    {   // blended overlay coverage (f5be3a42 on 41686139: cb1[10].z 1.256, .w 12.558, t0 alpha mean 0.54)
+        check("coverage curve: a*B 0.54 nearly full, 0.1 zero", terrain_layers::coverage(0.54f, 1.256f, 12.558f) > 0.9f &&
+              terrain_layers::coverage(0.1f, 1.256f, 12.558f) == 0.f);
+        const std::uint32_t colours[4] = {0x00ff0000u, 0x00000000u, 0x00ff00ffu, 0x00100000u};   // B = 1, 0, 1, 0.06
+        auto u = quad(colours);
+        const std::uint32_t ids[3] = {1, 2, 0};
+        terrain_layers::assign(u, ids, scales);
+        terrain_layers::drop_uncovered(u, 0.54f, 1.256f, 12.558f);
+        check("overlay: B=0 triangles dropped, B=1 kept with their layer",
+              u.triangle_layer == std::vector<std::uint8_t>({0, terrain_layers::kDropped, 1, terrain_layers::kDropped}));
+        const std::uint32_t none[4] = {0, 0, 0, 0};
+        auto v = quad(none);
+        terrain_layers::assign(v, ids, scales);
+        terrain_layers::drop_uncovered(v, 0.54f, 1.256f, 12.558f);
+        check("overlay: a mesh with nothing covered is left whole", v.triangle_layer == std::vector<std::uint8_t>({0, 0, 0, 0}));
+    }
     {   // nothing captured beyond layer 0
         const std::uint32_t colours[4] = {0x000000ffu, 0, 0, 0};
         auto u = quad(colours);
@@ -144,6 +160,24 @@ int main() {
                 check("build: layer 1 UVs scaled by 10/5", m[0].u0 == 1.f && m[1].u0 == 2.f);
             }
         }
+        live_scene::destroy(api, s);
+    }
+    {   // build: dropped triangles are in no surface
+        meshes.clear();
+        live_scene::State s;
+        live_scene::update(api, {}, {live_capture::TextureFile{1, L"C:\\t\\live_1.dds", nullptr, false, -1, false},
+                                     live_capture::TextureFile{2, L"C:\\t\\live_2.dds", nullptr, false, -1, false}},
+                           frame, s, options);
+        const std::uint32_t colours[4] = {0x00ff0000u, 0x00000000u, 0x00ff00ffu, 0x00000000u};
+        auto u = quad(colours);
+        u.geometry = 0x1234500000002ull;
+        const std::uint32_t ids[3] = {1, 2, 0};
+        terrain_layers::assign(u, ids, scales);
+        terrain_layers::drop_uncovered(u, 0.54f, 1.256f, 12.558f);
+        live_scene::update(api, {u}, {}, frame, s, options);
+        std::size_t total = 0;
+        if (meshes.size() == 1) for (const auto& sf : meshes[0]) total += sf.indices;
+        check("build: only the covered triangles reach Remix (2 of 4)", meshes.size() == 1 && total == 6);
         live_scene::destroy(api, s);
     }
     std::printf("failures=%d\n", failures);
