@@ -13,7 +13,7 @@ sky and the desert grade are next. More: [media/2026-11-14](media/2026-11-14/REA
 | Live Remix in the game, desktop | Installed (`9555829d…`). 60.0 fps median, p10 59.1 while turning, at 640x350 in a copied Proton prefix; 12-min soak flat (1,787 meshes, 467 MB). Matches the game's own frame at the camp: median 0.316 vs 0.306, p95 0.530 vs 0.554, saturation 0.180 vs 0.184, warmth 1.217 vs 1.214 |
 | Live Remix in the game, laptop | Installed for normal Steam launches (`NIER_ENV.ini`, `rtx.conf`), the October DLAA mod chained behind it, its `ec_hooks.dll` set aside (it patches our proxy). Played by hand: runs, "much better state". 17 fps median, GPU-bound at 2880x1800 |
 | On by default | Grey-first materials, depth pre-pass skipped, frame-1 pass leak closed, the game's material flags (with per-instance tint), GPU skinning, terrain bake. Each switch rolls back with `NIER_REMIX_LIVE_<NAME>=0` |
-| Not right yet | Sky (flat plate), water, emission, the grade outside the camp (desert reads mustard), 2B's silver hair (an anisotropic lobe Remix cannot express), exit hang (deadlock in Remix teardown) |
+| Not right yet | Effects (smoke, particles, explosions: left out by the proxy), sky (flat plate), water, emission, the grade outside the camp (desert reads mustard), 2B's silver hair (an anisotropic lobe Remix cannot express), exit hang (deadlock in Remix teardown) |
 | Tests | 94/94 frozen gates (`analysis/checks/run_suite_parallel.py`); every behaviour change was seen failing first and mutation-checked |
 
 The plan, with evidence beside every item, is [`analysis/PLAN_2026-11-13.md`](analysis/PLAN_2026-11-13.md); its last
@@ -58,13 +58,15 @@ sections are the end-of-session state and the next work. [PROGRESS.md](PROGRESS.
 
 ### Next
 
-1. **Remix owns presentation**, so DLSS frame generation can reach the screen (today Remix renders into a hidden
+1. Phase plan: [`analysis/PLAN_2026-11-14.md`](analysis/PLAN_2026-11-14.md) (playable on the laptop). Effects of every kind are
+   missing: our proxy leaves the effect shaders out and Remix's image replaces the game's frame (track E1).
+2. **Remix owns presentation**, so DLSS frame generation can reach the screen (today Remix renders into a hidden
    window and its frames are copied into the game's swapchain, so generated frames are never seen) and the
    per-frame copy back from the GPU goes away.
-2. **Standard DLSS modes in our menu** (Quality / Balanced / Performance / Ultra Performance) through the Remix API's
+3. **Standard DLSS modes in our menu** (Quality / Balanced / Performance / Ultra Performance) through the Remix API's
    `SetConfigVariable`, instead of Remix's "Custom" preset.
-3. **Sky, water and the desert grade** from the two laptop captures (desert, water).
-4. Mip levels for the terrain bakes; the exit hang (needs `ptrace`); the laptop install step setting `ec_hooks.dll`
+4. **Sky, water and the desert grade** from the two laptop captures (desert, water).
+5. Mip levels for the terrain bakes; the exit hang (needs `ptrace`); the laptop install step setting `ec_hooks.dll`
    aside by itself.
 
 ## Scope and status (2026-11-01, historical)
