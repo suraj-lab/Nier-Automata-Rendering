@@ -308,6 +308,34 @@ inline bool build_mesh(const remixapi_Interface& api, State& s, const live_captu
         surface.skinning_hasvalue = 1;
         surface.skinning_value = skinning;
     }
+    // Item L5b: a terrain mesh becomes one surface per layer present, each with its own albedo and UV repeat; layer 0
+    // keeps the material above. Not for skinned meshes (terrain never is).
+    std::vector<std::vector<remixapi_HardcodedVertex>> layer_vertices;
+    std::vector<std::vector<std::uint32_t>> layer_indices;
+    std::vector<remixapi_MeshInfoSurfaceTriangles> surfaces;
+    if (!upload.triangle_layer.empty() && !upload.skinned && upload.triangle_layer.size() * 3 == upload.indices.size()) {
+        layer_vertices.reserve(3);   // surfaces keep pointers into these: no reallocation after the first push
+        layer_indices.reserve(3);
+        for (std::uint8_t k = 0; k < 3; ++k) {
+            if (!upload.layer_texture[k]) continue;
+            std::vector<std::uint32_t> idx;
+            for (std::size_t t = 0; t < upload.triangle_layer.size(); ++t)
+                if (upload.triangle_layer[t] == k) idx.insert(idx.end(), upload.indices.begin() + static_cast<long>(t * 3),
+                                                              upload.indices.begin() + static_cast<long>(t * 3 + 3));
+            if (idx.empty()) continue;
+            layer_indices.push_back(std::move(idx));
+            layer_vertices.push_back(vertices);
+            if (k)
+                for (auto& v : layer_vertices.back()) { v.texcoord[0] *= upload.layer_scale[k][0]; v.texcoord[1] *= upload.layer_scale[k][1]; }
+            remixapi_MeshInfoSurfaceTriangles layer = surface;
+            layer.vertices_values = layer_vertices.back().data();
+            layer.vertices_count = layer_vertices.back().size();
+            layer.indices_values = layer_indices.back().data();
+            layer.indices_count = layer_indices.back().size();
+            if (k) layer.material = material_for(api, s, upload.layer_texture[k], upload.alpha_op, upload.alpha_ref);
+            surfaces.push_back(layer);
+        }
+    }
     remixapi_MeshInfo info{};
     info.sType = REMIXAPI_STRUCT_TYPE_MESH_INFO;
     info.pNext = nullptr;
@@ -318,8 +346,8 @@ inline bool build_mesh(const remixapi_Interface& api, State& s, const live_captu
     // destroyed hash, which crashed the runtime. The high 32 bits are the capture key's, for logs and the fake runtime.
     if (!(++s.serial & 0xFFFFFFFFull)) ++s.serial;
     info.hash = (upload.geometry & 0xFFFFFFFF00000000ull) | (s.serial & 0xFFFFFFFFull);
-    info.surfaces_values = &surface;
-    info.surfaces_count = 1;
+    info.surfaces_values = surfaces.empty() ? &surface : surfaces.data();
+    info.surfaces_count = surfaces.empty() ? 1 : static_cast<std::uint32_t>(surfaces.size());
     remixapi_MeshHandle mesh = nullptr;
     if (api.CreateMesh(&info, &mesh) || !mesh) return false;
     visibility_math::Bounds local;

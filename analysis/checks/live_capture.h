@@ -32,6 +32,7 @@
 #include "alpha_test.h"
 #include "material_roles.h"
 #include "depth_only.h"
+#include "terrain_layers.h"
 
 namespace live_capture {
 
@@ -560,6 +561,13 @@ inline std::atomic<unsigned long long> depth_ps_skipped{0};   // draws not submi
 inline bool wait_for_target = [] {
     const char* v = std::getenv("NIER_REMIX_LIVE_WAIT_FOR_TARGET");   // on by default since 2026-11-13 (user pick); =0 rolls back
     return !(v && v[0] == '0' && v[1] == '\0');
+}();
+// Item L5b: NieR's terrain blends up to three layers by vertex colour (runtime/l5-disasm/scene/0f537e30...: t0 at
+// uv*cb1[5].xy, t1 at uv*cb1[5].zw, t2 at uv*cb1[6].xy, weights from COLOR.r/.g). Remix has one albedo per surface, so
+// each triangle takes its dominant layer. Default off until the user picks from the sheet; read at load.
+inline bool terrain_layers = [] {
+    const char* v = std::getenv("NIER_REMIX_LIVE_TERRAIN_LAYERS");
+    return v && v[0] == '1' && v[1] == '\0';
 }();
 inline bool flag_constants = [] {
     const char* v = std::getenv("NIER_REMIX_LIVE_FLAG_CONSTANTS");   // on by default since 2026-11-13 (user pick); =0 rolls back
@@ -1714,6 +1722,8 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     std::uint32_t texture = 0;
     std::uint32_t normal = 0, metallic = 0, roughness = 0;
     MaterialConstants flag_values;        // item L3: what the shader's flags select instead of a texture
+    std::uint32_t layer_texture[3] = {0, 0, 0};   // item L5b: terrain layers (texture ids), [0] = the albedo
+    float layer_scale[3][2] = {{1.f, 1.f}, {1.f, 1.f}, {1.f, 1.f}};   // ... and their absolute UV repeats
     int albedo_slot = -1;                 // the PS slot the albedo came from (role, or first usable)
     float uv_scale[2] = {1.f, 1.f};       // the shader's own texture repeat at that slot, baked into the mesh UVs
     std::uint64_t uv_bits = 0;            // ... folded into the version, so a changed repeat rebuilds the mesh
@@ -1917,6 +1927,44 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
                               u.lanes.c_str(), uv_scale[0], uv_scale[1]);
                 slot_notes += note;
             }
+        }
+        // Item L5b: a terrain shader (no traced albedo, repeats on slots 0 and 1, and on 2 for three layers) gets its
+        // other layers captured with their own repeats; the per-triangle choice is made once the colours are decoded.
+        if (terrain_layers && roles.albedo.slot < 0 && albedo_slot == 0 && texture && pixel.roles.uv[0].cb >= 0 &&
+            pixel.roles.uv[1].cb >= 0) {
+            const auto repeat = [&](const material_roles::UvScale& u, float out[2]) {
+                if (u.cb < 0 || u.cb >= 14 || u.lanes.size() != 2) return false;
+                ID3D11Buffer* cb = nullptr;
+                context->PSGetConstantBuffers(static_cast<UINT>(u.cb), 1, &cb);
+                if (!cb) return false;
+                const std::vector<unsigned char>* bytes = buffer_bytes(device, context, cb);
+                const std::size_t at = static_cast<std::size_t>(u.reg) * 16;
+                bool ok = bytes && at + 16 <= bytes->size();
+                for (int k = 0; k < 2 && ok; ++k) {
+                    std::memcpy(&out[k], bytes->data() + at + 4 * std::string("xyzw").find(u.lanes[static_cast<std::size_t>(k)]), 4);
+                    ok = std::isfinite(out[k]) && std::fabs(out[k]) > 1e-4f && std::fabs(out[k]) < 1e4f;
+                }
+                cb->Release();
+                return ok;
+            };
+            layer_texture[0] = texture;
+            layer_scale[0][0] = uv_scale[0];
+            layer_scale[0][1] = uv_scale[1];
+            std::uint64_t layer_bits = 0x7e44a1u;
+            for (int k = 1; k < 3; ++k) {
+                float rep[2] = {1.f, 1.f};
+                std::uint32_t id = 0;
+                if (pixel.roles.uv[k].cb < 0 || !repeat(pixel.roles.uv[k], rep)) continue;
+                if (take(k, id, 0) != TextureResult::Captured || !id) continue;
+                layer_texture[k] = id;
+                layer_scale[k][0] = rep[0];
+                layer_scale[k][1] = rep[1];
+                std::uint32_t bits[2];
+                std::memcpy(bits, rep, sizeof bits);
+                layer_bits = hash_value(layer_bits ^ id ^ (static_cast<std::uint64_t>(bits[0]) << 32) ^ bits[1]);
+            }
+            if (layer_texture[1] || layer_texture[2]) uv_bits ^= layer_bits;   // a changed layer set rebuilds the mesh
+            else layer_texture[0] = 0;
         }
         const auto lane = [](const std::string& c) { return c.empty() ? 0u : static_cast<unsigned>(std::string("xyzw").find(c[0])); };
         if (normal_textures && roles.normal.slot >= 0 && !normal_off) take(roles.normal.slot, normal, 1);
@@ -2276,6 +2324,7 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
                 upload.vertices[i].color = decoded.vertices[i].color;
             }
             upload.indices = std::move(decoded.indices);
+            terrain_layers::assign(upload, layer_texture, layer_scale);   // L5b: no-op unless a terrain draw
             upload.bones = std::move(decoded.bones);
             upload.weights = std::move(decoded.weights);
             if (built_versions().size() > 200000) { built_versions().clear(); content_hashes().clear(); sky_geometries().clear(); }  // bounded; one rebuild each

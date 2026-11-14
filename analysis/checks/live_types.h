@@ -45,6 +45,11 @@ struct Upload {
     int alpha_op = 7;                  // the pixel shader's alpha test as Remix AlphaTestType (7 = kAlways: none)
     std::uint8_t alpha_ref = 0;        // ... and its 8-bit reference (alpha_test.h)
     MaterialConstants constants;       // item L3: constants the game's flags select instead of a texture
+    // Item L5b, NIER_REMIX_LIVE_TERRAIN_LAYERS: NieR's ground shaders blend up to three albedo layers by vertex colour.
+    // Each triangle takes its dominant layer and becomes part of that layer's surface. Empty `triangle_layer` = one surface.
+    std::uint32_t layer_texture[3] = {0, 0, 0};                 // [0] is `texture`; 0 = layer absent
+    float layer_scale[3][2] = {{1.f, 1.f}, {1.f, 1.f}, {1.f, 1.f}}; // UV repeat relative to the baked (layer 0) UVs
+    std::vector<std::uint8_t> triangle_layer;                   // per triangle: 0, 1 or 2
     std::uint64_t ps = 0;              // the draw's pixel shader (diagnostic: NIER_REMIX_LIVE_BUILD_LOG)
     unsigned target_w = 0, target_h = 0;   // the draw's colour target (diagnostic, same switch)
 };

@@ -206,7 +206,17 @@ remixapi_ErrorCode REMIXAPI_CALL create_mesh(const remixapi_MeshInfo* i, remixap
          i ? static_cast<unsigned long long>(i->hash) : 0ull, i ? i->surfaces_count : 0u, verts, indices, materials,
          skinned ? 1 : 0, bones_per_vertex, weights, v0[0], v0[1], v0[2], frames, started,
          i ? static_cast<unsigned long long>(i->hash) >> 32 : 0ull, uv0[0], uv0[1],
-         i && i->surfaces_count ? static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(i->surfaces_values[0].material)) : 0ull);  // live_scene: capture key in the high 32 bits
+         i && i->surfaces_count ? static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(i->surfaces_values[0].material)) : 0ull);
+    // Item L5b: one line per surface when a mesh has several (terrain layers): material, indices, UV sum.
+    if (i && i->surfaces_count > 1)
+        for (std::uint32_t k = 0; k < i->surfaces_count; ++k) {
+            const remixapi_MeshInfoSurfaceTriangles& sf = i->surfaces_values[k];
+            double su = 0, sv = 0;
+            for (std::uint64_t n = 0; n < sf.vertices_count; ++n) { su += sf.vertices_values[n].texcoord[0]; sv += sf.vertices_values[n].texcoord[1]; }
+            note("Surface %u of key=%llu mat=%llu indices=%llu uvsum=%.4f,%.4f", k, static_cast<unsigned long long>(i->hash >> 32),
+                 static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(sf.material)),
+                 static_cast<unsigned long long>(sf.indices_count), su, sv);
+        }  // live_scene: capture key in the high 32 bits
     if (!started) note("VIOLATION CreateMesh before Startup");
     const unsigned long long hash = i ? static_cast<unsigned long long>(i->hash) : 0ull;
     if (!hash) { *h = reinterpret_cast<remixapi_MeshHandle>(handle++); return REMIXAPI_ERROR_CODE_SUCCESS; }
