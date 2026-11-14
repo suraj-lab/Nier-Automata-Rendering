@@ -746,6 +746,23 @@ struct Worker {
             fail("runtime incomplete");
             return false;
         }
+        // Remix reads rtx.conf relative to the working directory, and in the game that never resolved ("No config file
+        // found at: rtx.conf", 2026-11-14): every in-game run so far used Remix's defaults. Point it at the rtx.conf next
+        // to this DLL unless the caller already chose one.
+        if (env(L"DXVK_RTX_CONFIG_FILE").empty()) {
+            HMODULE self = nullptr;
+            wchar_t path[MAX_PATH] = {};
+            if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                                   reinterpret_cast<LPCWSTR>(&runtime_incomplete), &self) &&
+                GetModuleFileNameW(self, path, MAX_PATH)) {
+                std::wstring conf(path);
+                conf = conf.substr(0, conf.find_last_of(L"\\/") + 1) + L"rtx.conf";
+                if (GetFileAttributesW(conf.c_str()) != INVALID_FILE_ATTRIBUTES) {
+                    SetEnvironmentVariableW(L"DXVK_RTX_CONFIG_FILE", conf.c_str());
+                    logger.load()("remix: rtx.conf %ls", conf.c_str());
+                }
+            }
+        }
         const remixapi_ErrorCode loaded = remixapi_lib_loadRemixDllAndInitialize(runtime_path.c_str(), &api, &module);
         if (loaded) { fail("runtime load", loaded); return false; }
         if (!api.dxvk_CreateD3D9 || !api.dxvk_RegisterD3D9Device || !api.dxvk_CopyRenderingOutput || !api.Startup ||

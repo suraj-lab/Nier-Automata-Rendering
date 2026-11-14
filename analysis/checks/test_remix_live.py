@@ -55,12 +55,12 @@ def win(path):
     return 'Z:' + str(path).replace('/', '\\')
 
 
-def run(work, name, env, fonts=True, expected_presented=80):
+def run(work, name, env, fonts=True, expected_presented=80, files=None):
     for k in ENV_KEYS:
         os.environ.pop(k, None)
     os.environ.update(env)
     try:
-        d, r, log = tmo.scenario(work, name, b'[Rendering]\r\nPreset=Custom75\r\n', fonts, (0, 0))
+        d, r, log = tmo.scenario(work, name, b'[Rendering]\r\nPreset=Custom75\r\n', fonts, (0, 0), files=files)
     finally:
         for k in ENV_KEYS:
             os.environ.pop(k, None)

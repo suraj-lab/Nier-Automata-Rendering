@@ -59,6 +59,12 @@ remixapi_ErrorCode REMIXAPI_CALL register_device(IDirect3DDevice9Ex* device) {
     return REMIXAPI_ERROR_CODE_SUCCESS;
 }
 remixapi_ErrorCode REMIXAPI_CALL startup(const remixapi_StartupInfo* info) {
+    {   // which rtx.conf the real runtime would read (DXVK_RTX_CONFIG_FILE, else ./rtx.conf)
+        char conf[MAX_PATH * 2] = {};
+        const DWORD n = GetEnvironmentVariableA("DXVK_RTX_CONFIG_FILE", conf, sizeof conf);
+        const char* base = n ? std::strrchr(conf, '\\') : nullptr;
+        note("ConfigFile %s", n ? (base ? base + 1 : conf) : "-");
+    }
     note("Startup hwnd_visible=%d combineGui=%d registered=%d", info && IsWindowVisible(info->hwnd), info ? info->combineGuiInFinalColor : -1,
          registered != nullptr);
     if (!registered) note("VIOLATION Startup before Register");

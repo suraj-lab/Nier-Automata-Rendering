@@ -45,7 +45,7 @@ def main():
     (scene / 'scene_textures').mkdir(parents=True)
     (scene / 'scene.bin').write_bytes(ts.scene_bytes(ts.CAMERA, ts.DRAWS, ts.TEXTURES, ts.TRIS))
 
-    def run(name, flags, switch, extra=None):
+    def run(name, flags, switch, extra=None, files=None):
         tex = work / f'tex-{name}'
         tex.mkdir()
         env = {'MOCK_CAMERA': 'live', 'MOCK_FRAME_MS': '60', 'MOCK_FLAG_PS': flags,
@@ -54,7 +54,7 @@ def main():
                'NIER_REMIX_LIVE_TEX': tr.win(tex), 'FAKE_REMIX_INSTANCE_LOG': '1', 'NIER_REMIX_LIVE_STATS_EVERY': '10'}
         env['NIER_REMIX_LIVE_FLAG_CONSTANTS'] = '1' if switch else '0'   # on by default since 2026-11-13
         env.update(extra or {})
-        _, result, log, fake = tr.run(work, name, env)
+        _, result, log, fake = tr.run(work, name, env, files=files)
         assert fake and 'VIOLATION' not in fake, fake[-1500:]
         # The world mesh's material: the one named with the shader's own roles (the scene shell keeps its own).
         mats = [l for l in fake.splitlines() if l.startswith('CreateMaterial ') and 'hash=1000' not in l
@@ -62,17 +62,17 @@ def main():
         assert mats, fake[-1500:]
         notes = [l.split('remix: ', 1)[1] for l in log.splitlines() if 'remix: material ps=' in l]
         counted = [l for l in log.splitlines() if 'remix: live flag_constants' in l]
-        return mats[-1], notes, counted
+        return mats[-1], notes, counted, fake
 
     results = {}
 
-    mat, _, counted = run('switch-off', '0,1,1,1', False)
+    mat, _, counted, fake = run('switch-off', '0,1,1,1', False)
     assert field(mat, 'path') != '-' and field(mat, 'metallic') != '-' and field(mat, 'roughness') != '-', mat
     assert field(mat, 'mconst') == '0.000' and field(mat, 'rconst') == '0.600', mat
     assert not counted, 'the switch is off: nothing may read the flags'
     results['switch-off'] = "default: today's material, mask textures, flags ignored"
 
-    mat, notes, counted = run('flags-set', '0,1,1,1', True)
+    mat, notes, counted, _ = run('flags-set', '0,1,1,1', True)
     assert field(mat, 'path') == '-', f'a constant albedo replaces the texture: {mat}'
     assert field(mat, 'metallic') == '-' and field(mat, 'roughness') == '-', f'constants replace the mask: {mat}'
     assert field(mat, 'aconst') == '0.200,0.400,0.600', mat
@@ -81,21 +81,28 @@ def main():
     assert counted and int(field(counted[-1], 'draws')) > 0, counted
     results['flags-set'] = 'all three flags: constants 0.2,0.4,0.6 / metal 0.8 / roughness 0.7, no textures'
 
-    mat, _, counted = run('flags-clear', '0,0,0,0', True)
+    mat, _, counted, _ = run('flags-clear', '0,0,0,0', True)
     assert field(mat, 'path') != '-' and field(mat, 'metallic') != '-' and field(mat, 'roughness') != '-', mat
     assert field(mat, 'aconst') == '1.000,1.000,1.000' and field(mat, 'mconst') == '0.000', mat
     assert counted and int(field(counted[-1], 'draws')) == 0, counted
     results['flags-clear'] = 'flags clear: the textures, default constants'
 
-    mat, _, _ = run('gloss-only', '0,0,1,0', True)
+    mat, _, _, _ = run('gloss-only', '0,0,1,0', True)
     assert field(mat, 'roughness') == '-' and field(mat, 'rconst') == '0.700', mat
     assert field(mat, 'metallic') != '-' and field(mat, 'path') != '-', mat
     results['gloss-only'] = 'one flag: only that role becomes a constant'
 
     # L8: the game tints the flag's constant albedo by cb8[0] * cb4[0] like the texture (hair shader, ps line 345).
-    mat, _, _ = run('tinted', '0,1,1,1', True, {'MOCK_FLAG_TINT': '0.5,1,1'})
+    mat, _, _, _ = run('tinted', '0,1,1,1', True, {'MOCK_FLAG_TINT': '0.5,1,1'})
     assert field(mat, 'aconst') == '0.100,0.200,0.600', f'constant albedo must carry the tint (0.5,0.5,1): {mat}'
     results['tinted'] = 'flag albedo 0.2,0.4,0.6 x tint 0.5,0.5,1 = 0.1,0.2,0.6'
+
+    # L1 (2026-11-14): in the game Remix never found rtx.conf (it looks in the working directory). The proxy points
+    # DXVK_RTX_CONFIG_FILE at the rtx.conf next to its own DLL when one exists, and leaves it unset otherwise.
+    assert 'ConfigFile -' in fake, [l for l in fake.splitlines() if l.startswith('ConfigFile')]
+    _, _, _, fake = run('conf-next-to-dll', '0,0,0,0', True, files={'rtx.conf': b'rtx.tonemappingMode = 0\n'})
+    assert 'ConfigFile rtx.conf' in fake, [l for l in fake.splitlines() if l.startswith('ConfigFile')]
+    results['rtx-conf'] = 'an rtx.conf next to the DLL is handed to Remix; without one nothing is set'
 
     print('\n'.join(f'PASS {k}: {v}' for k, v in results.items()))
 
