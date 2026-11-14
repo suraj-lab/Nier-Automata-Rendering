@@ -1,12 +1,80 @@
 # NieR RTX — NieR:Automata rendering investigation
 
+![NieR:Automata on the laptop, path-traced live through RTX Remix](media/2026-11-14/laptop-desert-84.jpg)
+
+*2026-11-14: the game played by hand on the laptop (RTX Spark N1X, 2880x1800), every draw translated to RTX Remix
+live: GPU-skinned characters, the game's material flags and HUD, terrain baked from the game's own layer blend. The
+sky and the desert grade are next. More: [media/2026-11-14](media/2026-11-14/README.md).*
+
+## Current state — 2026-11-14
+
+| Area | State |
+| --- | --- |
+| Live Remix in the game, desktop | Installed (`9555829d…`). 60.0 fps median, p10 59.1 while turning, at 640x350 in a copied Proton prefix; 12-min soak flat (1,787 meshes, 467 MB). Matches the game's own frame at the camp: median 0.316 vs 0.306, p95 0.530 vs 0.554, saturation 0.180 vs 0.184, warmth 1.217 vs 1.214 |
+| Live Remix in the game, laptop | Installed for normal Steam launches (`NIER_ENV.ini`, `rtx.conf`), the October DLAA mod chained behind it, its `ec_hooks.dll` set aside (it patches our proxy). Played by hand: runs, "much better state". 17 fps median, GPU-bound at 2880x1800 |
+| On by default | Grey-first materials, depth pre-pass skipped, frame-1 pass leak closed, the game's material flags (with per-instance tint), GPU skinning, terrain bake. Each switch rolls back with `NIER_REMIX_LIVE_<NAME>=0` |
+| Not right yet | Sky (flat plate), water, emission, the grade outside the camp (desert reads mustard), 2B's silver hair (an anisotropic lobe Remix cannot express), exit hang (deadlock in Remix teardown) |
+| Tests | 94/94 frozen gates (`analysis/checks/run_suite_parallel.py`); every behaviour change was seen failing first and mutation-checked |
+
+The plan, with evidence beside every item, is [`analysis/PLAN_2026-11-13.md`](analysis/PLAN_2026-11-13.md); its last
+sections are the end-of-session state and the next work. [PROGRESS.md](PROGRESS.md)'s top entry is the resume point.
+
+### What we learned this phase
+
+- **Remix never read `rtx.conf` in the game.** It resolves the file against a working directory that is not the game
+  folder, so every in-game run until 2026-11-14 used Remix's defaults (56% too bright, washed out). The proxy now sets
+  `DXVK_RTX_CONFIG_FILE` to the `rtx.conf` beside it.
+- **Most of the triangles Remix saw were not the scene.** NieR draws a linear-depth pre-pass, shadow casters and a
+  velocity pass; identified by pixel-shader bytecode (a depth-only rule over the disassembly, not vertex layout, which
+  left orphans) and skipped: +28% / +14% fps in replay (+22% in the game together with the other three switches),
+  and the hair and awning artefacts went with them.
+- **Placeholder materials were textures that arrived late, not missing ones.** Grey first, then a swap under the same
+  hash when the file lands, removed every placeholder and halved mesh churn.
+- **The game's material flags carry real colour.** Constant albedo (times the per-instance tint `cb8[0]*cb4[0]`)
+  replaces texture lookups that were never meant to happen.
+- **The floor blends layers per texel**, so no per-triangle choice reproduces it; a per-tile bake of the game's own
+  blend does.
+- **Motion vectors need GPU skinning.** Re-creating a mesh under a live handle gives Remix no previous positions; GPU
+  skinning does, and builds each mesh once (45.6 → 59.9 fps while turning).
+- **The laptop is GPU-bound at the panel's resolution.** 51 ms of every frame is waiting for Remix's GPU frame;
+  everything on the CPU side is under 3 ms.
+
+### How the work is done
+
+- **Frozen gates first.** Each change starts as a test that fails for the right reason against a mock game
+  (`analysis/checks/menu_overlay_mock_game.cpp`) and a fake Remix runtime that logs every API call and flags protocol
+  violations; the gate is then mutation-checked (a deliberate bug must turn it red). New behaviour ships behind a
+  switch, is measured, and becomes the default only by the user's pick, with `=0` as the rollback.
+- **Unattended game runs.** `analysis/runtime/game-runs/game_run.py` cold-starts the game in a copied Proton prefix,
+  drives the menus and camera from the proxy, takes shots and pulls the log; the user's save is hash-checked after
+  every run and has never changed.
+- **Truth pairs.** The game's own frame and ours at the same still camera, compared by numbers
+  (`analysis/replay/frame_stats.py`), not by eye; motion is compared with scripted turns.
+- **Replays.** F9 captures re-run through Remix offline (`analysis/replay/run_replay.py`) for A/Bs without the game.
+- **Hash-pinned installs.** `analysis/checks/install_live_dll.py --expect <sha> --install` with a rollback copy for each.
+- **Delegation with verification.** Bounded work went to local models and small cloud scouts; nothing was accepted
+  without re-running the gate or checking the claim against the shader disassembly
+  (`~/Documents/Local-Model-Delegation-Outcomes.jsonl`).
+
+### Next
+
+1. **Remix owns presentation**, so DLSS frame generation can reach the screen (today Remix renders into a hidden
+   window and its frames are copied into the game's swapchain, so generated frames are never seen) and the
+   per-frame copy back from the GPU goes away.
+2. **Standard DLSS modes in our menu** (Quality / Balanced / Performance / Ultra Performance) through the Remix API's
+   `SetConfigVariable`, instead of Remix's "Custom" preset.
+3. **Sky, water and the desert grade** from the two laptop captures (desert, water).
+4. Mip levels for the terrain bakes; the exit hang (needs `ptrace`); the laptop install step setting `ec_hooks.dll`
+   aside by itself.
+
+## Scope and status (2026-11-01, historical)
+
 ![Live NieR:Automata, path-traced through RTX Remix, with the game's own HUD](media/2026-10-29/live-rtx-hud-2b.jpg)
 
 *2026-10-29: the running game path-traced live through RTX Remix: CPU-skinned 2B, the game's sun, sky fill and local
 lights, and NieR's own HUD on top. Albedo-only materials and 1–4 fps for now. Details and before/after evidence:
 [media/2026-10-29](media/2026-10-29/README.md).*
 
-## Scope and status
 
 > **2026-11-01 — the live-Remix row is current; the other rows date from 2026-10-28.** Desktop game runs are paused by
 > the operator, so the only runnable test platform is the laptop (`analysis/LAPTOP_PORT.md`). `PROGRESS.md`'s top

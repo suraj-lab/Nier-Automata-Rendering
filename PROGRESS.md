@@ -1,5 +1,26 @@
 # NieR:Automata Rendering — Progress & Resume
 
+## START HERE (2026-11-14): the plan's look phase is done where data allows; the laptop plays it
+
+Pushed on `main`. Suite **94/94** (`analysis/runtime/suite-s56`). Proxy DLL **`9555829d…`** installed on both machines:
+desktop game folder (rollback `backups/live-scene-20261114T073931815056Z`), laptop via `analysis/deploy/laptop_port.py
+install` (set `NIER_LAPTOP_HOST=suraj@100.114.109.95` from the desktop; `restore` puts the DLAA install back exactly).
+`analysis/PLAN_2026-11-13.md` holds every item with its evidence; its closing sections are the state and the next work.
+
+- **On by default** (user picks): grey-first, depth pre-pass skip, wait-for-target, flag constants (+ tint), GPU
+  skinning, terrain bake. Rollback each with `NIER_REMIX_LIVE_<NAME>=0`. Off: `SKIP_OVERLAYS` (no visible effect).
+- **Desktop in the game:** 60.0 fps median, p10 59.1 while turning (640x350, copied prefix); the L1 grade fitted to
+  the game's own frame (`analysis/deploy/rtx/game.conf`, read now that the proxy sets `DXVK_RTX_CONFIG_FILE`).
+- **Laptop:** `NIER_ENV.ini` (`analysis/deploy/laptop-NIER_ENV.ini`) + `rtx.conf` (`analysis/deploy/rtx/laptop-game.conf`,
+  DLSS Custom = Ultra Performance, Ray Reconstruction, frame generation off). `ec_hooks.dll` renamed `.off` (it patches
+  our proxy: crash dump `analysis/runtime/laptop-port/dumps/play-20261114.dmp`). User play session: works, 17 fps median
+  at DLSS Performance, GPU-bound (51 ms waiting for Remix's frame). Ultra Performance not yet confirmed in play.
+- **New data:** two laptop F9 captures (desert, water) and a recording in `analysis/runtime/laptop-play-20261114/`
+  (stills in `media/2026-11-14/`). They unblock L9 sky, L8 water and a second area for the grade.
+- **Next, in order:** Remix owns presentation (DLSS FG on screen, no copy back); standard DLSS modes in our menu via
+  `remixapi SetConfigVariable`; sky/water/desert grade from the new captures; mips for the terrain bakes; exit hang
+  (needs ptrace permission); `laptop_port.py install` setting `ec_hooks.dll` aside itself.
+
 ## START HERE (2026-11-13, end of session 2): the game runs unattended, and the first truth pair exists
 
 Uncommitted on `main`. Suite **87/87** (`analysis/runtime/suite-s17`, 192 s). Proxy DLL **`55211a35…`**, installed in
