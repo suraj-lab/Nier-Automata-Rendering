@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
+#include <deque>
 #include <map>
 #include <mutex>
 #include <set>
@@ -12,6 +13,7 @@
 #include <vector>
 #include <remix_c.h>
 #include "live_types.h"
+#include "terrain_bake.h"
 #include "funnel.h"
 #include "visibility_math.h"
 #include "nscn_scene.h"
@@ -61,6 +63,11 @@ struct State {
     // L4: geometry -> triangles of meshes built with no material. Counted against `meshes` at report time, so an
     // evicted or rebuilt mesh drops out without bookkeeping at every destroy site.
     std::map<std::uint64_t, std::size_t> bare;
+    // terrain_bake.h: baked blend tiles by material key, while either layer file is not on disk yet (sent grey).
+    struct PendingBake { std::uint32_t t0, t1; unsigned level; float sharpness; std::uint64_t hash; };
+    std::map<std::uint64_t, PendingBake> pending_bakes;
+    std::deque<std::wstring> baked_paths;   // stable addresses: Remix keeps each c_str()
+    unsigned long long bakes_done = 0, bakes_failed = 0;   // reported with grey_first's line
     // NIER_REMIX_LIVE_BUILD_LOG=1: one entry per built mesh (geometry, pixel shader, triangles, material handle, first
     // vertex), drained and logged by remix_live.cpp. Diagnostic: links a mesh in the fake runtime's log to its shader.
     struct Built { std::uint64_t geometry, ps; std::size_t triangles; std::uint64_t material; float v0[3];
@@ -106,6 +113,7 @@ inline void destroy(const remixapi_Interface& api, State& s) {
     s.materials.clear();
     s.incomplete.clear();
     s.bare.clear();
+    s.pending_bakes.clear();
     s.texture_paths.clear();
     s.landed.clear();
     s.sun = s.sky = nullptr;
@@ -243,6 +251,78 @@ inline remixapi_MaterialHandle material_for(const remixapi_Interface& api, State
 // Item T1: a material sent grey (or without a PBR / normal file) is destroyed and created again under its own hash once
 // every file it names is on disk. The runtime knows a material by hash and ignores a repeat create under a live one, so
 // destroy-then-create is the only way the surface changes; the mesh, which names the hash, is not rebuilt.
+// ---- terrain_bake: file I/O on the worker and the baked material -------------------------------------------------
+inline bool read_whole(const std::wstring& path, std::vector<unsigned char>& out) {
+#ifdef _WIN32
+    FILE* f = _wfopen(path.c_str(), L"rb");
+#else
+    std::string narrow(path.begin(), path.end());   // tests: ASCII paths
+    FILE* f = std::fopen(narrow.c_str(), "rb");
+#endif
+    if (!f) return false;
+    out.clear();
+    unsigned char buf[65536];
+    std::size_t n;
+    while ((n = std::fread(buf, 1, sizeof buf, f)) > 0) out.insert(out.end(), buf, buf + n);
+    std::fclose(f);
+    return !out.empty();
+}
+inline bool write_whole(const std::wstring& path, const std::vector<unsigned char>& bytes) {
+#ifdef _WIN32
+    FILE* f = _wfopen(path.c_str(), L"wb");
+#else
+    std::string narrow(path.begin(), path.end());
+    FILE* f = std::fopen(narrow.c_str(), "wb");
+#endif
+    if (!f) return false;
+    const bool ok = std::fwrite(bytes.data(), 1, bytes.size(), f) == bytes.size();
+    return (std::fclose(f) == 0) && ok;
+}
+// Bake the tile and write it next to layer 0's file; the path is kept in `s.baked_paths` (Remix keeps the c_str()).
+inline const wchar_t* bake_file(State& s, std::uint32_t t0, std::uint32_t t1, unsigned level, float sharpness) {
+    const auto path_of = [&s](std::uint32_t id) -> const std::wstring* {
+        return id && id <= s.texture_paths.size() && !s.texture_paths[id - 1].empty() ? &s.texture_paths[id - 1] : nullptr;
+    };
+    const std::wstring* p0 = path_of(t0);
+    const std::wstring* p1 = path_of(t1);
+    if (!p0 || !p1) return nullptr;
+    std::vector<unsigned char> f0, f1;
+    terrain_bake::Image i0, i1;
+    if (!read_whole(*p0, f0) || !read_whole(*p1, f1) || !terrain_bake::read_dds(f0, i0) || !terrain_bake::read_dds(f1, i1))
+        return nullptr;
+    const float r = (static_cast<float>(level) + 0.5f) / static_cast<float>(terrain_bake::kLevels);
+    const std::wstring dir = p0->substr(0, p0->find_last_of(L"\\/") + 1);
+    const std::wstring path = dir + L"bake_" + std::to_wstring(t0) + L"_" + std::to_wstring(t1) + L"_" +
+                              std::to_wstring(level) + L"_" + std::to_wstring(static_cast<int>(sharpness * 10000.f)) + L".dds";
+    if (!write_whole(path, terrain_bake::dds_bytes(terrain_bake::bake(i0, i1, r, sharpness)))) return nullptr;
+    s.baked_paths.push_back(path);
+    return s.baked_paths.back().c_str();
+}
+// One material per (layer 0, layer 1, red level, sharpness): grey until both layer files are on disk, then the baked tile,
+// swapped in under the same hash (refresh_incomplete_materials), like a late texture.
+inline remixapi_MaterialHandle baked_material_for(const remixapi_Interface& api, State& s, std::uint32_t t0,
+                                                  std::uint32_t t1, unsigned level, float sharpness) {
+    std::uint32_t sbits = 0;
+    std::memcpy(&sbits, &sharpness, sizeof sbits);
+    std::uint64_t key = 0x7a4b5c0000000000ull;
+    for (const std::uint64_t v : {std::uint64_t(t0), std::uint64_t(t1), std::uint64_t(level), std::uint64_t(sbits)})
+        key = (key ^ v) * 0x100000001b3ull;
+    const auto known = s.materials.find(key);
+    if (known != s.materials.end()) return known->second;
+    const std::uint64_t hash = (1ull << 61) | (key & ((1ull << 61) - 1));   // bit 61 alone: clear of every other range
+    const wchar_t* path = bake_file(s, t0, t1, level, sharpness);
+    remixapi_MaterialInfo info;
+    remixapi_MaterialInfoOpaqueEXT ext;
+    nscn::detail::make_material_info(info, ext, path, hash, false);
+    if (!path) ext.albedoConstant.x = ext.albedoConstant.y = ext.albedoConstant.z = 0.5f;
+    remixapi_MaterialHandle handle = nullptr;
+    if (api.CreateMaterial(&info, &handle) || !handle) return nullptr;
+    s.materials.emplace(key, handle);
+    if (path) ++s.bakes_done;
+    else s.pending_bakes[key] = {t0, t1, level, sharpness, hash};
+    return handle;
+}
+
 // L4: meshes live right now with no material, and their triangles (what material_scoreboard.py calls "no material").
 inline std::pair<std::size_t, std::size_t> bare_meshes(const State& s) {
     std::pair<std::size_t, std::size_t> out{0, 0};
@@ -252,6 +332,21 @@ inline std::pair<std::size_t, std::size_t> bare_meshes(const State& s) {
 }
 
 inline void refresh_incomplete_materials(const remixapi_Interface& api, State& s) {
+    for (auto it = s.pending_bakes.begin(); it != s.pending_bakes.end();) {   // terrain_bake: both files landed?
+        const State::PendingBake b = it->second;
+        const auto landed = [&s](std::uint32_t id) {
+            return id <= s.landed.size() && s.landed[id - 1] != 0 && !s.texture_paths[id - 1].empty();
+        };
+        if (!landed(b.t0) || !landed(b.t1)) { ++it; continue; }
+        const std::uint64_t key = it->first;
+        it = s.pending_bakes.erase(it);
+        const auto known = s.materials.find(key);
+        if (known == s.materials.end()) continue;
+        if (known->second) api.DestroyMaterial(known->second);
+        s.materials.erase(known);
+        if (!baked_material_for(api, s, b.t0, b.t1, b.level, b.sharpness)) ++s.bakes_failed;
+        ++s.refreshed;
+    }
     for (auto it = s.incomplete.begin(); it != s.incomplete.end();) {
         const State::Incomplete m = it->second;
         bool ready = true;
@@ -314,9 +409,30 @@ inline bool build_mesh(const remixapi_Interface& api, State& s, const live_captu
     std::vector<std::vector<std::uint32_t>> layer_indices;
     std::vector<remixapi_MeshInfoSurfaceTriangles> surfaces;
     if (!upload.triangle_layer.empty() && !upload.skinned && upload.triangle_layer.size() * 3 == upload.indices.size()) {
-        layer_vertices.reserve(3);   // surfaces keep pointers into these: no reallocation after the first push
-        layer_indices.reserve(3);
-        for (std::uint8_t k = 0; k < 3; ++k) {
+        // With a bake (terrain_bake.h), layers 0 and 1 become one surface per vertex-red level instead.
+        const bool baking = upload.bake_sharpness > 0.f && upload.triangle_bucket.size() == upload.triangle_layer.size();
+        layer_vertices.reserve(3 + terrain_bake::kLevels);
+        layer_indices.reserve(3 + terrain_bake::kLevels);
+        if (baking)
+            for (unsigned level = 0; level < terrain_bake::kLevels; ++level) {
+                std::vector<std::uint32_t> idx;
+                for (std::size_t t = 0; t < upload.triangle_layer.size(); ++t)
+                    if (upload.triangle_layer[t] < 2 && upload.triangle_bucket[t] == level)
+                        idx.insert(idx.end(), upload.indices.begin() + static_cast<long>(t * 3),
+                                   upload.indices.begin() + static_cast<long>(t * 3 + 3));
+                if (idx.empty()) continue;
+                layer_indices.push_back(std::move(idx));
+                layer_vertices.push_back(vertices);
+                remixapi_MeshInfoSurfaceTriangles tile = surface;
+                tile.vertices_values = layer_vertices.back().data();
+                tile.vertices_count = layer_vertices.back().size();
+                tile.indices_values = layer_indices.back().data();
+                tile.indices_count = layer_indices.back().size();
+                tile.material = baked_material_for(api, s, upload.layer_texture[0], upload.layer_texture[1], level,
+                                                   upload.bake_sharpness);
+                surfaces.push_back(tile);
+            }
+        for (std::uint8_t k = baking ? 2 : 0; k < 3; ++k) {
             if (!upload.layer_texture[k]) continue;
             std::vector<std::uint32_t> idx;
             for (std::size_t t = 0; t < upload.triangle_layer.size(); ++t)
@@ -408,7 +524,7 @@ inline bool update(const remixapi_Interface& api, std::vector<live_capture::Uplo
                    const std::vector<live_capture::TextureFile>& textures, const live_capture::Frame& frame,
                    State& s, const nscn::Options& options) {
     add_textures(s, textures);
-    if (grey_first) refresh_incomplete_materials(api, s);
+    if (grey_first || !s.pending_bakes.empty()) refresh_incomplete_materials(api, s);
     // Newest upload per geometry wins: a rewrite while queued replaces the queued one, so geometry rewritten every
     // frame cannot grow the backlog, and the stale version is never built.
     std::vector<live_capture::Upload> queue = std::move(s.backlog);

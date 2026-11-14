@@ -44,6 +44,21 @@ inline void assign(live_capture::Upload& u, const std::uint32_t ids[3], const fl
         u.layer_texture[k] = ids[k];
         for (int a = 0; a < 2; ++a) u.layer_scale[k][a] = scales[0][a] != 0.f ? scales[k][a] / scales[0][a] : 1.f;
     }
+    // terrain_bake.h: layers 0 and 1 repeating alike blend into one tile per vertex-red level; each triangle not on
+    // layer 2 takes the tile of its mean red (8 levels, terrain_bake::kLevels).
+    if (ids[1] && scales[1][0] == scales[0][0] && scales[1][1] == scales[0][1]) {
+        u.bake_sharpness = s;
+        u.triangle_bucket.assign(u.triangle_layer.size(), 0);
+        for (std::size_t t = 0; t < u.triangle_bucket.size(); ++t) {
+            float r = 0.f;
+            for (std::size_t c = 0; c < 3; ++c) {
+                const std::uint32_t index = u.indices[t * 3 + c];
+                r += static_cast<float>((index < u.vertices.size() ? u.vertices[index].color : 0u) & 0xffu) / 255.f;
+            }
+            const int level = static_cast<int>(r / 3.f * 8.f);
+            u.triangle_bucket[t] = static_cast<std::uint8_t>(level < 0 ? 0 : level > 7 ? 7 : level);
+        }
+    }
 }
 
 // A blended terrain overlay (f5be3a42...: lines 59-84) writes a coverage alpha, not a colour alpha:

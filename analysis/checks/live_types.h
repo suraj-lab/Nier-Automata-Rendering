@@ -50,6 +50,8 @@ struct Upload {
     std::uint32_t layer_texture[3] = {0, 0, 0};                 // [0] is `texture`; 0 = layer absent
     float layer_scale[3][2] = {{1.f, 1.f}, {1.f, 1.f}, {1.f, 1.f}}; // UV repeat relative to the baked (layer 0) UVs
     std::vector<std::uint8_t> triangle_layer;                   // per triangle: 0, 1 or 2
+    std::vector<std::uint8_t> triangle_bucket;                  // per triangle: vertex-red level for the baked blend tile
+    float bake_sharpness = 0.f;                                 // cb1[1].w; 0 = no bake (layers differ in repeat)
     std::uint64_t ps = 0;              // the draw's pixel shader (diagnostic: NIER_REMIX_LIVE_BUILD_LOG)
     unsigned target_w = 0, target_h = 0;   // the draw's colour target (diagnostic, same switch)
 };
