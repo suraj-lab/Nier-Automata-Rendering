@@ -38,6 +38,7 @@ DLL = A / 'runtime/menu-dll/d3d11.dll'
 FONTS = A / 'runtime/menu-dll/nier_render_fonts'
 SCENE = A / 'runtime/remix-probe/textured-scene'
 GAME = r'C:\Program Files (x86)\Steam\steamapps\common\NieRAutomata'
+HOST = os.environ.get('NIER_LAPTOP_HOST', 'spaghetti')   # the desktop resolves the laptop only by address (suraj@100.114.109.95)
 WORK = r'C:\Users\suraj\Downloads\NieR-Laptop-Port'          # scene, backup, launch scripts: outside the game folder
 BACKUP = WORK + r'\backup'
 RUNTIME = r'C:\Program Files\NVIDIA Corporation\RTX Remix\deps\remix_runtime\runtime\.trex\d3d9.dll'
@@ -63,15 +64,15 @@ def ps(script, timeout=600):
         handle.write(b'\xff\xfe' + script.encode('utf-16le'))  # BOM so PowerShell reads pasted Unicode correctly
         local = handle.name
     try:
-        p = subprocess.run(['scp', *OPTS, local, 'spaghetti:' + remote], capture_output=True, text=True, timeout=120)
+        p = subprocess.run(['scp', *OPTS, local, HOST + ':' + remote], capture_output=True, text=True, timeout=120)
         if p.returncode:
             raise RuntimeError(f'could not stage the script: {p.stderr[-500:]}')
-        p = subprocess.run(['ssh', *OPTS, 'spaghetti',
+        p = subprocess.run(['ssh', *OPTS, HOST,
                             f'powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File {path!r}'.replace("'", '"')],
                            capture_output=True, text=True, errors='replace', timeout=timeout)
     finally:
         os.unlink(local)
-    subprocess.run(['ssh', *OPTS, 'spaghetti', f'del "{path}"'], capture_output=True, text=True, timeout=120)
+    subprocess.run(['ssh', *OPTS, HOST, f'del "{path}"'], capture_output=True, text=True, timeout=120)
     out = '\n'.join(l for l in p.stdout.splitlines() if not l.startswith(('#< CLIXML', '<Objs')))
     if p.returncode:
         import re
@@ -81,7 +82,7 @@ def ps(script, timeout=600):
 
 
 def scp(local, remote, recursive=False):
-    p = subprocess.run(['scp', *OPTS, *(['-r'] if recursive else []), str(local), 'spaghetti:' + remote.replace('\\', '/')],
+    p = subprocess.run(['scp', *OPTS, *(['-r'] if recursive else []), str(local), HOST + ':' + remote.replace('\\', '/')],
                        capture_output=True, text=True)
     if p.returncode:
         raise RuntimeError(f'scp {local}: {p.stderr}')
@@ -197,7 +198,7 @@ $wer=@($dumps)  # bounded: the previous Get-WinEvent query scanned the whole App
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / f'{label}-{stamp}.json').write_text(json.dumps(receipt, indent=2) + '\n')
     if remix:  # the runtime's own log: DLSS/RR/FG state and the effective RTX options live only there
-        subprocess.run(['scp', *OPTS, 'spaghetti:' + (WORK + f'\\remix-dxvk-{label}.log').replace('\\', '/'),
+        subprocess.run(['scp', *OPTS, HOST + ':' + (WORK + f'\\remix-dxvk-{label}.log').replace('\\', '/'),
                         str(OUT / f'{label}-{stamp}-remix-dxvk.log')], capture_output=True, text=True, timeout=300)
     lines = [l for l in (receipt.get('log') or '').splitlines() if l.strip()]
     print(f"{label}: pids={receipt['pids']} task_result={receipt['task_result']} alive_at_end={receipt['alive_at_end']} log_lines={len(lines)} crash={bool(receipt['crash'])}")
