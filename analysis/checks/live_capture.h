@@ -33,6 +33,7 @@
 #include "material_roles.h"
 #include "depth_only.h"
 #include "terrain_layers.h"
+#include "overlay_rule.h"
 
 namespace live_capture {
 
@@ -569,6 +570,12 @@ inline bool terrain_layers = [] {
     const char* v = std::getenv("NIER_REMIX_LIVE_TERRAIN_LAYERS");
     return v && v[0] == '1' && v[1] == '\0';
 }();
+// Item L7: not-surface blend layers (overlay_rule.h) are not submitted. Default off until the user picks; read at load.
+inline bool skip_overlays = [] {
+    const char* v = std::getenv("NIER_REMIX_LIVE_SKIP_OVERLAYS");
+    return v && v[0] == '1' && v[1] == '\0';
+}();
+inline std::atomic<unsigned long long> overlays_skipped{0};
 inline bool flag_constants = [] {
     const char* v = std::getenv("NIER_REMIX_LIVE_FLAG_CONSTANTS");   // on by default since 2026-11-13 (user pick); =0 rolls back
     return !(v && v[0] == '0' && v[1] == '\0');
@@ -1489,6 +1496,7 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     bool blend_on = false;                 // the bound blend state as D3D11 reports it, not the "alpha blend" heuristic
     unsigned blend_src = 0, blend_dest = 0;
     unsigned target_format = 0;            // the bound colour target's DXGI format (L7: depth-like passes write one float)
+    bool depth_write = true;               // L7: the bound depth-stencil state writes depth (no state = D3D11 default, on)
     {
     const ObserveTimer timer(kObserveState);
     ID3D11RenderTargetView* early_rtv = nullptr;
@@ -1511,6 +1519,14 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
             blend_src = static_cast<unsigned>(rt.SrcBlend);
             blend_dest = static_cast<unsigned>(rt.DestBlend);
             blend->Release();
+        }
+        ID3D11DepthStencilState* ds = nullptr;
+        context->OMGetDepthStencilState(&ds, nullptr);
+        if (ds) {
+            D3D11_DEPTH_STENCIL_DESC dd{};
+            ds->GetDesc(&dd);
+            depth_write = dd.DepthEnable && dd.DepthWriteMask == D3D11_DEPTH_WRITE_MASK_ALL;
+            ds->Release();
         }
     }
     }
@@ -1657,6 +1673,16 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     // the path-traced scene (user decision 2026-11-01). NIER_REMIX_LIVE_EFFECTS=1 keeps them for comparison.
     unsigned long long pixel_ps = 0;
     const PixelInfo& pixel = *pixel_info(context, &pixel_ps);
+    if (skip_overlays && !ui_pass) {
+        const material_roles::Roles& r = pixel.roles;
+        const bool roles = r.albedo.slot >= 0 || r.metal.slot >= 0 || r.gloss.slot >= 0;
+        if (overlay_rule::is_overlay(blend_on, blend_src, blend_dest, depth_write, roles)) {
+            overlays_skipped.fetch_add(1, std::memory_order_relaxed);
+            trace.event.reason = visibility_trace::Reason::Effect;
+            release_all(vbs, 4, ib, layout);
+            return;
+        }
+    }
     if (pixel.depth_only && skip_depth_ps) {
         depth_ps_skipped.fetch_add(1, std::memory_order_relaxed);
         { std::lock_guard<std::recursive_mutex> lock(mutex()); ++building().skipped_prepass; }

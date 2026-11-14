@@ -1020,6 +1020,8 @@ struct Worker {
                                       live.incomplete.size(), live.refreshed, live.materials.size(),
                                       live_capture::deferred_pending.load(), live_capture::deferred_written.load(),
                                       live_capture::deferred_given_up.load());
+                    if (live_capture::skip_overlays)   // item L7: blend layers that are not surfaces
+                        logger.load()("remix: live overlays_skipped=%llu", live_capture::overlays_skipped.load());
                     if (live_capture::skip_depth_ps)   // item L7: depth-only draws not submitted
                         logger.load()("remix: live depth_ps_skipped=%llu", live_capture::depth_ps_skipped.load());
                     if (live_capture::flag_constants)   // item L3: draws whose own flags chose constants over a texture
