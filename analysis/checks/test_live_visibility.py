@@ -87,8 +87,11 @@ def mesh_signature(log):
             fields = dict(re.findall(r'(\w+)=([^\s]+)', line))
             # No `presented`: the frame a build lands on is timing (it varied by one once texture files moved to their
             # own thread, 2026-11-03); the build count and content are what diagnostics must not change.
-            out.append(tuple(fields.get(k) for k in ('surfaces', 'verts', 'indices', 'materials', 'skinned',
-                                                     'bonesPerVertex', 'weights', 'v0')))
+            # No `materials` either: it is the fake runtime's running count of CreateMaterial calls so far, and with
+            # grey-first (default since 2026-11-13) materials are re-created when files land on the writer thread,
+            # so the count at a given build is timing. The mesh content fields below are what must not change.
+            out.append(tuple(fields.get(k) for k in ('surfaces', 'verts', 'indices', 'skinned',
+                                                     'bonesPerVertex', 'weights', 'v0', 'uvsum')))
     return sorted(out)
 
 
