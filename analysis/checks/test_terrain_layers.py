@@ -103,6 +103,18 @@ int main() {
         check("3: green -> 2, red -> 1, black -> 0, red+green -> 2",
               u.triangle_layer == std::vector<std::uint8_t>({2, 1, 0, 2}));
     }
+    {   // height blend with the real numbers of 41686139 draws 1697/1703: t0 alpha 0.2, t1 alpha 1.0, cb1[1].w 0.1
+        // G 0xf2 (0.95) alone: raw weights pick layer 2, the shader's w2 = sat((0.95 - 1.0) / 0.1) = 0 keeps layer 0;
+        // R 0x80 (0.5): w1 = sat((0.5 - 0.2) / 0.1) = 1 -> layer 1.
+        const std::uint32_t colours[4] = {0x0000f200u, 0x00000080u, 0x00000000u, 0x0000ff00u};
+        auto u = quad(colours);
+        const std::uint32_t ids[3] = {1, 2, 3};
+        const float alpha[2] = {0.2f, 1.0f};
+        terrain_layers::assign(u, ids, scales, alpha, 0.1f);
+        // ... and even G = 1.0 gives w2 = sat(0 / 0.1) = 0: with t1's alpha at 1.0 the game never shows layer 2 here.
+        check("height: green stays layer 0 below t1's alpha (even at 1.0), R above t0's alpha goes to layer 1",
+              u.triangle_layer == std::vector<std::uint8_t>({0, 1, 0, 0}));
+    }
     {   // nothing captured beyond layer 0
         const std::uint32_t colours[4] = {0x000000ffu, 0, 0, 0};
         auto u = quad(colours);

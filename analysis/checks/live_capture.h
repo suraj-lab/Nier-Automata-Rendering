@@ -1100,6 +1100,17 @@ enum class TextureResult { Captured, Unusable, Deferred };
 
 // `reserved` (item T1): the id this texture was given at first sight, so a deferred readback lands under the id the
 // material was already built with. 0 means "allocate one now", the old behaviour.
+// Item L5b: mean alpha per captured texture id (terrain height blend), recorded only with NIER_REMIX_LIVE_TERRAIN_LAYERS.
+inline std::map<std::uint32_t, float>& texture_alpha_mean() { static std::map<std::uint32_t, float> m; return m; }
+inline void note_alpha_mean(std::uint32_t id, const texture_capture::Texture& source) {
+    if (texture_alpha_mean().size() > 65536 || texture_alpha_mean().count(id)) return;
+    texture_capture::Texture copy = source;
+    copy.mip_levels = 1;   // mip 0 is enough for a mean
+    if (!texture_capture::to_channel(copy, 3, false) || copy.bytes.empty()) return;
+    unsigned long long sum = 0;
+    for (const unsigned char b : copy.bytes) sum += b;
+    texture_alpha_mean()[id] = static_cast<float>(sum) / (255.f * static_cast<float>(copy.bytes.size()));
+}
 inline TextureResult write_texture(ID3D11Device* device, ID3D11DeviceContext* context, ID3D11Resource* resource,
                                    std::uint32_t& id, std::shared_ptr<const texture_capture::Texture>& source,
                                    bool normal_slot = false, int channel = -1, bool invert = false,
@@ -1131,6 +1142,7 @@ inline TextureResult write_texture(ID3D11Device* device, ID3D11DeviceContext* co
     swprintf(name, 64, L"\\live_%u.dds", assigned);
     const std::wstring path = texture_dir + name;
     texture_bytes_written += source->bytes.size();  // conservative per-output disk accounting, unchanged
+    if (terrain_layers && channel < 0 && !normal_slot) note_alpha_mean(assigned, *source);   // L5b height blend
     all_textures().push_back(TextureFile{assigned, path, source, normal_slot, channel, invert});
     id = assigned;
     if (!reserved) ++next_texture_id;
@@ -1750,6 +1762,8 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     MaterialConstants flag_values;        // item L3: what the shader's flags select instead of a texture
     std::uint32_t layer_texture[3] = {0, 0, 0};   // item L5b: terrain layers (texture ids), [0] = the albedo
     float layer_scale[3][2] = {{1.f, 1.f}, {1.f, 1.f}, {1.f, 1.f}};   // ... and their absolute UV repeats
+    float layer_alpha[2] = {0.5f, 0.5f};          // ... t0 / t1 mean alpha (0.5 until known)
+    float layer_sharpness = 1.f;                   // ... cb1[1].w
     int albedo_slot = -1;                 // the PS slot the albedo came from (role, or first usable)
     float uv_scale[2] = {1.f, 1.f};       // the shader's own texture repeat at that slot, baked into the mesh UVs
     std::uint64_t uv_bits = 0;            // ... folded into the version, so a changed repeat rebuilds the mesh
@@ -1988,6 +2002,16 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
                 std::uint32_t bits[2];
                 std::memcpy(bits, rep, sizeof bits);
                 layer_bits = hash_value(layer_bits ^ id ^ (static_cast<std::uint64_t>(bits[0]) << 32) ^ bits[1]);
+            }
+            {   // the shader's blend sharpness cb1[1].w and each layer's alpha (texture_alpha_mean, from the writer)
+                material_roles::UvScale sharp;
+                sharp.cb = 1; sharp.reg = 1; sharp.lanes = "ww";
+                float sw[2] = {1.f, 1.f};
+                if (repeat(sharp, sw)) layer_sharpness = sw[0];
+                for (int k = 0; k < 2; ++k) {
+                    const auto known = texture_alpha_mean().find(layer_texture[k]);
+                    if (known != texture_alpha_mean().end()) layer_alpha[k] = known->second;
+                }
             }
             if (layer_texture[1] || layer_texture[2]) uv_bits ^= layer_bits;   // a changed layer set rebuilds the mesh
             else layer_texture[0] = 0;
@@ -2350,7 +2374,7 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
                 upload.vertices[i].color = decoded.vertices[i].color;
             }
             upload.indices = std::move(decoded.indices);
-            terrain_layers::assign(upload, layer_texture, layer_scale);   // L5b: no-op unless a terrain draw
+            terrain_layers::assign(upload, layer_texture, layer_scale, layer_alpha, layer_sharpness);   // L5b: no-op unless terrain
             upload.bones = std::move(decoded.bones);
             upload.weights = std::move(decoded.weights);
             if (built_versions().size() > 200000) { built_versions().clear(); content_hashes().clear(); sky_geometries().clear(); }  // bounded; one rebuild each
