@@ -901,7 +901,7 @@ struct Worker {
                     if (live.refreshed != reported_refreshed) {
                         logger.load()("remix: live grey_first swapped=%llu total=%llu blank=%llu incomplete=%zu pending=%zu",
                                       live.refreshed - reported_refreshed, live.refreshed, live.refreshed_blank,
-                                      live.incomplete.size(), live_capture::deferred_readbacks().size());
+                                      live.incomplete.size(), live_capture::deferred_pending.load());
                         reported_refreshed = live.refreshed;
                     }
                 }
@@ -1001,13 +1001,13 @@ struct Worker {
                         logger.load()("remix: live grey_first incomplete=%zu refreshed=%llu materials=%zu pending=%zu "
                                       "written=%llu given_up=%llu",
                                       live.incomplete.size(), live.refreshed, live.materials.size(),
-                                      live_capture::deferred_readbacks().size(), live_capture::deferred_written,
-                                      live_capture::deferred_given_up);
+                                      live_capture::deferred_pending.load(), live_capture::deferred_written.load(),
+                                      live_capture::deferred_given_up.load());
                     if (live_capture::skip_depth_ps)   // item L7: depth-only draws not submitted
                         logger.load()("remix: live depth_ps_skipped=%llu", live_capture::depth_ps_skipped.load());
                     if (live_capture::flag_constants)   // item L3: draws whose own flags chose constants over a texture
                         logger.load()("remix: live flag_constants draws=%llu normal_off=%llu",
-                                      live_capture::flag_constant_draws, live_capture::flag_normal_off_draws);
+                                      live_capture::flag_constant_draws.load(), live_capture::flag_normal_off_draws.load());
                     logger.load()("remix: live rebuilds first=%llu unknown=%llu buffer=%llu pose=%llu texture=%llu evicted=%llu "
                                   "buffer_skinned=%llu buffer_dynamic=%llu game_frames=%llu game_max_ms=%llu "
                                   "worst_capture_ms=%llu worst_hook_ms=%llu worst_present_ms=%llu build_deferred=%llu "

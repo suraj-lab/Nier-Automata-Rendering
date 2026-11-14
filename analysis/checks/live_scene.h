@@ -194,7 +194,8 @@ inline remixapi_MaterialHandle material_for(const remixapi_Interface& api, State
     const auto on_disk = [&s](std::uint32_t id) {   // "landed" in the state means the file is written, not merely queued
         return id && id <= s.landed.size() && s.landed[id - 1] != 0;
     };
-    const bool has_albedo = !texture ? false : grey_first ? on_disk(texture) : true;   // grey_first: queued is not on disk
+    // grey_first: queued is not on disk, and a write that failed lands with an empty path: grey, never L"" (review F4).
+    const bool has_albedo = !texture ? false : grey_first ? on_disk(texture) && path_of(texture) != nullptr : true;
     const bool has_normal = grey_first ? (normal != 0)
                                        : (normal && normal <= s.texture_paths.size() && !s.texture_paths[normal - 1].empty());
     remixapi_MaterialInfo info;

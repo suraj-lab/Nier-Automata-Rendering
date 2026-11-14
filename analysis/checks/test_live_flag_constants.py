@@ -27,7 +27,8 @@ import test_menu_overlay as tmo
 import test_nscn_scene as ts
 
 tr.ENV_KEYS = tuple(tr.ENV_KEYS) + ('NIER_REMIX_LIVE', 'NIER_REMIX_LIVE_TEX', 'FAKE_REMIX_INSTANCE_LOG', 'MOCK_CAMERA',
-                                    'MOCK_FLAG_PS', 'NIER_REMIX_LIVE_FLAG_CONSTANTS', 'NIER_REMIX_LIVE_STATS_EVERY')
+                                    'MOCK_FLAG_PS', 'NIER_REMIX_LIVE_FLAG_CONSTANTS', 'NIER_REMIX_LIVE_STATS_EVERY',
+                                    'MOCK_FLAG_TINT')
 
 
 def field(line, key):
@@ -44,7 +45,7 @@ def main():
     (scene / 'scene_textures').mkdir(parents=True)
     (scene / 'scene.bin').write_bytes(ts.scene_bytes(ts.CAMERA, ts.DRAWS, ts.TEXTURES, ts.TRIS))
 
-    def run(name, flags, switch):
+    def run(name, flags, switch, extra=None):
         tex = work / f'tex-{name}'
         tex.mkdir()
         env = {'MOCK_CAMERA': 'live', 'MOCK_FRAME_MS': '60', 'MOCK_FLAG_PS': flags,
@@ -52,6 +53,7 @@ def main():
                'NIER_REMIX_SCENE': tr.win(scene / 'scene.bin'), 'NIER_REMIX_LIVE': '1',
                'NIER_REMIX_LIVE_TEX': tr.win(tex), 'FAKE_REMIX_INSTANCE_LOG': '1', 'NIER_REMIX_LIVE_STATS_EVERY': '10'}
         env['NIER_REMIX_LIVE_FLAG_CONSTANTS'] = '1' if switch else '0'   # on by default since 2026-11-13
+        env.update(extra or {})
         _, result, log, fake = tr.run(work, name, env)
         assert fake and 'VIOLATION' not in fake, fake[-1500:]
         # The world mesh's material: the one named with the shader's own roles (the scene shell keeps its own).
@@ -89,6 +91,11 @@ def main():
     assert field(mat, 'roughness') == '-' and field(mat, 'rconst') == '0.700', mat
     assert field(mat, 'metallic') != '-' and field(mat, 'path') != '-', mat
     results['gloss-only'] = 'one flag: only that role becomes a constant'
+
+    # L8: the game tints the flag's constant albedo by cb8[0] * cb4[0] like the texture (hair shader, ps line 345).
+    mat, _, _ = run('tinted', '0,1,1,1', True, {'MOCK_FLAG_TINT': '0.5,1,1'})
+    assert field(mat, 'aconst') == '0.100,0.200,0.600', f'constant albedo must carry the tint (0.5,0.5,1): {mat}'
+    results['tinted'] = 'flag albedo 0.2,0.4,0.6 x tint 0.5,0.5,1 = 0.1,0.2,0.6'
 
     print('\n'.join(f'PASS {k}: {v}' for k, v in results.items()))
 

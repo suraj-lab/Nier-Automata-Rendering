@@ -566,7 +566,7 @@ inline bool flag_constants = [] {
     return !(v && v[0] == '0' && v[1] == '\0');
 }();
 inline float roughness_floor_constant = 38.f / 255.f;   // the same floor the gloss mask gets (remix_live.cpp)
-inline unsigned long long flag_constant_draws = 0, flag_normal_off_draws = 0;   // reported with the stats
+inline std::atomic<unsigned long long> flag_constant_draws{0}, flag_normal_off_draws{0};   // read by the worker   // reported with the stats
 // NIER_REMIX_LIVE_EFFECTS=1: keep the effects shaders' draws in the scene (default: left out).
 inline bool keep_effects = false;
 // NIER_REMIX_LIVE_GPU_SKIN (Phase 4): a blended skinned draw keeps ONE mesh in bind space and is moved by the frame's
@@ -584,7 +584,8 @@ struct DeferredReadback {
     std::uint32_t id = 0;
     unsigned kind = 0;
 };
-inline unsigned long long deferred_given_up = 0, deferred_written = 0;   // item T1 diagnostics, reported with grey_first
+inline std::atomic<unsigned long long> deferred_given_up{0}, deferred_written{0};   // read by the worker (review F7)
+inline std::atomic<std::size_t> deferred_pending{0};   // deferred_readbacks().size(), mirrored for the worker   // item T1 diagnostics, reported with grey_first
 inline std::vector<DeferredReadback>& deferred_readbacks() {
     static std::vector<DeferredReadback> list;
     return list;
@@ -1177,6 +1178,7 @@ inline void begin_frame(ID3D11DeviceContext* context, unsigned width = 0, unsign
                 }
                 ++i;
             }
+            deferred_pending.store(deferred_readbacks().size(), std::memory_order_relaxed);
             for (auto it = deferred_pixels().begin(); it != deferred_pixels().end();) {
                 bool pending = false;
                 for (const auto& e : deferred_readbacks()) if (e.resource == it->first) { pending = true; break; }
@@ -1280,7 +1282,8 @@ inline DisassembleFn disassembler() {
 // texture channel is albedo / metal / gloss / normal (material_roles.h, analysis/PBR_MAPPING.md), and whether it is an
 // effects shader (declares the effect buffers t27 / t30: particles, smoke, distortion).
 struct PixelInfo { alpha_test::Result alpha; material_roles::Roles roles; bool effect = false;
-                   bool depth_only = false; };   // L7: writes linear depth, not a surface (depth_only.h)
+                   bool depth_only = false;   // L7: writes linear depth, not a surface (depth_only.h)
+                   bool tint_cb8_cb4 = false; };   // L8: albedo is multiplied by cb8[0].xyz * cb4[0].xyz (hair: line 249/345)   // L7: writes linear depth, not a surface (depth_only.h)
 // One line per distinct pixel shader, the first time it is seen with a draw: what the material path did with it. For
 // live runs where some surfaces come out wrong (pbr-look1: untextured dunes, chrome rocks, missing foliage), so each
 // can be traced back to a shader, its roles and the fate of each texture. Drained by the worker, bounded.
@@ -1318,7 +1321,11 @@ inline void tally_shader(unsigned long long ps, unsigned long long triangles, bo
 }
 // The heaviest shaders, biggest triangle share first, for the stats line.
 inline std::vector<std::pair<unsigned long long, ShaderTally>> top_shaders(std::size_t count) {
-    std::vector<std::pair<unsigned long long, ShaderTally>> all(shader_tallies().begin(), shader_tallies().end());
+    std::vector<std::pair<unsigned long long, ShaderTally>> all;
+    {   // the draw thread inserts under mutex() (review F6)
+        std::lock_guard<std::recursive_mutex> lock(mutex());
+        all.assign(shader_tallies().begin(), shader_tallies().end());
+    }
     std::sort(all.begin(), all.end(), [](const auto& a, const auto& b) { return a.second.triangles > b.second.triangles; });
     if (all.size() > count) all.resize(count);
     return all;
@@ -1410,6 +1417,12 @@ inline const PixelInfo* pixel_info(ID3D11DeviceContext* context, unsigned long l
         }
         result.effect = declares_effect_buffers(asm_text);
         result.depth_only = depth_only::writes_depth_only(asm_text);
+        // The game's per-instance x per-mesh tint, as the hair shader forms it (ps c2a9d2f6...: `mul r2.xyz, cb8[0].xyzx,
+        // cb4[0].xyzx`, then `mul r5.xyz, r2.xyzx, r1.xyzx` with r1 the albedo, texture or the flag's constant).
+        // shortcut: only the non-instanced cb8[0] form; shaders indexing cb8 per instance had white tints on both
+        // reference captures (runtime/delegation/l8_tint.md). Read the instance index when a capture needs it.
+        result.tint_cb8_cb4 = asm_text.find("cb8[0].xyzx, cb4[0].xyzx") != std::string::npos ||
+                              asm_text.find("cb4[0].xyzx, cb8[0].xyzx") != std::string::npos;
     }
     if (text) text->Release();
     ps->Release();
@@ -1645,7 +1658,7 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     }
     if (pixel.effect && !keep_effects) {
         note_material({pixel_ps, true, {}, {}, 7});
-        tally_shader(pixel_ps, index_count / 3, false, 0, 0, false, true, true);
+        { std::lock_guard<std::recursive_mutex> lock(mutex()); tally_shader(pixel_ps, index_count / 3, false, 0, 0, false, true, true); }
         trace.event.reason = visibility_trace::Reason::Effect;
         release_all(vbs, 4, ib, layout);
         return;
@@ -1728,6 +1741,7 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
                 texture_ids()[key] = TextureEntry{reserved, frame_number};
                 if (deferred_readbacks().size() < 65536)
                     deferred_readbacks().push_back(DeferredReadback{resource, key, reserved, kind});
+                deferred_pending.store(deferred_readbacks().size(), std::memory_order_relaxed);
                 id = reserved;
                 return TextureResult::Captured;
             }
@@ -1829,6 +1843,13 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
                 float rgb[3];
                 bool ok = true;
                 for (int k = 0; k < 3 && ok; ++k) ok = lane_value(a.cb, a.reg, a.lanes[static_cast<std::size_t>(k)], rgb[k]);
+                if (ok && pixel.tint_cb8_cb4) {   // L8: the game tints the constant like the texture (ps line 345)
+                    for (int k = 0; k < 3 && ok; ++k) {
+                        float instance = 1.f, mesh = 1.f;
+                        const char lane_k = "xyz"[k];
+                        if (lane_value(8, 0, lane_k, instance) && lane_value(4, 0, lane_k, mesh)) rgb[k] *= instance * mesh;
+                    }
+                }
                 if (ok) for (int k = 0; k < 3; ++k) flag_values.albedo[k] = clamp01(rgb[k]);
             }
             if (roles.normal.enable.cb >= 0 && flag_set(roles.normal.enable) == std::optional<bool>(false)) normal_off = true;

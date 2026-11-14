@@ -47,6 +47,46 @@ add r0.x, r0.x, r0.y
 mov o0.xyzw, r0.xxxx
 ret
 """
+# Review 2026-11-13 (runtime/delegation/review_2026-11-13.md F1-F3): shapes that look like depth but are colour.
+UNRELATED_ZW = """ps_5_0
+dcl_input_ps linear v1.zw
+dcl_output o0.xyzw
+dcl_temps 1
+div r0.x, v1.z, v1.w
+mov o0.xyzw, cb0[1].xyzw
+ret
+"""
+BRANCH = """ps_5_0
+dcl_resource_texture2d (float,float,float,float) t0
+dcl_input_ps linear v1.zw
+dcl_input_ps linear v2.xy
+dcl_output o0.xyzw
+dcl_temps 2
+div r1.x, v1.z, v1.w
+sample_indexable(texture2d)(float,float,float,float) r0.x, v2.xyxx, t0.xyzw, s0
+lt r0.x, r0.x, l(0.500000)
+if_nz r0.x
+  mov o0.xyzw, r1.xxxx
+else
+  mov o0.xyzw, cb0[2].xyzw
+endif
+ret
+"""
+INDEXED = """ps_5_0
+dcl_resource_texture2d (float,float,float,float) t0
+dcl_input_ps linear v1.zw
+dcl_input_ps linear v2.xy
+dcl_output o0.xyzw
+dcl_temps 3
+dcl_indexableTemp x0[2], 4
+sample_indexable(texture2d)(float,float,float,float) r0.x, v2.xyxx, t0.xyzw, s0
+mov x0[0].x, r0.x
+mov x0[r1.x + 1].x, cb0[1].x
+div r2.x, v1.z, v1.w
+mov o0.x, x0[0].x
+mov o0.yzw, r2.xxxx
+ret
+"""
 SRC = r'''
 #include "depth_only.h"
 #include <cstdio>
@@ -67,10 +107,11 @@ def main():
     (work / 't.cpp').write_text(SRC)
     subprocess.run(['g++', '-std=c++17', '-O1', '-Wall', '-Wextra', '-Werror', '-fsanitize=address,undefined',
                     '-I', str(C), str(work / 't.cpp'), '-o', str(work / 't')], check=True)
-    for name, text in (('flat.asm', FLAT), ('card.asm', CARD), ('sampled_depth.asm', SAMPLED_DEPTH)):
+    for name, text in (('flat.asm', FLAT), ('card.asm', CARD), ('sampled_depth.asm', SAMPLED_DEPTH),
+                       ('unrelated_zw.asm', UNRELATED_ZW), ('branch.asm', BRANCH), ('indexed.asm', INDEXED)):
         (work / name).write_text(text)
     positives = sorted(FIX.glob('*.asm'))
-    negatives = [work / 'flat.asm', work / 'card.asm', work / 'sampled_depth.asm']
+    negatives = [work / n for n in ('flat.asm', 'card.asm', 'sampled_depth.asm', 'unrelated_zw.asm', 'branch.asm', 'indexed.asm')]
     corpus = sorted(CORPUS.glob('*.asm')) if CORPUS.exists() else []
     files = positives + negatives + corpus
     out = {}

@@ -29,13 +29,15 @@ HARNESS = r'''
 #include <vector>
 #include "live_scene.h"
 
-struct Mat { bool albedo, normal; };
+struct Mat { bool albedo, normal, empty_albedo; float grey; };
 static std::map<unsigned long long, Mat> materials;
 struct Mesh { unsigned long long material; std::size_t vertices; };
 static std::vector<Mesh> meshes;
 static unsigned long long next_handle = 0x1000;
 static remixapi_ErrorCode REMIXAPI_CALL create_material(const remixapi_MaterialInfo* i, remixapi_MaterialHandle* out) {
-    materials[next_handle] = {i && i->albedoTexture, i && i->normalTexture};
+    const auto* ext = i ? static_cast<const remixapi_MaterialInfoOpaqueEXT*>(i->pNext) : nullptr;
+    materials[next_handle] = {i && i->albedoTexture && *i->albedoTexture, i && i->normalTexture,
+                              i && i->albedoTexture && !*i->albedoTexture, ext ? ext->albedoConstant.x : -1.f};
     *out = reinterpret_cast<remixapi_MaterialHandle>(next_handle++);
     return REMIXAPI_ERROR_CODE_SUCCESS;
 }
@@ -63,7 +65,7 @@ static live_capture::TextureFile file(std::uint32_t id, const wchar_t* path) {
 
 static int failures = 0;
 static void check(const char* what, bool ok) { if (!ok) { ++failures; std::printf("FAIL %s\n", what); } }
-static Mat mat_of(const Mesh& m) { return m.material ? materials[m.material] : Mat{false, false}; }
+static Mat mat_of(const Mesh& m) { return m.material ? materials[m.material] : Mat{false, false, false, -1.f}; }
 
 int main() {
     remixapi_Interface api{};
@@ -75,6 +77,16 @@ int main() {
     api.DestroyLight = reinterpret_cast<decltype(api.DestroyLight)>(ok_handle);
     const live_capture::Frame frame{};
     const nscn::Options options{};
+    if (live_scene::grey_first) {   // G (review F4, 2026-11-13): an albedo whose write failed lands with an empty path
+        live_scene::State s;
+        live_scene::update(api, {upload(60, 1, 0)}, {file(1, L"")}, frame, s, options);
+        check("G: built with a material", meshes.size() == 1 && meshes[0].material != 0);
+        check("G: never names an empty albedo path", meshes.size() == 1 && !mat_of(meshes[0]).empty_albedo);
+        check("G: grey instead", meshes.size() == 1 && !mat_of(meshes[0]).albedo && mat_of(meshes[0]).grey == 0.5f);
+        live_scene::destroy(api, s);
+        std::printf("failures=%d\n", failures);
+        return failures ? 1 : 0;
+    }
     const auto L = [](std::uint32_t id, const wchar_t* path) { return file(id, path); };
     {   // A + E
         live_scene::State s;
@@ -156,8 +168,11 @@ def main():
     # These cases freeze the hold-back contract, now the NIER_REMIX_LIVE_GREY_FIRST=0 rollback (T1 is the default).
     run = subprocess.run([str(work / 'harness')], capture_output=True, text=True,
                          env={**os.environ, 'NIER_REMIX_LIVE_GREY_FIRST': '0'})
-    ok = run.returncode == 0
-    print(json.dumps({'passed': ok, 'output': (run.stdout + run.stderr)[-2500:]}))
+    # Case G runs with the default (grey-first on).
+    grey = subprocess.run([str(work / 'harness')], capture_output=True, text=True,
+                          env={k: v for k, v in os.environ.items() if k != 'NIER_REMIX_LIVE_GREY_FIRST'})
+    ok = run.returncode == 0 and grey.returncode == 0
+    print(json.dumps({'passed': ok, 'output': (run.stdout + run.stderr)[-2000:] + ' | grey-first: ' + grey.stdout[-500:]}))
     return 0 if ok else 1
 
 

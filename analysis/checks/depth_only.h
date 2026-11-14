@@ -66,8 +66,18 @@ inline int lane(char c) { return c == 'x' ? 0 : c == 'y' ? 1 : c == 'z' ? 2 : c 
 
 inline bool writes_depth_only(const std::string& asm_text) {
     using namespace detail;
-    std::map<std::string, std::array<bool, 4>> taint;   // register -> component tainted by a texture sample
-    bool output_tainted = false, output_written = false, z_over_w = false;
+    // Two taints per register component: `sampled` (derived from a texture sample) and `zw` (derived from vN.z / vN.w).
+    // A depth pass writes zw-derived values and nothing sampled; the zw value must reach the output (review F1).
+    std::map<std::string, std::array<bool, 4>> sampled, zw;
+    std::vector<bool> branch_sampled;   // if/else nesting: is the condition sample-derived? (review F2)
+    bool output_sampled = false, output_zw = false, output_written = false;
+    const auto any = [](const std::map<std::string, std::array<bool, 4>>& taint, const Ref& r) {
+        const auto it = taint.find(r.reg);
+        if (it == taint.end()) return false;
+        const std::string comps = r.comps.empty() ? "xyzw" : r.comps;
+        for (const char c : comps) if (lane(c) >= 0 && it->second[static_cast<std::size_t>(lane(c))]) return true;
+        return false;
+    };
     std::istringstream lines(asm_text);
     std::string line;
     while (std::getline(lines, line)) {
@@ -77,7 +87,6 @@ inline bool writes_depth_only(const std::string& asm_text) {
         while (!line.empty() && (line.back() == '\r' || line.back() == '\0' || std::isspace(static_cast<unsigned char>(line.back()))))
             line.pop_back();
         if (line.empty() || line.rfind("//", 0) == 0 || line.rfind("dcl_", 0) == 0 || line.rfind("ps_", 0) == 0) continue;
-        // opcode: up to the first space, after any "(...)" type suffixes (sample_indexable(texture2d)(float,...))
         std::size_t space = 0;
         int depth = 0;
         for (; space < line.size(); ++space) {
@@ -86,41 +95,59 @@ inline bool writes_depth_only(const std::string& asm_text) {
             if (depth == 0 && std::isspace(static_cast<unsigned char>(line[space]))) break;
         }
         const std::string op = line.substr(0, space);
-        if (space >= line.size()) continue;   // ret, else, endif, loop...: no operands
+        if (op == "endif") { if (!branch_sampled.empty()) branch_sampled.pop_back(); continue; }
+        if (space >= line.size()) continue;   // ret, else, loop...: no operands
         const std::vector<std::string> ops = operands(line.substr(space + 1));
-        const bool no_dst = op.rfind("discard", 0) == 0 || op.rfind("if", 0) == 0 || op.rfind("break", 0) == 0 ||
-                            op.rfind("continue", 0) == 0 || op.rfind("ret", 0) == 0 || op.rfind("switch", 0) == 0 ||
-                            op.rfind("case", 0) == 0 || op.rfind("call", 0) == 0;
+        if (op.rfind("if", 0) == 0) {   // if_nz / if_z: a sample-derived condition taints everything it guards
+            branch_sampled.push_back(!ops.empty() && any(sampled, ref_of(ops[0])));
+            continue;
+        }
+        const bool no_dst = op.rfind("discard", 0) == 0 || op.rfind("break", 0) == 0 || op.rfind("continue", 0) == 0 ||
+                            op.rfind("ret", 0) == 0 || op.rfind("switch", 0) == 0 || op.rfind("case", 0) == 0 ||
+                            op.rfind("call", 0) == 0;
         if (no_dst || ops.empty()) continue;
         const std::string base = op.substr(0, op.find('('));
-        // Two destinations: sincos, udiv, imul/umul (hi, lo), the rest one.
         const std::size_t dsts = (base == "sincos" || base == "udiv" || base == "imul" || base == "umul") ? 2 : 1;
         if (ops.size() <= dsts) continue;
         const bool sample = base.rfind("sample", 0) == 0 || base.rfind("ld", 0) == 0 || base.rfind("gather", 0) == 0;
-        bool src_tainted = sample;
-        for (std::size_t k = dsts; k < ops.size() && !src_tainted; ++k) {
+        bool src_sampled = sample;
+        for (const bool b : branch_sampled) src_sampled = src_sampled || b;
+        bool src_zw = false;
+        for (std::size_t k = dsts; k < ops.size(); ++k) {
             const Ref r = ref_of(ops[k]);
             if (r.reg.empty() || r.reg[0] == 'v') continue;
-            const auto it = taint.find(r.reg);
-            if (it == taint.end()) continue;
-            const std::string comps = r.comps.empty() ? "xyzw" : r.comps;
-            for (const char c : comps) if (lane(c) >= 0 && it->second[static_cast<std::size_t>(lane(c))]) src_tainted = true;
+            src_sampled = src_sampled || any(sampled, r);
+            src_zw = src_zw || any(zw, r);
         }
         if ((base == "div" || base == "div_sat") && ops.size() == 3) {
             const Ref num = ref_of(ops[1]), den = ref_of(ops[2]);
             if (!num.reg.empty() && num.reg[0] == 'v' && num.reg == den.reg && num.comps == "z" && den.comps == "w")
-                z_over_w = true;
+                src_zw = true;
         }
         for (std::size_t k = 0; k < dsts; ++k) {
             const Ref d = ref_of(ops[k]);
             if (d.reg.empty()) continue;
-            if (d.reg[0] == 'o') { output_written = true; output_tainted = output_tainted || src_tainted; continue; }
-            auto& t = taint[d.reg];
+            if (d.reg[0] == 'o') {
+                output_written = true;
+                output_sampled = output_sampled || src_sampled;
+                output_zw = output_zw || src_zw;
+                continue;
+            }
+            // An indexable temp x#[...] may be written at an index we cannot resolve: merge, never overwrite (F3).
+            const bool weak = d.reg[0] == 'x';
+            auto& ts = sampled[d.reg];
+            auto& tz = zw[d.reg];
             const std::string comps = d.comps.empty() ? "xyzw" : d.comps;
-            for (const char c : comps) if (lane(c) >= 0) t[static_cast<std::size_t>(lane(c))] = src_tainted;
+            for (const char c : comps) {
+                const int l = lane(c);
+                if (l < 0) continue;
+                const auto i = static_cast<std::size_t>(l);
+                ts[i] = weak ? (ts[i] || src_sampled) : src_sampled;
+                tz[i] = weak ? (tz[i] || src_zw) : src_zw;
+            }
         }
     }
-    return output_written && !output_tainted && z_over_w;
+    return output_written && !output_sampled && output_zw;
 }
 
 }  // namespace depth_only

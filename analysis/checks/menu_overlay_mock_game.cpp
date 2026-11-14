@@ -366,10 +366,13 @@ int wmain(int argc, wchar_t** argv) {
         "SamplerState s : register(s0);\n"
         "cbuffer C : register(b0) { float4 tint; float4 light; };\n"
         "cbuffer M : register(b1) { float4 flags; float4 m1, m2, m3; float4 albedo_c; float4 gm; };\n"
+        "cbuffer T4 : register(b4) { float4 mesh_tint; }; cbuffer T8 : register(b8) { float4 inst_tint; };\n"
         "float4 main(float4 p : SV_POSITION) : SV_TARGET {\n"
         "  float2 uv = p.xy * 0.001;\n"
         "  float4 albedo = t0.Sample(s, uv); float4 mask = t2.Sample(s, uv);\n"
+        "  float3 tint = inst_tint.rgb * mesh_tint.rgb;\n"
         "  [branch] if (flags.y != 0) albedo.rgb = albedo_c.rgb;\n"
+        "  albedo.rgb *= tint;\n"
         "  [branch] if (flags.z != 0) mask.y = gm.x;\n"
         "  [branch] if (flags.w != 0) mask.x = gm.y;\n"
         "  float3 n = t3.Sample(s, uv).xyz - 0.5; float2 d = mad(t4.Sample(s, uv).xy, 2, -1); n.xy += d * mask.w;\n"
@@ -398,7 +401,18 @@ int wmain(int argc, wchar_t** argv) {
         D3D11_BUFFER_DESC cd{}; cd.ByteWidth = sizeof tile_data; cd.Usage = D3D11_USAGE_DEFAULT; cd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
         D3D11_SUBRESOURCE_DATA cdata = {tile_data, 0, 0};
         if (FAILED(device->CreateBuffer(&cd, &cdata, &uv_cb))) { std::fprintf(out, "FAIL uv cb\n"); return 3; }
-    } else if (mesh_flags) {   // bound at b1 where the UV case binds its buffer
+    }
+    // MOCK_FLAG_TINT=r,g,b (item L8): bind the flag shader's tint buffers, cb8[0] = (r,g,b) and cb4[0] = (1, 0.5, 1).
+    ID3D11Buffer* tint_cbs[2] = {nullptr, nullptr};   // [0] -> b4, [1] -> b8
+    if (const char* tint = std::getenv("MOCK_FLAG_TINT")) {
+        float inst[4] = {1, 1, 1, 1}, mesh[4] = {1, 0.5f, 1, 1};
+        std::sscanf(tint, "%f,%f,%f", &inst[0], &inst[1], &inst[2]);
+        D3D11_BUFFER_DESC td{}; td.ByteWidth = 16; td.Usage = D3D11_USAGE_DEFAULT; td.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+        D3D11_SUBRESOURCE_DATA m4 = {mesh, 0, 0}, i8 = {inst, 0, 0};
+        if (FAILED(device->CreateBuffer(&td, &m4, &tint_cbs[0])) || FAILED(device->CreateBuffer(&td, &i8, &tint_cbs[1])))
+            { std::fprintf(out, "FAIL tint cb\n"); return 3; }
+    }
+    if (!mesh_uv && mesh_flags) {   // bound at b1 where the UV case binds its buffer
         float flag_data[24] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.2f, 0.4f, 0.6f, 0, 0.3f, 0.8f, 0, 0};
         std::sscanf(mesh_flags, "%f,%f,%f,%f", &flag_data[0], &flag_data[1], &flag_data[2], &flag_data[3]);
         D3D11_BUFFER_DESC cd{}; cd.ByteWidth = sizeof flag_data; cd.Usage = D3D11_USAGE_DEFAULT; cd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
@@ -1176,6 +1190,7 @@ int wmain(int argc, wchar_t** argv) {
                 context->VSSetShader(live_vs, nullptr, 0);
                 context->PSSetShader(mesh_ps, nullptr, 0);
                 if (uv_cb) context->PSSetConstantBuffers(1, 1, &uv_cb);
+                if (tint_cbs[0]) { context->PSSetConstantBuffers(4, 1, &tint_cbs[0]); context->PSSetConstantBuffers(8, 1, &tint_cbs[1]); }
                 context->VSSetConstantBuffers(0, 1, &camera_buffer);
                 context->VSSetConstantBuffers(11, 1, &live_cb11);
                 context->PSSetShaderResources(0, 1, &mesh_srvs[0]);
@@ -1252,6 +1267,7 @@ int wmain(int argc, wchar_t** argv) {
                 context->VSSetShader(live_vs, nullptr, 0);
                 context->PSSetShader(mesh_ps, nullptr, 0);
                 if (uv_cb) context->PSSetConstantBuffers(1, 1, &uv_cb);
+                if (tint_cbs[0]) { context->PSSetConstantBuffers(4, 1, &tint_cbs[0]); context->PSSetConstantBuffers(8, 1, &tint_cbs[1]); }
                 context->VSSetConstantBuffers(0, 1, &camera_buffer);
                 context->VSSetConstantBuffers(11, 1, &live_cb11);
                 context->PSSetShaderResources(0, 1, &mesh_srvs[0]);
