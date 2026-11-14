@@ -265,7 +265,7 @@ State configure() {
         normal_flip_y = env(L"NIER_REMIX_LIVE_NORMAL_FLIP_Y") == L"1";
         // NIER_REMIX_LIVE_GPU_SKIN=1: one bind-space mesh per blended skinned draw, moved by the frame's bone palette,
         // instead of re-baking every animation pose into a new mesh (Phase 4).
-        live_capture::gpu_skinning = env(L"NIER_REMIX_LIVE_GPU_SKIN") == L"1";
+        live_capture::gpu_skinning = env(L"NIER_REMIX_LIVE_GPU_SKIN") != L"0";   // on by default since 2026-11-14 (user pick)
         // Dome fill: a header-valid HDR DDS (NIER_REMIX_SKY_DDS, default nier_sky_hdr.dds beside the scene). Without one
         // the dome adds no light. Strength 2.0 was chosen on the laptop A/B (sky-fill-0.5-vs-2.png).
         sky_path = env(L"NIER_REMIX_SKY_DDS");

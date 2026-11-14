@@ -567,8 +567,8 @@ inline bool wait_for_target = [] {
 // uv*cb1[5].xy, t1 at uv*cb1[5].zw, t2 at uv*cb1[6].xy, weights from COLOR.r/.g). Remix has one albedo per surface, so
 // each triangle takes its dominant layer. Default off until the user picks from the sheet; read at load.
 inline bool terrain_layers = [] {
-    const char* v = std::getenv("NIER_REMIX_LIVE_TERRAIN_LAYERS");
-    return v && v[0] == '1' && v[1] == '\0';
+    const char* v = std::getenv("NIER_REMIX_LIVE_TERRAIN_LAYERS");   // on by default since 2026-11-14 (user pick); =0 rolls back
+    return !(v && v[0] == '0' && v[1] == '\0');
 }();
 // Item L7: not-surface blend layers (overlay_rule.h) are not submitted. Default off until the user picks; read at load.
 inline bool skip_overlays = [] {

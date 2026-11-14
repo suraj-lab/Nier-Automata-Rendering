@@ -36,7 +36,8 @@ def inside():
         tex.mkdir()
         base = {'NIER_REMIX_RUNTIME': tr.win(work / 'fake_remix.dll'),
             'NIER_REMIX_SCENE': tr.win(scene / 'scene.bin'), 'MOCK_FRAME_MS': '40', 'MOCK_CAMERA': 'live-skin-poses',
-            'NIER_REMIX': '1', 'NIER_REMIX_LIVE': '1', 'NIER_REMIX_LIVE_TEX': tr.win(tex), 'FAKE_REMIX_INSTANCE_LOG': '1'}
+            'NIER_REMIX': '1', 'NIER_REMIX_LIVE': '1', 'NIER_REMIX_LIVE_TEX': tr.win(tex), 'FAKE_REMIX_INSTANCE_LOG': '1',
+            'NIER_REMIX_LIVE_GPU_SKIN': '0'}   # the CPU-bake cases: the rollback since GPU skinning became the default
         rigid_base = dict(base)
         # The bake cases below need a mesh that really blends bones; a one-bone mesh now takes the rigid path.
         base = {**base, 'MOCK_SKIN_SPLIT': '1'}
