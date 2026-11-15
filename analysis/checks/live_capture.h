@@ -1,4 +1,5 @@
 #pragma once
+#include "effect_census.h"
 #include <cstdlib>
 // Live scene capture: describes the game's draws for the current frame from CPU shadows and one-time
 // reads, so the Remix worker can rebuild the scene every frame without GPU readback. No Remix API here.
@@ -31,6 +32,10 @@
 #include "shader_capture.h"
 #include "alpha_test.h"
 #include "material_roles.h"
+#include "sky_layer.h"
+#include "water_class.h"
+#include "hair_class.h"
+#include "sky_scale.h"
 #include "depth_only.h"
 #include "terrain_layers.h"
 #include "overlay_rule.h"
@@ -586,10 +591,54 @@ inline bool flag_constants = [] {
     const char* v = std::getenv("NIER_REMIX_LIVE_FLAG_CONSTANTS");   // on by default since 2026-11-13 (user pick); =0 rolls back
     return !(v && v[0] == '0' && v[1] == '\0');
 }();
+// W1.3 step 1 (PLAN_2026-11-14): the sky shader multiplies each layer's base colour by g_IntensityParam.y and
+// g_MeshColor.rgb, and takes g_AlbedoParam.rgb as the base when its .w > 0 (runtime/w1-disasm/sky_ps.asm:24-30). Those
+// three are read from the draw's own constant buffers by their RDEF names (sky_layer.h) and folded into the material of
+// a sky-classified draw. Default off until the user picks a W1 sky from the labelled sheets; =1 turns it on.
+inline bool sky_layers = [] {
+    const char* v = std::getenv("NIER_REMIX_LIVE_SKY_LAYERS");
+    return v && v[0] == '1' && v[1] == '\0';
+}();
+inline std::atomic<unsigned long long> sky_layer_draws{0}, sky_layer_folded{0};
+inline std::atomic<unsigned long long> sky_layer_textured{0}, sky_layer_unresolved{0};   // the two reasons a layer kept today's material
 inline float roughness_floor_constant = 38.f / 255.f;   // the same floor the gloss mask gets (remix_live.cpp)
 inline std::atomic<unsigned long long> flag_constant_draws{0}, flag_normal_off_draws{0};   // read by the worker   // reported with the stats
 // NIER_REMIX_LIVE_EFFECTS=1: keep the effects shaders' draws in the scene (default: left out).
 inline bool keep_effects = false;
+// E1.6 (PLAN_2026-11-14): an effect draw whose blend state the runtime can express is submitted as a PARTICLE instance
+// carrying that state, instead of being left out. Default off: the user picks the look from labelled sheets, and only a
+// live A/B shows whether the particles light the scene. NIER_REMIX_LIVE_PARTICLE_BLEND=1 turns it on.
+inline bool particle_blend_on = [] {
+    const char* v = std::getenv("NIER_REMIX_LIVE_PARTICLE_BLEND");
+    return v && v[0] == '1' && v[1] == '\0';
+}();
+inline std::atomic<unsigned long long> particle_draws{0}, particle_submitted{0}, particle_refused{0};
+// W3 step 2 (PLAN_2026-11-14): a draw classified as the pond's water (water_class.h) takes the runtime's translucent
+// material and the ANIMATED_WATER category instead of the forced-cutout path. Default off: today's cutout stands until a
+// live A/B on a pond capture and the user's pick (W3 steps 1/3/4). NIER_REMIX_LIVE_WATER=1 turns it on.
+inline bool water_on = [] {
+    const char* v = std::getenv("NIER_REMIX_LIVE_WATER");
+    return v && v[0] == '1' && v[1] == '\0';
+}();
+// draws of a shader that declares g_TranslucentParam; ... of which submitted as water; ... of which the state refused
+// (blended wrongly, alpha-tested, skinned, sky, effect, depth pass, no albedo), so a live run can tell the declaration
+// from the decision.
+inline std::atomic<unsigned long long> water_draws{0}, water_submitted{0}, water_refused{0};
+// W5 step 1 (PLAN_2026-11-14): a draw classified as the character's hair (hair_class.h) gets the runtime's anisotropy
+// scalar on its own material. Default off: today's isotropic material stands until a live A/B and the user's pick (W5
+// steps 2/4). NIER_REMIX_LIVE_HAIR=1 turns it on.
+inline bool hair_on = [] {
+    const char* v = std::getenv("NIER_REMIX_LIVE_HAIR");
+    return v && v[0] == '1' && v[1] == '\0';
+}();
+// A classified draw's mesh is keyed with a salt of its own, so the material it needs cannot displace the mesh built from
+// the same buffers with a different material. Named, because the key is recomputed once more when a skinned draw turns
+// out to be rigid: that path rewrites `geometry` from the pre-classification base (review P1, 2026-11-15).
+inline constexpr std::uint64_t kWaterGeometrySalt = 0x77617465725f7375ull;   // "water_su"
+inline constexpr std::uint64_t kHairGeometrySalt = 0x686169725f7375ull;     // "hair_su"
+// draws of a shader that declares g_AnisoParam1/g_AnisoParam2; ... of which submitted as hair; ... of which the state or
+// the draw's own lobe flag refused (blended, solid, unskinned, sky, effect, depth pass, no albedo, lobe off).
+inline std::atomic<unsigned long long> hair_draws{0}, hair_submitted{0}, hair_refused{0};
 // NIER_REMIX_LIVE_GPU_SKIN (Phase 4): a blended skinned draw keeps ONE mesh in bind space and is moved by the frame's
 // CB11 palette, instead of baking every pose into a new mesh (live: pose was 82% of the rebuilds, 2026-10-30). Off by
 // default: the CPU bake stays the shipped path until the A/B on the laptop is green twice (analysis/PHASE4_PLAN.md).
@@ -1317,7 +1366,10 @@ inline DisassembleFn disassembler() {
 struct PixelInfo { alpha_test::Result alpha; material_roles::Roles roles; bool effect = false;
                    bool depth_only = false;   // L7: writes linear depth, not a surface (depth_only.h)
                    bool tint_cb8_cb4 = false;   // L8: albedo is multiplied by cb8[0].xyz * cb4[0].xyz (hair: line 249/345)
-                   unsigned long long code = 0; };   // FNV-1a 64 of the bytecode (stable across runs), as in the notes   // L7: writes linear depth, not a surface (depth_only.h)
+                   unsigned long long code = 0;   // FNV-1a 64 of the bytecode (stable across runs), as in the notes
+                   bool water_decl = false;   // W3: its RDEF declares g_TranslucentParam (the water family's shared member)
+                   bool hair_decl = false;   // W5: its RDEF declares g_AnisoParam1 and g_AnisoParam2 (the hair family's pair)
+                   std::vector<sky_layer::Decl> sky_decls; };   // W1.3: its RDEF constant-buffer members, once (sky_layer.h)
 // One line per distinct pixel shader, the first time it is seen with a draw: what the material path did with it. For
 // live runs where some surfaces come out wrong (pbr-look1: untextured dunes, chrome rocks, missing foliage), so each
 // can be traced back to a shader, its roles and the fate of each texture. Drained by the worker, bounded.
@@ -1453,6 +1505,34 @@ inline const PixelInfo* pixel_info(ID3D11DeviceContext* context, unsigned long l
         result.depth_only = depth_only::writes_depth_only(asm_text);
         result.code = 0xcbf29ce484222325ull;
         for (const unsigned char b : bytecode) result.code = (result.code ^ b) * 0x100000001b3ull;
+        // W1.3 / W5: only when one of them can run, and a parse that failed half way names nothing (sky_layer::members
+        // fills `out` as it goes, so a malformed RDEF would otherwise leave a partial list behind).
+        if (sky_layers || hair_on) {
+            if (!sky_layer::members(bytecode, result.sky_decls)) result.sky_decls.clear();
+        }
+        // W3 step 2: the water family's one shared declaration. Read as an RDEF member name, the way sky_layer.h reads
+        // its own, never from a shader name or a value: only the field's presence matters here.
+        if (water_on && !result.water_decl) {
+            std::vector<sky_layer::Decl> decls;
+            if (sky_layer::members(bytecode, decls))
+                for (const auto& d : decls)
+                    if (d.name == "g_TranslucentParam") { result.water_decl = true; break; }
+        }
+        // W5 step 1: the hair family's pair. Both members, because no capture shows one without the other and a
+        // declaration that is only half there is not the family (and the alternate sign path is off in every measured
+        // draw, so g_AnisoParam1 alone would identify nothing).
+        if (hair_on && !result.hair_decl) {
+            // One buffer, one pair: the measured family declares both members of the SAME PSParamBuffer1 (96 and 112), so
+            // two names from two buffers are not the family, and a duplicate is ambiguous rather than a match.
+            const sky_layer::Decl* first = nullptr;
+            const sky_layer::Decl* second = nullptr;
+            unsigned firsts = 0, seconds = 0;
+            for (const auto& d : result.sky_decls) {
+                if (d.name == "g_AnisoParam1") { first = &d; ++firsts; }
+                if (d.name == "g_AnisoParam2") { second = &d; ++seconds; }
+            }
+            result.hair_decl = firsts == 1 && seconds == 1 && first->buffer == second->buffer;
+        }
         // The game's per-instance x per-mesh tint, as the hair shader forms it (ps c2a9d2f6...: `mul r2.xyz, cb8[0].xyzx,
         // cb4[0].xyzx`, then `mul r5.xyz, r2.xyzx, r1.xyzx` with r1 the albedo, texture or the flag's constant).
         // shortcut: only the non-instanced cb8[0] form; shaders indexing cb8 per instance had white tints on both
@@ -1463,6 +1543,91 @@ inline const PixelInfo* pixel_info(ID3D11DeviceContext* context, unsigned long l
     if (text) text->Release();
     ps->Release();
     return &infos[ps];
+}
+// W1.3: the sky shader's per-layer inputs, read from the constant buffers this draw binds. Which slot each member sits
+// in comes from the shader's own RDEF and the sizes the draw reports (sky_layer.h), never from a table order or a size
+// guess. Only the slots the shader declares are queried, and only the two that hold the three members are read.
+inline bool sky_inputs(ID3D11Device* device, ID3D11DeviceContext* context, const PixelInfo& pixel,
+                       sky_layer::Inputs& out) {
+    out = sky_layer::Inputs{};
+    if (pixel.sky_decls.empty()) return false;
+    std::array<std::uint32_t, sky_layer::kSlots> bound{};
+    std::array<sky_layer::Binding, sky_layer::kSlots> bindings{};
+    std::array<std::vector<unsigned char>, sky_layer::kSlots> owned;   // buffer_bytes storage is trimmed by later calls
+    std::array<ID3D11Buffer*, sky_layer::kSlots> held{};
+    std::array<bool, sky_layer::kSlots> asked{};
+    struct Guard {   // one reference per slot, released on every path (the whole frame loop runs under a lock)
+        std::array<ID3D11Buffer*, sky_layer::kSlots>& buffers;
+        ~Guard() { for (ID3D11Buffer* b : buffers) if (b) b->Release(); }
+    } guard{held};
+    for (const auto& d : pixel.sky_decls)
+        for (const std::uint32_t slot : d.binds) {
+            if (slot >= sky_layer::kSlots || asked[slot]) continue;
+            asked[slot] = true;
+            ID3D11Buffer* cb = nullptr;
+            context->PSGetConstantBuffers(slot, 1, &cb);
+            if (!cb) continue;
+            D3D11_BUFFER_DESC desc{};
+            cb->GetDesc(&desc);
+            bound[slot] = desc.ByteWidth;
+            held[slot] = cb;
+        }
+    std::vector<std::uint32_t> placed;
+    if (!sky_layer::place(pixel.sky_decls, bound, placed)) return false;   // two candidates of the right size: no fold
+    for (std::size_t i = 0; i < pixel.sky_decls.size(); ++i) {
+        const sky_layer::Decl& d = pixel.sky_decls[i];
+        if (d.name != "g_IntensityParam" && d.name != "g_AlbedoParam" && d.name != "g_MeshColor") continue;
+        const std::uint32_t slot = i < placed.size() ? placed[i] : sky_layer::kUnbound;
+        if (slot >= sky_layer::kSlots || !held[slot] || bindings[slot].data) continue;
+        if (const std::vector<unsigned char>* bytes = buffer_bytes(device, context, held[slot]); bytes && !bytes->empty()) {
+            owned[slot] = *bytes;   // copied: the borrow above may be trimmed before the read below finishes
+            bindings[slot] = {static_cast<std::uint32_t>(owned[slot].size()), owned[slot].data()};
+        }
+    }
+    return sky_layer::read(pixel.sky_decls, placed, bindings, out);
+}
+// W5 step 1: whether this draw takes the shader's anisotropic lobe, which is what the shader itself branches on:
+// `lt r0.y, l(0), cb1[7].x` / `if_nz` in ps_550297348744, and cb1[7] is the `g_AnisoParam2` the RDEF puts at offset 112
+// of the PSParamBuffer1 that also declares g_AnisoParam1 at 96 (g_AlbedoColor at 48 is read as cb1[3] in the same
+// shader, which is what fixes the member-to-register mapping). The slot comes from sky_layer::place: in the hair draws
+// 208 bytes are bound for a 192-byte declaration, so no size equality would ever find it. A draw whose value cannot be
+// read keeps today's material -- false, never a guess.
+inline bool hair_lobe_on(ID3D11Device* device, ID3D11DeviceContext* context, const PixelInfo& pixel) {
+    // Only the buffer that declares the pair: `place` refuses as soon as any *other* declared buffer is bound smaller
+    // than its declaration, and the hair shader declares twelve PS buffers (gate part 1 pins that table).
+    const std::vector<sky_layer::Decl> pair = sky_layer::both_members(pixel.sky_decls, "g_AnisoParam1", "g_AnisoParam2");
+    if (pair.empty()) return false;
+    std::array<std::uint32_t, sky_layer::kSlots> bound{};
+    std::array<ID3D11Buffer*, sky_layer::kSlots> held{};
+    std::array<bool, sky_layer::kSlots> asked{};
+    struct Guard {
+        std::array<ID3D11Buffer*, sky_layer::kSlots>& buffers;
+        ~Guard() { for (ID3D11Buffer* b : buffers) if (b) b->Release(); }
+    } guard{held};
+    for (const auto& d : pair)
+        for (const std::uint32_t slot : d.binds) {
+            if (slot >= sky_layer::kSlots || asked[slot]) continue;
+            asked[slot] = true;
+            ID3D11Buffer* cb = nullptr;
+            context->PSGetConstantBuffers(slot, 1, &cb);
+            if (!cb) continue;
+            D3D11_BUFFER_DESC desc{};
+            cb->GetDesc(&desc);
+            bound[slot] = desc.ByteWidth;
+            held[slot] = cb;
+        }
+    std::vector<std::uint32_t> placed;
+    if (!sky_layer::place(pair, bound, placed)) return false;   // ambiguous or bound too small: today's material
+    const std::size_t index = pair[0].name == "g_AnisoParam2" ? 0 : 1;
+    const std::uint32_t slot = index < placed.size() ? placed[index] : sky_layer::kUnbound;
+    if (slot >= sky_layer::kSlots || !held[slot]) return false;
+    const std::vector<unsigned char>* bytes = buffer_bytes(device, context, held[slot]);
+    if (!bytes || bytes->empty()) return false;
+    std::array<sky_layer::Binding, sky_layer::kSlots> bindings{};
+    bindings[slot] = {static_cast<std::uint32_t>(bytes->size()), bytes->data()};
+    float v[4] = {0, 0, 0, 0};
+    if (!sky_layer::detail::value(pair[index], slot, bindings, v)) return false;
+    return v[0] > 0.f;
 }
 
 // ---- draw observation --------------------------------------------------------------------------
@@ -1516,6 +1681,7 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     bool blended = false;
     bool blend_on = false;                 // the bound blend state as D3D11 reports it, not the "alpha blend" heuristic
     unsigned blend_src = 0, blend_dest = 0;
+    particle_blend::State draw_blend;      // E1.6: the same state in full, for the per-instance blend of a particle
     unsigned target_format = 0;            // the bound colour target's DXGI format (L7: depth-like passes write one float)
     bool depth_write = true;               // L7: the bound depth-stencil state writes depth (no state = D3D11 default, on)
     {
@@ -1539,6 +1705,16 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
             blend_on = rt.BlendEnable != FALSE;      // the raw state, for the per-shader tally (items L6/L7)
             blend_src = static_cast<unsigned>(rt.SrcBlend);
             blend_dest = static_cast<unsigned>(rt.DestBlend);
+            // E1.6: the whole state, not just the two colour factors, for the per-instance blend the particle path sends.
+            draw_blend.enable = rt.BlendEnable != FALSE;
+            draw_blend.alpha_to_coverage = desc.AlphaToCoverageEnable != FALSE;
+            draw_blend.src = static_cast<unsigned>(rt.SrcBlend);
+            draw_blend.dst = static_cast<unsigned>(rt.DestBlend);
+            draw_blend.op = static_cast<unsigned>(rt.BlendOp);
+            draw_blend.src_alpha = static_cast<unsigned>(rt.SrcBlendAlpha);
+            draw_blend.dst_alpha = static_cast<unsigned>(rt.DestBlendAlpha);
+            draw_blend.op_alpha = static_cast<unsigned>(rt.BlendOpAlpha);
+            draw_blend.write_mask = rt.RenderTargetWriteMask;
             blend->Release();
         }
         ID3D11DepthStencilState* ds = nullptr;
@@ -1558,6 +1734,16 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     const std::pair<unsigned, unsigned> final_size{final_width, final_height};
     const bool ui_pass = hud_enabled && scene_target_enabled && scene_width && final_width && blended &&
                          early_target == final_size && std::pair<unsigned, unsigned>{scene_width, scene_height} != final_size;
+    if (effect_census::enabled.load(std::memory_order_relaxed)) {
+        try {
+            const PixelInfo& diagnostic = *pixel_info(context);
+            if (diagnostic.effect)
+                effect_census::sample(context, trace.epoch, diagnostic.code, index_count, instance_count, min_index_count);
+        } catch (...) {  // diagnostics must not change geometry eligibility or take down capture on an allocation failure
+            std::lock_guard<std::mutex> lock(effect_census::pending_mutex);
+            effect_census::limited = true;
+        }
+    }
     if (!ui_pass && index_count < min_index_count) {
         // What the size filter drops from the scene image itself (grass, leaf cards and small props would be here):
         // one line per pixel shader, so a missing class of object can be tied to this filter or ruled out.
@@ -1694,6 +1880,14 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     // the path-traced scene (user decision 2026-11-01). NIER_REMIX_LIVE_EFFECTS=1 keeps them for comparison.
     unsigned long long pixel_ps = 0;
     const PixelInfo& pixel = *pixel_info(context, &pixel_ps);
+    // E1.6: an effect draw the runtime can blend per instance is submitted as a PARTICLE one. Its own geometry key keeps
+    // that mesh -- and the draw-call-alpha material it needs -- from displacing an opaque mesh built from the same
+    // buffers, which the worker keys by geometry. A HUD-target draw keeps today's path: it is not world geometry.
+    const bool particle_draw = particle_blend_on && !ui_pass && pixel.effect && particle_blend::map(draw_blend).ok;
+    if (particle_draw) {
+        geometry = hash_value(geometry ^ 0x7061727469636c65ull);
+        trace.event.geometry = geometry;
+    }
     if (skip_code && pixel.code == skip_code) {
         trace.event.reason = visibility_trace::Reason::Effect;
         release_all(vbs, 4, ib, layout);
@@ -1716,9 +1910,14 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
         release_all(vbs, 4, ib, layout);
         return;
     }
-    if (pixel.effect && !keep_effects) {
+    if (particle_blend_on && pixel.effect) {
+        ++particle_draws;
+        if (!particle_draw) ++particle_refused;   // submitted is counted where the material is known (below)
+    }
+    if (pixel.effect && !keep_effects && !particle_draw) {
         note_material({pixel_ps, true, {}, {}, 7});
-        { std::lock_guard<std::recursive_mutex> lock(mutex()); tally_shader(pixel_ps, index_count / 3, false, 0, 0, false, true, true); }
+        { std::lock_guard<std::recursive_mutex> lock(mutex());
+          tally_shader(pixel_ps, index_count / 3, blend_on, blend_src, blend_dest, pixel.alpha.discards, true, true, target_format); }
         trace.event.reason = visibility_trace::Reason::Effect;
         release_all(vbs, 4, ib, layout);
         return;
@@ -1783,6 +1982,7 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     float uv_scale[2] = {1.f, 1.f};       // the shader's own texture repeat at that slot, baked into the mesh UVs
     std::uint64_t uv_bits = 0;            // ... folded into the version, so a changed repeat rebuilds the mesh
     bool texture_deferred = false;
+    sky_layer::Inputs sky_values;   // W1.3: read here, where this draw's constant buffers are bound; folded below
     {
         const ObserveTimer timer(kObserveMaterial);
         // Share raw bytes between this draw's roles (metallic/roughness use the same mask); only the queued worker
@@ -1936,6 +2136,30 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
                               flag_values.albedo[1], flag_values.albedo[2], flag_values.metallic, flag_values.roughness,
                               normal_off ? "off" : "on");
                 slot_notes += note;
+            }
+        }
+        // W1.3 step 1: the sky shader's own per-layer inputs, read here where the draw's constant buffers are bound and
+        // folded into the material further down, once the world extent has said this draw is the background shell.
+        // step 1b adds the textured layer's factor to the same rule (uv_bits below), so a changed one rebuilds too.
+        // shortcut: read for every draw of a shader that declares them, folded only for sky ones; a non-sky draw of the
+        // same shader pays two constant-buffer reads and keeps its material.
+        if (sky_layers) sky_inputs(device, context, pixel, sky_values);
+        if (sky_values.present) {
+            float sky_colour[3];
+            if (sky_layer::constant_colour(sky_values, sky_colour)) {
+                // The constants are part of the surface: a change rebuilds the mesh, like a changed UV repeat.
+                std::uint32_t bits[3];
+                std::memcpy(bits, sky_colour, sizeof bits);
+                std::uint64_t h = 0x5c1d2705ull;
+                for (const std::uint32_t b : bits) h = hash_value(h ^ b);
+                uv_bits ^= h;
+            } else {
+                float factor = 1.f;   // W1.3 step 1b: same rule for a textured layer's factor (its copy is per factor)
+                if (sky_scale::layer_factor(sky_values, factor)) {
+                    std::uint32_t bits = 0;
+                    std::memcpy(&bits, &factor, sizeof bits);
+                    uv_bits ^= hash_value(0x5c1d2706ull ^ bits);
+                }
             }
         }
         if (flag_values.has_albedo()) {
@@ -2115,6 +2339,70 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     // already-built geometry costs nothing per frame even when its static bytes were dropped under the budget.
     // HUD pass: decode now and keep the quad for the replay. Deliberately outside the geometry cache: sprite
     // vertices change every frame (text, bars, dialogue), so there is nothing worth caching.
+    // E1.6: a particle is submitted with the game's own blend state, and only a material can switch the runtime onto it
+    // (useDrawCallAlphaState). An effect draw with no texture gets no material, so it stays out as it does with the
+    // switch off instead of going out as a solid, blend-less quad.
+    if (particle_draw && !texture) {
+        ++particle_refused;
+        trace.event.reason = visibility_trace::Reason::Effect;
+        release_all(vbs, 4, ib, layout);
+        device->Release();
+        return;
+    }
+    // W3 step 2: the pond's water family, classified from the draw's own shader declaration and blend/alpha state
+    // (water_class.h). Every draw of the two water shaders in the pond and desert captures is in the state this asks for;
+    // a hair or foliage card, a skinned draw, an effect, the sky and a depth pass are refused there. Its own geometry key
+    // keeps the translucent mesh -- and the material it needs -- from displacing the cutout mesh built from the same
+    // buffers, exactly as the particle path does. `sky` comes from the map the build path fills, keyed by the geometry key
+    // this draw had before the water salt below (a sky geometry is never salted: it is refused here first) -- and on a
+    // first sight there is no entry yet, which only means the sky rule cannot fire for that one draw.
+    water_class::Draw water_input;
+    if (water_on) { water_input.blend_enabled = draw_blend.enable;
+      water_input.alpha_to_coverage = draw_blend.alpha_to_coverage;
+      water_input.src = draw_blend.src; water_input.dst = draw_blend.dst; water_input.op = draw_blend.op;
+      water_input.translucent_declared = pixel.water_decl;
+      water_input.alpha_test = pixel.alpha.discards;
+      water_input.skinned = skinned;
+      const auto known_sky = sky_geometries().find(geometry);
+      water_input.sky = known_sky != sky_geometries().end() && known_sky->second;
+      water_input.effect = pixel.effect;
+      water_input.depth_only = pixel.depth_only;
+      water_input.albedo = texture; }
+    const bool water_draw = water_on && !ui_pass && water_class::water(water_input);
+    if (water_on && pixel.water_decl) { ++water_draws; if (!water_draw) ++water_refused; }
+    if (water_draw) {
+        geometry = hash_value(geometry ^ kWaterGeometrySalt);   // its own mesh key
+        trace.event.geometry = geometry;
+    }
+    // W5 step 1: the character's hair, classified from the draw's own shader declaration, the scalar the shader branches
+    // on and its state (hair_class.h). The lobe flag is read only for a draw that passes every other rule: in the
+    // captures the other aniso family -- the recon's cloth/velvet set -- never runs the lobe (g_AnisoParam2.x = 0 on
+    // every draw), so a declaration alone would paint it. Its own geometry key for the same reason the water path takes
+    // one: a mesh built with the isotropic material must not stand in for a hair draw that shares its buffers.
+    hair_class::Draw hair_input;
+    if (hair_on) {
+        hair_input.aniso_declared = pixel.hair_decl;
+        hair_input.alpha_test = pixel.alpha.discards;
+        hair_input.skinned = skinned;
+        hair_input.blend_enabled = draw_blend.enable;
+        // The build stores a sky geometry under its post-classification key, so look for both: the key this draw has
+        // now and the one it would take below (a sky draw is refused by the rules before the lobe is ever read).
+        const auto sky_plain = sky_geometries().find(geometry);
+        const auto sky_salted = sky_geometries().find(hash_value(geometry ^ kHairGeometrySalt));
+        hair_input.sky = (sky_plain != sky_geometries().end() && sky_plain->second) ||
+                         (sky_salted != sky_geometries().end() && sky_salted->second);
+        hair_input.effect = pixel.effect;
+        hair_input.depth_only = pixel.depth_only;
+        hair_input.albedo = texture;
+        if (hair_class::why(hair_input) == hair_class::kNoAnisoLobe)   // only this refusal needs the constant buffer
+            hair_input.aniso_lobe = hair_lobe_on(device, context, pixel);
+    }
+    const bool hair_draw = hair_on && !ui_pass && hair_class::hair(hair_input);
+    if (hair_on && pixel.hair_decl) { ++hair_draws; if (!hair_draw) ++hair_refused; }
+    if (hair_draw) {
+        geometry = hash_value(geometry ^ kHairGeometrySalt);   // its own mesh key
+        trace.event.geometry = geometry;
+    }
     Pin pinned;  // from here on several buffer_bytes() results are held at once: nothing may be trimmed under them
     if (ui_pass) {
         trace.event.reason = visibility_trace::Reason::Ui;
@@ -2320,7 +2608,11 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
                 // that would be built once more on the next frame and then stay resident unused.
                 rigid = true;
                 rigid_bone = bone;
+                // `skin_base` predates the classification: re-key under this draw's own salt, or the hair mesh would be
+                // built (and reused) under the isotropic draw's key (review P1, 2026-11-15; the water path had it too).
                 geometry = skin_base;
+                if (water_draw) geometry = hash_value(geometry ^ kWaterGeometrySalt);
+                if (hair_draw) geometry = hash_value(geometry ^ kHairGeometrySalt);
                 pose = 0;
                 version = version_now();
                 previously = built_versions().find(geometry);
@@ -2360,12 +2652,36 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
             // is not world geometry — ray tracing it encloses the camera — so it is submitted with the SKY category
             // instead of being dropped, which is what makes the background exist at all.
             sky_extent = extent > 5000.f;
+            if (extent > 1000.f) effect_census::sky(context, trace.epoch, pixel.code, index_count, instance_count, extent);
             sky_geometries()[geometry] = sky_extent;
+            // W1.3: the layer's own inputs become the base colour of a sky draw. Applied before the content hash below,
+            // because a changed colour has to reach a new material: the `unchanged` shortcut re-uses the mesh on the GPU
+            // and skips the upload that creates it.
+            float sky_colour[3] = {0.f, 0.f, 0.f};
+            float sky_factor = 1.f;   // W1.3 step 1b: a textured layer's t0 * factor, as a copy of t0 (sky_scale.h)
+            bool sky_folded = false;
+            if (sky_layers && sky_extent) {
+                ++sky_layer_draws;
+                if (!sky_values.present) ++sky_layer_unresolved;   // no members, no binding, or nothing readable
+                else if (sky_layer::constant_colour(sky_values, sky_colour)) {
+                    for (int k = 0; k < 3; ++k) flag_values.albedo[k] = sky_colour[k];
+                    sky_folded = true;
+                    ++sky_layer_folded;
+                } else if (sky_scale::layer_factor(sky_values, sky_factor)) {
+                    flag_values.albedo_scale = sky_factor;   // the worker writes and names the copy (live_scene)
+                    ++sky_scale::draws;
+                } else ++sky_layer_textured;   // factor 1, a tinted layer, or a value this path will not write
+            }
             std::uint64_t content = 1469598103934665603ull;
             content = hash_mix(content, decoded.vertices.data(), decoded.vertices.size() * sizeof(decoded.vertices[0]));
             content = hash_mix(content, decoded.indices.data(), decoded.indices.size() * sizeof(decoded.indices[0]));
             content = hash_mix(content, decoded.bones.data(), decoded.bones.size() * sizeof(decoded.bones[0]));
             content = hash_mix(content, decoded.weights.data(), decoded.weights.size() * sizeof(decoded.weights[0]));
+            // shortcut: only the sky fold is hashed here. Item L3's flag albedo changes under the same rule would leave
+            // the same stale material, but that path is accepted and default-on: changing when it rebuilds needs its own
+            // gate (recorded as a finding in W1_SKY_LAYERS.md).
+            if (sky_folded) content = hash_mix(content, sky_colour, sizeof sky_colour);   // a constant colour is part of the surface, not of the buffers
+            if (sky_factor != 1.f) content = hash_mix(content, &sky_factor, sizeof sky_factor);   // same rule for a scaled layer
             const auto known = content_hashes().find(geometry);
             const bool unchanged = previously != built_versions().end() && known != content_hashes().end() &&
                                    known->second == content;
@@ -2387,6 +2703,9 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
             upload.target_h = early_target.second;
             upload.skinned = gpu_skinning && skinned && !rigid;  // bind space + per-frame palette, or baked above
             upload.blended = blended;
+            upload.particle = particle_draw;   // the material must carry useDrawCallAlphaState (an untextured draw is out above)
+            upload.water = water_draw;          // W3: the translucent material this mesh is built with
+            upload.hair = hair_draw;            // W5: and whether that material carries the anisotropy scalar
             upload.sky = sky_extent;
             if (alpha.discards) { upload.alpha_op = alpha.op; upload.alpha_ref = alpha.reference; }
             upload.vertices.resize(decoded.vertices.size());
@@ -2458,11 +2777,18 @@ inline void observe(ID3D11DeviceContext* context, UINT index_count, UINT start_i
     }
     item.texture = texture;
     item.blended = blended;
+    item.particle = particle_draw;
+    if (item.particle) ++particle_submitted;
+    item.water = water_draw;
+    if (item.water) ++water_submitted;
+    if (hair_draw) ++hair_submitted;
+    item.blend = draw_blend;
     const auto sky_known = sky_geometries().find(geometry);
     item.sky = sky_known != sky_geometries().end() && sky_known->second;
     if (item.sky && !sky_enabled) { trace.event.reason = visibility_trace::Reason::Sky; ++frame.skipped_sky; release_all(vbs, 4, ib, layout); device->Release(); return; }
     if (item.sky) ++frame.sky;  // per draw, so the stats line shows the sky every frame, not only when it is built
     if (blended) ++frame.blended;
+    if (item.particle) ++frame.particles;
     if (!texture) ++frame.untextured;  // no material: distinguishes 'texture never written' from 'material not created'
     item.first = static_cast<unsigned>(frame.transforms.size() / 12);
     item.count = instance_count;

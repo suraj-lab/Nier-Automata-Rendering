@@ -1,0 +1,17 @@
+{
+  "description": "Camp view at 3440x1440 from save Su.117 (Resistance Camp). Fractions of the frame. Character pixels are excluded because the two runs differ by an idle-animation phase, not by lighting; everything else is compared.",
+  "regions": {
+    "all": [0.0, 0.0, 1.0, 1.0],
+    "wall_shadow_upper": [0.0, 0.0, 1.0, 0.30],
+    "metal_terminal": [0.40, 0.18, 0.62, 0.72],
+    "ground_fore": [0.0, 0.70, 1.0, 1.0],
+    "right_room": [0.62, 0.25, 1.0, 0.85],
+    "left_panels": [0.0, 0.22, 0.40, 0.80]
+  },
+  "exclude": [[0.42, 0.36, 0.62, 1.0]],
+  "provenance": {
+    "original": "runtime/game-runs/t1-original-shortleft/shots/shot-2.png",
+    "remix": "runtime/game-runs/t1-remix-clean/shots/shot-2.png",
+    "limitation": "Single pair, one camera, one time of day. Not a W2 acceptance; the character mask is hand-placed and generous."
+  }
+}

@@ -1,6 +1,7 @@
 #include "panel.h"
 #include "imgui_internal.h"
 #include <cassert>
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -168,6 +169,42 @@ int main(int argc, char** argv) {
                 assert(moved.recovery_required && moved.file==FileState::Missing && moved.saved==Mode::Custom75);
                 const int after_recovery=writer.calls;frame(moved);click(moved,geometry.save);
                 assert(writer.calls==after_recovery && render_menu::notice(moved)==Notice::RecoveryRequired);
+            }
+            // P1 optional row: bounds and one-click selection at every supported scale; arrow+Enter navigation.
+            {
+                State s{SessionMode::Custom75,Mode::Custom75,true}; s.open = true;
+                struct Pick { int mode = 0; int calls = 0; } pick;
+                UpscalerRow row{0,"Requested live; see log for acceptance.",[](int m, void* raw) {
+                    auto& p = *static_cast<Pick*>(raw); p.mode = m; ++p.calls;
+                },&pick};
+                auto live_frame = [&] {
+                    ImGui::NewFrame();
+                    draw_panel(s,info,fonts,scale,save,&writer,&geometry,&row);
+                    ImGui::Render();
+                };
+                for (int n=0;n<3;++n) live_frame();
+                for (auto r : geometry.upscaler) {
+                    assert(r.max.x > r.min.x && near(r.max.y-r.min.y,40*scale));
+                    assert(r.min.x >= geometry.panel.min.x && r.max.x <= geometry.panel.max.x);
+                }
+                // The row is in the scrolling body, not over the fixed footer; scroll it into view when necessary.
+                for (auto* w : ImGui::GetCurrentContext()->Windows) {
+                    if ((w->Flags & ImGuiWindowFlags_ChildWindow) && std::strstr(w->Name,"body"))
+                        ImGui::SetScrollY(w,std::max(0.f,geometry.upscaler[4].max.y-w->InnerRect.Max.y+w->Scroll.y));
+                }
+                live_frame();live_frame();
+                auto pos = center(geometry.upscaler[4]);
+                assert(pos.y < geometry.save.min.y && pos.y > geometry.panel.min.y);
+                io.AddMousePosEvent(pos.x,pos.y);
+                io.AddMouseButtonEvent(0,true);live_frame();
+                io.AddMouseButtonEvent(0,false);live_frame();
+                assert(pick.mode == 4 && pick.calls == 1);
+                row.selected = pick.mode;
+                io.AddKeyEvent(ImGuiKey_LeftArrow,true);live_frame();
+                io.AddKeyEvent(ImGuiKey_LeftArrow,false);live_frame();
+                io.AddKeyEvent(ImGuiKey_Enter,true);live_frame();
+                io.AddKeyEvent(ImGuiKey_Enter,false);live_frame();
+                assert(pick.mode == 3 && pick.calls == 2);
             }
             ImGui::DestroyContext();
         }

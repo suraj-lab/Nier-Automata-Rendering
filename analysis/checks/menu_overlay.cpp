@@ -21,6 +21,7 @@
 #include "live_capture.h"
 #include "input_capture.h"
 #include "remix_live.h"
+#include "upscaler_settings.h"
 #include "../menu-preview/panel.h"
 #include "backends/imgui_impl_dx11.h"
 #include "backends/imgui_impl_win32.h"
@@ -184,6 +185,25 @@ menu_preview::SaveReport save(render_settings::Mode mode, void*) {
         static_cast<unsigned long>(report.detail.error), static_cast<int>(report.after.file),
         render_settings::name(report.after.next_launch) == L"Native" ? "Native" : "Custom75");
     return {report.outcome, report.after.file, report.after.next_launch};
+}
+
+// P1: one click queues the live write on the Remix worker and saves the choice to NIER_REMIX.ini (not NIER_RENDER.ini).
+char upscaler_status[160] = "";
+void pick_upscaler(int mode, void*) {
+    static const char* names[5] = {"config", "ultra-performance", "performance", "balanced", "quality"};
+    const bool queued = remix_live::request_upscaler(mode);
+    std::string error;
+    const bool saved = upscaler::save_mode(std::filesystem::path(host.module_dir) / L"NIER_REMIX.ini",
+                                           static_cast<upscaler::Mode>(mode), &error);
+    const char* env = std::getenv("NIER_REMIX_LIVE_UPSCALER");
+    const bool env_override = env && *env;
+    host.log("menu: upscaler %s requested queued=%d saved=%d env_override=%d%s%s", names[mode], queued ? 1 : 0,
+             saved ? 1 : 0, env_override ? 1 : 0, error.empty() ? "" : " error=", error.c_str());
+    std::snprintf(upscaler_status, sizeof upscaler_status, "%s %s",
+                  !queued ? "Not applied: Remix is not running." :
+                  mode == 0 ? "Config: the runtime's own setting returns after a restart." : "Requested live; see log for acceptance.",
+                  !saved ? "Not saved: the settings file could not be written." :
+                  env_override ? "Saved, but NIER_REMIX_LIVE_UPSCALER overrides it at launch." : "Saved for next launch.");
 }
 
 void disable(const char* why) {
@@ -579,6 +599,16 @@ void render_panel(IDXGISwapChain* swapchain) {
     }
     if (!state->open) return;
 
+    const bool live_navigation = remix_live::upscaler_mode() >= 0;
+    if (live_navigation) io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    else io.ConfigFlags &= ~ImGuiConfigFlags_NavEnableKeyboard;
+    if (live_navigation) {
+        struct Key { ImGuiKey imgui; int win; };
+        const Key navigation[] = {{ImGuiKey_LeftArrow,VK_LEFT}, {ImGuiKey_RightArrow,VK_RIGHT},
+            {ImGuiKey_UpArrow,VK_UP}, {ImGuiKey_DownArrow,VK_DOWN}, {ImGuiKey_Tab,VK_TAB},
+            {ImGuiKey_Enter,VK_RETURN}, {ImGuiKey_Space,VK_SPACE}, {ImGuiMod_Shift,VK_SHIFT}};
+        for (const auto& k : navigation) io.AddKeyEvent(k.imgui, focused && (GetAsyncKeyState(k.win) & 0x8000));
+    }
     io.AddKeyEvent(ImGuiKey_Escape, escape);
     io.AddMouseButtonEvent(0, focused && (GetAsyncKeyState(GetSystemMetrics(SM_SWAPBUTTON) ? VK_RBUTTON : VK_LBUTTON) & 0x8000));
     io.MouseDrawCursor = false;  // use the now-visible OS cursor, not ImGui's own
@@ -586,7 +616,20 @@ void render_panel(IDXGISwapChain* swapchain) {
     ImGui_ImplWin32_NewFrame();
     ImGui::NewFrame();
     const menu_preview::RuntimeInfo info{nullptr, nullptr, display_size, *session.reason ? session.reason : nullptr};
-    menu_preview::draw_panel(*state, info, fonts, scale, save, nullptr);
+    const int upscaler_now = remix_live::upscaler_mode();
+    const menu_preview::UpscalerRow row{upscaler_now,
+        upscaler_now == 5 ? "Partial override: earlier writes may be effective. Restart to recover." : upscaler_status,
+        pick_upscaler, nullptr};
+    menu_preview::Geometry geometry;
+    menu_preview::draw_panel(*state, info, fonts, scale, save, nullptr, &geometry, upscaler_now >= 0 ? &row : nullptr);
+    static bool row_logged = false;
+    if (upscaler_now >= 0 && !row_logged) {  // test hook and diagnostics: where the live row's buttons are
+        row_logged = true;
+        static const char* names[5] = {"config", "ultra-performance", "performance", "balanced", "quality"};
+        for (int i = 0; i < 5; ++i)
+            host.log("menu: upscaler row %s %.0f,%.0f,%.0f,%.0f", names[i], geometry.upscaler[i].min.x,
+                     geometry.upscaler[i].min.y, geometry.upscaler[i].max.x, geometry.upscaler[i].max.y);
+    }
     ImGui::Render();
     ImDrawData* draw = ImGui::GetDrawData();
     static bool reported = false;

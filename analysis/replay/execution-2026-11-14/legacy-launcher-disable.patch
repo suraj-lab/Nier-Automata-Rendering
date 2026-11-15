@@ -1,0 +1,11 @@
+--- a/analysis/runtime/game-runs/g2-drive.sh
++++ b/analysis/runtime/game-runs/g2-drive.sh
+@@ -2,6 +2,8 @@
+ # G2: reach the world with nobody at the keyboard. Menu presses from process start (NIER_REMIX_LIVE_MENU_DRIVE),
+ # screenshots at fixed seconds so the run can be read afterwards. Guarded: the real save is hashed before and after.
+ set -u
++echo 'legacy launcher disabled: use runtime/game-runs/game_run.py (owned cleanup and report-only save guard)' >&2
++exit 1
+ A=/home/suraj/Projects/Nier-Automata-Rendering/analysis
+ GAME=/mnt/second/SteamLibrary/steamapps/common/NieRAutomata
+ RUN=${RUN:-$A/runtime/game-runs/g2-drive-2026-11-13}

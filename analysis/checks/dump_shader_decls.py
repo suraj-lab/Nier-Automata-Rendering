@@ -25,46 +25,63 @@ RESOURCE_TYPES = {0: 'cbuffer', 1: 'tbuffer', 2: 'texture', 3: 'sampler', 4: 'ua
 def chunks(data):
     if data[:4] != b'DXBC':
         return {}
-    count = struct.unpack_from('<I', data, 28)[0]
+    if len(data) < 32:
+        raise ValueError('DXBC header truncated')
+    total_size, count = struct.unpack_from('<2I', data, 24)
+    if total_size != len(data):
+        raise ValueError('DXBC declared size does not match container')
+    if 32 + 4 * count > len(data):
+        raise ValueError('DXBC chunk table out of bounds')
     offsets = struct.unpack_from(f'<{count}I', data, 32)
     out = {}
     for offset in offsets:
+        if offset < 32 + 4 * count or offset + 8 > len(data):
+            raise ValueError('DXBC chunk header out of bounds')
         fourcc = data[offset:offset + 4].decode('ascii', 'replace')
         size = struct.unpack_from('<I', data, offset + 4)[0]
+        if offset + 8 + size > len(data):
+            raise ValueError('DXBC chunk data out of bounds')
         out.setdefault(fourcc, []).append(data[offset + 8:offset + 8 + size])
     return out
 
 
+def _rdef_name(rdef, offset):
+    if offset >= len(rdef):
+        raise ValueError('RDEF name offset out of bounds')
+    end = rdef.index(b'\0', offset)  # ValueError if the name runs past the end of the chunk
+    return rdef[offset:end].decode('ascii', 'replace')
+
+
 def declarations(rdef):
     """(cbuffers, resources) from an RDEF chunk. cbuffer = (name, size, [(var, offset, size)])."""
-    try:
-        cb_count, cb_offset, res_count, res_offset = struct.unpack_from('<4I', rdef, 0)
-    except struct.error:
-        return [], []
-    cbuffers, resources = [], []
+    if len(rdef) < 28:
+        raise ValueError('RDEF header truncated')
+    cb_count, cb_offset, res_count, res_offset, target, _flags, _creator = struct.unpack_from('<7I', rdef, 0)
+    major = (target >> 8) & 0xFF
+    if major not in (4, 5):
+        raise ValueError('unsupported RDEF shader model')
+    var_stride = 40 if major == 5 else 24
+    if (cb_count and cb_offset < 28) or cb_offset + 24 * cb_count > len(rdef):
+        raise ValueError('RDEF cbuffer table out of bounds')
+    if (res_count and res_offset < 28) or res_offset + 32 * res_count > len(rdef):
+        raise ValueError('RDEF resource table out of bounds')
+    cbuffers = []
     for i in range(cb_count):
-        try:
-            name_offset, var_count, var_offset, size = struct.unpack_from('<4I', rdef, cb_offset + 24 * i)
-            name = rdef[name_offset:rdef.index(b'\0', name_offset)].decode('ascii', 'replace')
-        except (struct.error, ValueError):
-            continue
+        name_offset, var_count, var_offset, size = struct.unpack_from('<4I', rdef, cb_offset + 24 * i)
+        if (var_count and var_offset < 28) or var_offset + var_stride * var_count > len(rdef):
+            raise ValueError('RDEF variable table out of bounds')
         variables = []
         for v in range(var_count):
-            try:
-                var_name_offset, start, var_size = struct.unpack_from('<3I', rdef, cb_offset + var_offset + 24 * v)
-                var_name = rdef[var_name_offset:rdef.index(b'\0', var_name_offset)].decode('ascii', 'replace')
-            except (struct.error, ValueError):
-                break
-            variables.append((var_name, start, var_size))
-        cbuffers.append((name, size, variables))
+            var_name_offset, start, var_size = struct.unpack_from('<3I', rdef, var_offset + var_stride * v)
+            if start + var_size > size:
+                raise ValueError('RDEF variable extends beyond cbuffer')
+            variables.append((_rdef_name(rdef, var_name_offset), start, var_size))
+        cbuffers.append((_rdef_name(rdef, name_offset), size, variables))
+    resources = []
     for i in range(res_count):
-        try:
-            name_offset, kind, _ret, _dim, _samples, bind_point, bind_count = struct.unpack_from(
-                '<7I', rdef, res_offset + 32 * i)
-            name = rdef[name_offset:rdef.index(b'\0', name_offset)].decode('ascii', 'replace')
-        except (struct.error, ValueError):
-            continue
-        resources.append((name, RESOURCE_TYPES.get(kind, str(kind)), bind_point, bind_count))
+        name_offset, kind, _ret, _dim, _samples, bind_point, bind_count = struct.unpack_from(
+            '<7I', rdef, res_offset + 32 * i)
+        resources.append((_rdef_name(rdef, name_offset), RESOURCE_TYPES.get(kind, str(kind)), bind_point, bind_count))
     return cbuffers, resources
 
 

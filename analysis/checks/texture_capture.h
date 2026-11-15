@@ -80,6 +80,7 @@ struct Texture {
     DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
     UINT width = 0, height = 0;
     UINT mip_levels = 1;           // levels in `bytes`, mip 0 first, each packed tightly
+    UINT faces = 1;                // 1 = a 2D texture, 6 = a cube; `bytes` holds every face's chain in turn
     std::vector<unsigned char> bytes;
 };
 struct Ref { UINT slot = 0; std::uint32_t id = 0; };
@@ -106,7 +107,7 @@ inline bool normal_source(DXGI_FORMAT f, normal_octahedral::Source& out) {
 // does not know, so an unexpected texture is left as the game wrote it rather than mangled.
 inline bool to_octahedral(Texture& t, bool flip_y) {
     normal_octahedral::Source source;
-    if (!normal_source(t.format, source)) return false;
+    if (t.faces != 1 || !normal_source(t.format, source)) return false;  // a cube is not one 2D chain
     const FormatInfo fi = format_info(t.format);
     const UINT levels = t.mip_levels ? t.mip_levels : 1;
     std::vector<unsigned char> out;
@@ -144,7 +145,7 @@ inline bool mask_source(DXGI_FORMAT f, mask_channels::Source& out) {
 
 inline bool to_channel(Texture& t, unsigned channel, bool invert, unsigned char floor = 0) {
     mask_channels::Source source;
-    if (!mask_source(t.format, source)) return false;
+    if (t.faces != 1 || !mask_source(t.format, source)) return false;  // a cube is not one 2D chain
     const FormatInfo fi = format_info(t.format);
     const UINT levels = t.mip_levels ? t.mip_levels : 1;
     std::vector<unsigned char> out;
@@ -178,36 +179,43 @@ struct Cache {
     ~Cache() { clear(); }
 };
 
+// `faces` > 1 (R2b) reads a cube's six faces: subresource (mip, face) in slice-major order, the DDS layout.
 inline bool read_mips(ID3D11Device* device, ID3D11DeviceContext* context, ID3D11Texture2D* tex,
-                      const D3D11_TEXTURE2D_DESC& desc, Texture& out) {
+                      const D3D11_TEXTURE2D_DESC& desc, Texture& out, UINT faces = 1) {
     const FormatInfo fi = format_info(desc.Format);
     if (!fi.bytes || !desc.Width || !desc.Height) return false;
     D3D11_TEXTURE2D_DESC sd = desc;
     sd.MipLevels = 1; sd.ArraySize = 1; sd.SampleDesc.Count = 1; sd.SampleDesc.Quality = 0;
-    sd.Usage = D3D11_USAGE_STAGING; sd.BindFlags = 0; sd.CPUAccessFlags = D3D11_CPU_ACCESS_READ; sd.MiscFlags = 0;
+    sd.MiscFlags = 0;
+    sd.Usage = D3D11_USAGE_STAGING; sd.BindFlags = 0; sd.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
     ID3D11Texture2D* staging = nullptr;
     if (FAILED(device->CreateTexture2D(&sd, nullptr, &staging)) || !staging) return false;
     out.format = desc.Format; out.width = desc.Width; out.height = desc.Height;
     out.mip_levels = desc.MipLevels ? desc.MipLevels : 1;
+    out.faces = faces ? faces : 1;
     std::size_t total = 0;
     for (UINT m = 0; m < out.mip_levels; ++m) {
         const Level l = mip_geometry(fi, desc.Width, desc.Height, m);
         total += std::size_t(l.row_bytes) * l.rows;
     }
-    out.bytes.resize(total);
+    const std::size_t face_bytes = total;
+    out.bytes.resize(face_bytes * out.faces);
     // One level of staging, reused: copy mip m whole (the region it occupies in the larger staging does not matter,
     // we only read the level's own rows and pitch). The game's chain is copied, never filtered: BC data cannot be resized.
     std::size_t at = 0;
-    for (UINT m = 0; m < out.mip_levels; ++m) {
-        context->CopySubresourceRegion(staging, 0, 0, 0, 0, tex, D3D11CalcSubresource(m, 0, out.mip_levels), nullptr);
-        D3D11_MAPPED_SUBRESOURCE map{};
-        if (FAILED(context->Map(staging, 0, D3D11_MAP_READ, 0, &map))) { staging->Release(); return false; }
-        const Level l = mip_geometry(fi, desc.Width, desc.Height, m);
-        for (UINT r = 0; r < l.rows; ++r)  // the mapped RowPitch may be padded; pack tightly
-            std::memcpy(out.bytes.data() + at + std::size_t(r) * l.row_bytes,
-                        static_cast<const unsigned char*>(map.pData) + std::size_t(r) * map.RowPitch, l.row_bytes);
-        context->Unmap(staging, 0);
-        at += std::size_t(l.row_bytes) * l.rows;
+    for (UINT face = 0; face < out.faces; ++face) {
+        for (UINT m = 0; m < out.mip_levels; ++m) {
+            context->CopySubresourceRegion(staging, 0, 0, 0, 0, tex,
+                                           D3D11CalcSubresource(m, face, out.mip_levels), nullptr);
+            D3D11_MAPPED_SUBRESOURCE map{};
+            if (FAILED(context->Map(staging, 0, D3D11_MAP_READ, 0, &map))) { staging->Release(); return false; }
+            const Level l = mip_geometry(fi, desc.Width, desc.Height, m);
+            for (UINT r = 0; r < l.rows; ++r)  // the mapped RowPitch may be padded; pack tightly
+                std::memcpy(out.bytes.data() + at + std::size_t(r) * l.row_bytes,
+                            static_cast<const unsigned char*>(map.pData) + std::size_t(r) * map.RowPitch, l.row_bytes);
+            context->Unmap(staging, 0);
+            at += std::size_t(l.row_bytes) * l.rows;
+        }
     }
     staging->Release();
     return true;
@@ -215,13 +223,32 @@ inline bool read_mips(ID3D11Device* device, ID3D11DeviceContext* context, ID3D11
 
 // Record the PS material textures bound for the current draw. Reads each new static texture once per frame
 // (stops reading new ones past `byte_budget`, recording id 0 for them). Never fails the draw capture.
+// Bytes a readback of `faces` faces adds: the whole cube is charged to the budget, not just its first face.
+inline std::size_t capture_bytes(DXGI_FORMAT format, UINT width, UINT height, UINT levels, UINT faces) {
+    const FormatInfo fi = format_info(format);
+    if (!fi.bytes) return 0;
+    std::size_t chain = 0;
+    for (UINT m = 0; m < (levels ? levels : 1); ++m) {
+        const Level l = mip_geometry(fi, width, height, m);
+        chain += std::size_t(l.row_bytes) * l.rows;
+    }
+    return chain * (faces ? faces : 1);
+}
+// Record the PS material textures bound for the current draw. Reads each new static texture once per frame
+// (stops reading new ones past `byte_budget`, recording id 0 for them). Never fails the draw capture.
+// `slots` is how many PS SRVs to enumerate (R2a: 16 by default, up to 32) and `cube_faces` reads all six faces of a
+// cube SRV instead of face 0 (R2b).
 inline void capture(ID3D11Device* device, ID3D11DeviceContext* context, Cache& cache, std::vector<Ref>& out,
-                    std::size_t byte_budget) {
+                    std::size_t byte_budget, UINT slots = 16, bool cube_faces = false) {
     out.clear();
-    ID3D11ShaderResourceView* views[16] = {};
-    context->PSGetShaderResources(0, 16, views);
-    for (UINT slot = 0; slot < 16; ++slot) {
+    if (slots < 1) slots = 16;
+    if (slots > 32) slots = 32;
+    ID3D11ShaderResourceView* views[32] = {};
+    context->PSGetShaderResources(0, slots, views);
+    for (UINT slot = 0; slot < slots; ++slot) {
         if (!views[slot]) continue;
+        D3D11_SHADER_RESOURCE_VIEW_DESC vd{};
+        views[slot]->GetDesc(&vd);
         ID3D11Resource* res = nullptr;
         views[slot]->GetResource(&res);
         views[slot]->Release();
@@ -238,9 +265,19 @@ inline void capture(ID3D11Device* device, ID3D11DeviceContext* context, Cache& c
             D3D11_TEXTURE2D_DESC desc{};
             tex->GetDesc(&desc);
             const UINT dynamic_binds = D3D11_BIND_RENDER_TARGET | D3D11_BIND_DEPTH_STENCIL | D3D11_BIND_UNORDERED_ACCESS;
+            // Six faces only for a real cube view: a Texture2D view of one face of a cube resource was sampled as one
+            // face, so it must stay one face.
+            const UINT faces = cube_faces && vd.ViewDimension == D3D11_SRV_DIMENSION_TEXTURECUBE && desc.ArraySize == 6
+                                   ? 6 : 1;
+            // A cube costs six chains at once, so it is charged whole; a single 2D texture keeps the old rule (it only
+            // has to start below the cap).
+            const bool fits = faces > 1
+                                  ? cache.bytes + capture_bytes(desc.Format, desc.Width, desc.Height, desc.MipLevels, faces) <=
+                                        byte_budget
+                                  : cache.bytes < byte_budget;
             Texture t;
             if (!(desc.BindFlags & dynamic_binds) && desc.Usage != D3D11_USAGE_DYNAMIC && desc.SampleDesc.Count == 1 &&
-                cache.bytes < byte_budget && read_mips(device, context, tex, desc, t)) {
+                fits && read_mips(device, context, tex, desc, t, faces)) {
                 id = t.id = static_cast<std::uint32_t>(cache.textures.size() + 1);
                 cache.bytes += t.bytes.size();
                 cache.textures.push_back(std::move(t));
@@ -267,12 +304,18 @@ inline DXGI_FORMAT without_srgb(DXGI_FORMAT f) {
     }
 }
 
-// DDS with a DX10 header (BC data kept as-is), carrying the game's whole mip chain. Returns false on any write error.
+// DDS with a DX10 header (BC data kept as-is), carrying the game's whole mip chain. `faces` > 1 writes a cube: the
+// encoding DirectXTex reads back (DirectXTexDDS.cpp, the DDS_DIMENSION_TEXTURE2D case) is `resourceDimension 3` with
+// `miscFlag` = DDS_RESOURCE_MISC_TEXTURECUBE (0x4); there is no TEXTURECUBE resource dimension (4 is TEXTURE3D), and
+// `arraySize` counts cubes, not faces, so one cube is 1. Bytes stay slice-major: face 0's chain, then face 1's.
+// Returns false on any write error.
 inline bool write_dds(const wchar_t* path, const Texture& t) {
     FILE* f = _wfopen(path, L"wb");
     if (!f) return false;
     const FormatInfo fi = format_info(t.format);
     const std::uint32_t levels = t.mip_levels ? t.mip_levels : 1;
+    const std::uint32_t faces = t.faces ? t.faces : 1;
+    const bool cube = faces > 1;
     const Level mip0 = level_geometry(fi, t.width, t.height);
     std::uint32_t h[32] = {};
     h[0] = 0x20534444;            // "DDS "
@@ -285,11 +328,12 @@ inline bool write_dds(const wchar_t* path, const Texture& t) {
     h[19] = 32;                   // pixel format size
     h[20] = 0x4;                  // DDPF_FOURCC
     h[21] = 0x30315844;           // "DX10"
-    h[27] = 0x1000 | (levels > 1 ? 0x400000 : 0);  // DDSCAPS_TEXTURE | DDSCAPS_MIPMAP
-    h[28] = levels > 1 ? 0x400000 : 0;             // DDSCAPS2_MIPMAP
-    const std::uint32_t dx10[5] = {static_cast<std::uint32_t>(t.format), 3 /*TEXTURE2D*/, 0, 1, 0};
+    h[27] = 0x1000 | (levels > 1 ? 0x400000 : 0) | (cube ? 0x8 : 0);        // DDSCAPS_TEXTURE | MIPMAP | COMPLEX
+    h[28] = (levels > 1 ? 0x400000 : 0) | (cube ? 0xFE00u : 0u);           // DDSCAPS2_CUBEMAP and all six faces
+    const std::uint32_t dx10[5] = {static_cast<std::uint32_t>(t.format), 3 /*TEXTURE2D*/,
+                                   cube ? 0x4u : 0u /*DDS_RESOURCE_MISC_TEXTURECUBE*/, 1 /*arraySize: cubes*/, 0};
     const bool ok = std::fwrite(h, 4, 32, f) == 32 && std::fwrite(dx10, 4, 5, f) == 5 &&
-                    std::fwrite(t.bytes.data(), 1, t.bytes.size(), f) == t.bytes.size();  // mip 0..n in order
+                    std::fwrite(t.bytes.data(), 1, t.bytes.size(), f) == t.bytes.size();  // face 0's chain, then face 1's
     return (std::fclose(f) == 0) && ok;
 }
 

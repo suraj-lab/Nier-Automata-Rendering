@@ -12,7 +12,7 @@
 
 namespace mask_channels {
 
-enum class Source { Bc1, Bc3, Rgba8, Bgra8 };
+enum class Source { Bc1, Bc2, Bc3, Rgba8, Bgra8 };
 
 inline unsigned char to_byte(float v) {
     return static_cast<unsigned char>(v <= 0.f ? 0 : v >= 1.f ? 255 : static_cast<int>(v * 255.f + 0.5f));
@@ -41,13 +41,14 @@ inline void colour_texel(const unsigned char* block, unsigned x, unsigned y, boo
 // One level (mip) of `source` -> w*h bytes of channel `channel` (0 = R .. 3 = A), inverted (255 - v) if asked, then
 // raised to at least `floor`. The floor is for roughness: "very smooth" authoring becomes a literal mirror in a path
 // tracer, where raster hid it under specular highlights (FO4-Remix clamps roughness to >= 0.15 for the same reason).
+// BC2 is the one format whose alpha half is not a palette: 16 explicit 4-bit values.
 // False when the source bytes are too short for the level, leaving `out` partly written.
 inline bool extract_level(Source source, const unsigned char* src, std::size_t src_bytes, unsigned w, unsigned h,
                           unsigned channel, bool invert, unsigned char* out, unsigned char floor = 0) {
     if (channel > 3 || !w || !h) return false;
     const unsigned bw = (w + 3) / 4, bh = (h + 3) / 4;
     const std::size_t block_bytes = source == Source::Bc1 ? 8 : 16;
-    if (source == Source::Bc1 || source == Source::Bc3) {
+    if (source == Source::Bc1 || source == Source::Bc2 || source == Source::Bc3) {
         if (src_bytes < static_cast<std::size_t>(bw) * bh * block_bytes) return false;
         const auto finish = [invert, floor](float v) {
             const unsigned char b = to_byte(v);
@@ -57,6 +58,23 @@ inline bool extract_level(Source source, const unsigned char* src, std::size_t s
         for (unsigned by = 0; by < bh; ++by)
             for (unsigned bx = 0; bx < bw; ++bx) {
                 const unsigned char* block = src + (static_cast<std::size_t>(by) * bw + bx) * block_bytes;
+                const unsigned x_end = w - bx * 4 < 4 ? w - bx * 4 : 4, y_end = h - by * 4 < 4 ? h - by * 4 : 4;
+                if (source == Source::Bc2 && channel == 3) {
+                    // BC2's alpha half is 16 explicit 4-bit values, row-major, low nibble first (DXT3), with no
+                    // palette: block->byte = y*2 + x/2, low nibble for an even x. Alpha is linear, never sRGB.
+                    const auto nibble = [invert, floor](unsigned n) {
+                        unsigned char b = static_cast<unsigned char>(n * 17);
+                        if (invert) b = static_cast<unsigned char>(255 - b);
+                        return b < floor ? floor : b;
+                    };
+                    for (unsigned y = 0; y < y_end; ++y)
+                        for (unsigned x = 0; x < x_end; ++x) {
+                            const unsigned char byte = block[y * 2 + x / 2];
+                            out[static_cast<std::size_t>(by * 4 + y) * w + bx * 4 + x] =
+                                nibble(x % 2 ? byte >> 4 : byte & 0xf);
+                        }
+                    continue;
+                }
                 // Final output byte per palette index, computed once per block; then each texel looks up its index.
                 unsigned char lut[8];
                 std::uint64_t bits;
@@ -73,7 +91,7 @@ inline bool extract_level(Source source, const unsigned char* src, std::size_t s
                     float a[3], b[3];
                     normal_octahedral::rgb565(c0, a);
                     normal_octahedral::rgb565(c1, b);
-                    const bool four = source == Source::Bc3 || c0 > c1;
+                    const bool four = source != Source::Bc1 || c0 > c1;
                     float pal[4][4];
                     for (int i = 0; i < 3; ++i) {
                         pal[0][i] = a[i];
@@ -88,7 +106,6 @@ inline bool extract_level(Source source, const unsigned char* src, std::size_t s
                     bits_per_index = 2;
                 }
                 const unsigned mask = (1u << bits_per_index) - 1;
-                const unsigned x_end = w - bx * 4 < 4 ? w - bx * 4 : 4, y_end = h - by * 4 < 4 ? h - by * 4 : 4;
                 for (unsigned y = 0; y < y_end; ++y) {
                     unsigned char* o = out + static_cast<std::size_t>(by * 4 + y) * w + bx * 4;
                     for (unsigned x = 0; x < x_end; ++x)

@@ -309,6 +309,15 @@ int wmain(int argc, wchar_t** argv) {
     abd.RenderTarget[0].DestBlend = D3D11_BLEND_ONE;
     ID3D11BlendState* additive_blend = nullptr;
     if (FAILED(device->CreateBlendState(&abd, &additive_blend))) { std::fprintf(out, "FAIL additive blend\n"); return 3; }
+    // MOCK_EFFECT_BLEND selects a state the per-instance blend path must refuse (E1.6): `atoc` is the additive state with
+    // alpha-to-coverage, `opaque` is blending enabled with ONE/ZERO, which the runtime reads as its opaque alias.
+    ID3D11BlendState* atoc_blend = nullptr;
+    if (const char* refused = std::getenv("MOCK_EFFECT_BLEND")) {
+        D3D11_BLEND_DESC cd = abd;
+        if (!std::strcmp(refused, "opaque")) { cd.RenderTarget[0].SrcBlend = D3D11_BLEND_ONE; cd.RenderTarget[0].DestBlend = D3D11_BLEND_ZERO; }
+        else cd.AlphaToCoverageEnable = TRUE;
+        if (FAILED(device->CreateBlendState(&cd, &atoc_blend))) { std::fprintf(out, "FAIL refused blend\n"); return 3; }
+    }
     D3D11_DEPTH_STENCIL_DESC dd{};
     dd.DepthEnable = TRUE; dd.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO; dd.DepthFunc = D3D11_COMPARISON_GREATER;
     dd.FrontFace = dd.BackFace = {D3D11_STENCIL_OP_KEEP, D3D11_STENCIL_OP_KEEP, D3D11_STENCIL_OP_KEEP, D3D11_COMPARISON_ALWAYS};
@@ -342,6 +351,49 @@ int wmain(int argc, wchar_t** argv) {
         "Texture2D t : register(t0);\n"
         "float4 main(float4 p : SV_POSITION) : SV_TARGET { float4 c = t.Load(int3(0, 0, 0)); if (c.a < 0.5) discard; return c; }\n";
     const bool mesh_discards = std::getenv("MOCK_CUTOUT_PS") != nullptr;
+    // MOCK_WATER_PS (W3): the world shader carries the water family's one shared declaration, `g_TranslucentParam`, in a
+    // named constant buffer, exactly as ps_550347550280 / ps_550347548488 do in the pond capture (RDEF variable 160 /
+    // 144). The live path keys the family on that name, not on a shader name or a value, so the fixture only has to
+    // declare it: the classification under test also needs a blended state (MOCK_CAMERA=live-blend) and an albedo at t0.
+    const char water_ps_src[] =
+        "Texture2D t0 : register(t0); SamplerState s : register(s0);\n"
+        "cbuffer PSParamBuffer1 : register(b1) { float4 g_BaseBoolParam; float4 g_TranslucentParam; float4 g_Pad0;"
+        " float4 g_WetParam1; };\n"
+        // The member is read (a compiler drops an unread cbuffer from RDEF, and RDEF is what the live path reads), but
+        // the read is a no-op at 0 -- the value an unbound slot gives -- so the fixture's surface is its albedo either way.
+        "float4 main(float4 p : SV_POSITION) : SV_TARGET { return t0.Sample(s, p.xy * 0.001) * saturate(1 + g_TranslucentParam.w); }\n";
+    const bool mesh_water = std::getenv("MOCK_WATER_PS") != nullptr;
+    // ... and the same declaration on a card that discards (MOCK_CUTOUT_PS as well): the plan's foliage negative, which
+    // must stay on the cutout path however its shader is named.
+    const char water_cutout_ps_src[] =
+        "Texture2D t0 : register(t0); SamplerState s : register(s0);\n"
+        "cbuffer PSParamBuffer1 : register(b1) { float4 g_BaseBoolParam; float4 g_TranslucentParam; float4 g_Pad0;"
+        " float4 g_WetParam1; };\n"
+        "float4 main(float4 p : SV_POSITION) : SV_TARGET { float4 c = t0.Sample(s, p.xy * 0.001);"
+        " if (c.a * saturate(1 + g_TranslucentParam.w) < 0.5) discard; return c; }\n";
+    const bool water_cutout = mesh_water && std::getenv("MOCK_CUTOUT_PS") != nullptr;
+    // MOCK_HAIR_PS=x (W5 step 1): a pixel shader shaped like the game's hair family. It declares the pair the family
+    // shares -- g_AnisoParam1 at offset 96 and g_AnisoParam2 at 112 of one PSParamBuffer1, the offsets the disassembly of
+    // ps_550297348744 reads as cb1[6]/cb1[7] -- alpha-tests its texture the way a hair card does, and reads
+    // g_AnisoParam2.x, which is the value the live path classifies on. Every member is read so the compiler keeps the
+    // declared layout (a declared-but-unread member is dropped from RDEF, and RDEF is what the live path reads).
+    const char hair_ps_src[] =
+        "Texture2D t0 : register(t0); SamplerState s : register(s0);\n"
+        "cbuffer PSParamBuffer1 : register(b1) { float4 g_BaseBoolParam; float4 g_BaseBoolParam2; float4 g_DetailParam;"
+        " float4 g_AlbedoColor; float4 g_OtherPram; float4 g_ClothParam; float4 g_AnisoParam1; float4 g_AnisoParam2; };\n"
+        // A second buffer the mock binds with 64 bytes against this 80-byte declaration: the game's hair shader has the
+        // same shape (twelve PS buffers, one of them too small), and it is why the live path asks place() about the pair's
+        // own buffer instead of every buffer the shader declares.
+        "cbuffer TightBuffer : register(b0) { float4 g_Tie0; float4 g_Tie1; float4 g_Tie2; float4 g_Tie3; float4 g_Tie4; };\n"
+        "float4 main(float4 p : SV_POSITION) : SV_TARGET {\n"
+        "  float4 c = t0.Sample(s, p.xy * 0.001);\n"
+        "  if (c.a < 0.5) discard;\n"
+        "  float keep = g_BaseBoolParam.x + g_BaseBoolParam2.x + g_DetailParam.x + g_AlbedoColor.x + g_OtherPram.x"
+        " + g_ClothParam.x + g_AnisoParam1.x + g_AnisoParam2.x + g_Tie0.x + g_Tie4.x;\n"
+        "  return c * saturate(1 + keep * 1e-6);\n"
+        "}\n";
+    const char* hair_values = std::getenv("MOCK_HAIR_PS");
+    const bool mesh_hair = hair_values != nullptr;
     // MOCK_PBR_PS: the scene's pixel shader reads its material the way NieR's lit shaders do (analysis/PBR_MAPPING.md):
     // albedo t0, mask t2 (R metal, G gloss, A detail weight), normal map t3 (- 0.5), detail normal t4 (x2 - 1), F0 lerp
     // from 0.03 by the metal channel and a GGX alpha (1 - gloss)^2 floored at 1e-3. Written with mad() because the game's
@@ -382,6 +434,23 @@ int wmain(int argc, wchar_t** argv) {
         "}\n";
     const char* mesh_flags = std::getenv("MOCK_FLAG_PS");
     const bool mesh_pbr = std::getenv("MOCK_PBR_PS") != nullptr || mesh_flags != nullptr;
+    // MOCK_SKY_PS=int,alb_r,alb_g,alb_b,alb_w,mesh_r,mesh_g,mesh_b (W1.3 step 1): a pixel shader shaped like NieR's sky
+    // shader (runtime/w1-disasm/sky_ps.asm:24-26): `base = (g_AlbedoParam.w > 0 ? g_AlbedoParam.rgb : t0) *
+    // g_IntensityParam.y * g_MeshColor.rgb`. The constant buffers carry the game's own names, sizes and slots
+    // (PSParamBuffer1 at b1 with a 64-byte declaration while 112 bytes are bound, ModelBuffer at b4), so the live path
+    // has to resolve the members by RDEF name and the draw's bindings -- the sizes alone name nothing.
+    const char sky_ps_src[] =
+        "Texture2D t0 : register(t0); SamplerState s : register(s0);\n"
+        "cbuffer PSParamBuffer1 : register(b1) { float4 g_BaseBoolParam; float4 g_IntensityParam; float4 g_Pad0;"
+        " float4 g_AlbedoParam; };\n"
+        "cbuffer ModelBuffer : register(b4) { float4 g_MeshColor; };\n"
+        "float4 main(float4 p : SV_POSITION) : SV_TARGET {\n"
+        "  float4 a = t0.Sample(s, p.xy * 0.001);\n"
+        "  float3 base = (g_AlbedoParam.w > 0) ? g_AlbedoParam.rgb : a.rgb;\n"
+        "  return float4(base * g_IntensityParam.y * g_MeshColor.rgb, a.a);\n"
+        "}\n";
+    const char* sky_values = std::getenv("MOCK_SKY_PS");
+    const bool mesh_sky = sky_values != nullptr;
     // MOCK_UV_PS: the albedo is sampled at uv * cb1[5].xy, the way NieR's terrain layers repeat their textures; cb1 is
     // bound with (4, 2) there, so the live path must bake that repeat into the mesh UVs.
     const char uv_ps_src[] =
@@ -392,8 +461,8 @@ int wmain(int argc, wchar_t** argv) {
     // MOCK_SMALL_DRAW: a 6-index draw (two triangles of the main mesh) into the scene target, like a grass or leaf card.
     const bool small_draw = std::getenv("MOCK_SMALL_DRAW") != nullptr;
     ID3DBlob* ps_blob = nullptr;
-    const char* mesh_ps_src = mesh_uv ? uv_ps_src : mesh_flags ? flag_ps_src : mesh_pbr ? pbr_ps_src : mesh_discards ? cutout_ps_src : ps_src;
-    const SIZE_T mesh_ps_len = mesh_uv ? sizeof uv_ps_src - 1 : mesh_flags ? sizeof flag_ps_src - 1 : mesh_pbr ? sizeof pbr_ps_src - 1
+    const char* mesh_ps_src = mesh_hair ? hair_ps_src : mesh_water ? (water_cutout ? water_cutout_ps_src : water_ps_src) : mesh_sky ? sky_ps_src : mesh_uv ? uv_ps_src : mesh_flags ? flag_ps_src : mesh_pbr ? pbr_ps_src : mesh_discards ? cutout_ps_src : ps_src;
+    const SIZE_T mesh_ps_len = mesh_hair ? sizeof hair_ps_src - 1 : mesh_water ? (water_cutout ? sizeof water_cutout_ps_src - 1 : sizeof water_ps_src - 1) : mesh_sky ? sizeof sky_ps_src - 1 : mesh_uv ? sizeof uv_ps_src - 1 : mesh_flags ? sizeof flag_ps_src - 1 : mesh_pbr ? sizeof pbr_ps_src - 1
                              : mesh_discards ? sizeof cutout_ps_src - 1 : sizeof ps_src - 1;
     ID3D11Buffer* uv_cb = nullptr;
     if (mesh_uv) {
@@ -401,6 +470,22 @@ int wmain(int argc, wchar_t** argv) {
         D3D11_BUFFER_DESC cd{}; cd.ByteWidth = sizeof tile_data; cd.Usage = D3D11_USAGE_DEFAULT; cd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
         D3D11_SUBRESOURCE_DATA cdata = {tile_data, 0, 0};
         if (FAILED(device->CreateBuffer(&cd, &cdata, &uv_cb))) { std::fprintf(out, "FAIL uv cb\n"); return 3; }
+    }
+    // MOCK_HAIR_PS=x: b1 bound with 208 bytes against the shader's 128-byte declaration (the hair draws in the captures
+    // bind 208 for a 192-byte one), g_AnisoParam1 = 0 at offset 96 and g_AnisoParam2 = (x, 0.1, 70, 0) at 112 -- the
+    // values ps_550297348744's own draws carry.
+    ID3D11Buffer* hair_cb = nullptr;
+    if (mesh_hair) {
+        float first[52] = {};
+        float lobe = 0.f;
+        std::sscanf(hair_values, "%f", &lobe);
+        first[28] = lobe;       // g_AnisoParam2.x (offset 112)
+        first[29] = 0.1f;       // g_AnisoParam2.y
+        first[30] = 70.f;       // g_AnisoParam2.z
+        D3D11_BUFFER_DESC hd{}; hd.Usage = D3D11_USAGE_DEFAULT; hd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+        hd.ByteWidth = sizeof first;
+        D3D11_SUBRESOURCE_DATA hdata = {first, 0, 0};
+        if (FAILED(device->CreateBuffer(&hd, &hdata, &hair_cb))) { std::fprintf(out, "FAIL hair cb\n"); return 3; }
     }
     // MOCK_FLAG_TINT=r,g,b (item L8): bind the flag shader's tint buffers, cb8[0] = (r,g,b) and cb4[0] = (1, 0.5, 1).
     ID3D11Buffer* tint_cbs[2] = {nullptr, nullptr};   // [0] -> b4, [1] -> b8
@@ -411,6 +496,26 @@ int wmain(int argc, wchar_t** argv) {
         D3D11_SUBRESOURCE_DATA m4 = {mesh, 0, 0}, i8 = {inst, 0, 0};
         if (FAILED(device->CreateBuffer(&td, &m4, &tint_cbs[0])) || FAILED(device->CreateBuffer(&td, &i8, &tint_cbs[1])))
             { std::fprintf(out, "FAIL tint cb\n"); return 3; }
+    }
+    // MOCK_SKY_PS: b1 bound with 112 bytes against its 64-byte declaration (the captures do the same: 112 at slot 1 for
+    // a 64-byte PSParamBuffer1), and b4 with the 16-byte ModelBuffer that holds g_MeshColor.
+    static float sky_cb_template[28] = {};   // MOCK_SKY_PS's layer parameters, re-uploaded by MOCK_SKY_PS_ANIM
+    ID3D11Buffer* sky_cbs[2] = {nullptr, nullptr};
+    if (mesh_sky) {
+        float first[28] = {}, mesh[4] = {1.f, 1.f, 1.f, 1.f};
+        float intensity = 1.f, albedo[4] = {0.f, 0.f, 0.f, 0.f};
+        std::sscanf(sky_values, "%f,%f,%f,%f,%f,%f,%f,%f", &intensity, &albedo[0], &albedo[1], &albedo[2], &albedo[3],
+                    &mesh[0], &mesh[1], &mesh[2]);
+        first[5] = intensity;                 // g_IntensityParam.y (offset 16, lane y)
+        std::memcpy(first + 12, albedo, 16);  // g_AlbedoParam (offset 48)
+        D3D11_BUFFER_DESC bd{}; bd.Usage = D3D11_USAGE_DEFAULT; bd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+        bd.ByteWidth = sizeof first;          // 112 bytes for a 64-byte declaration
+        std::memcpy(sky_cb_template, first, sizeof first);
+        D3D11_SUBRESOURCE_DATA cd = {first, 0, 0};
+        D3D11_BUFFER_DESC md = bd; md.ByteWidth = sizeof mesh;
+        D3D11_SUBRESOURCE_DATA mdata = {mesh, 0, 0};
+        if (FAILED(device->CreateBuffer(&bd, &cd, &sky_cbs[0])) || FAILED(device->CreateBuffer(&md, &mdata, &sky_cbs[1])))
+            { std::fprintf(out, "FAIL sky cb\n"); return 3; }
     }
     if (!mesh_uv && mesh_flags) {   // bound at b1 where the UV case binds its buffer
         float flag_data[24] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.2f, 0.4f, 0.6f, 0, 0.3f, 0.8f, 0, 0};
@@ -424,6 +529,19 @@ int wmain(int argc, wchar_t** argv) {
     ID3D11PixelShader* mesh_ps = nullptr;
     device->CreatePixelShader(ps_blob->GetBufferPointer(), ps_blob->GetBufferSize(), nullptr, &mesh_ps);
     ps_blob->Release();
+    // E1 fixture: add an effect draw alongside opaque geometry, so the worker still has a scene to report.
+    ID3D11PixelShader* effect_ps = nullptr;
+    if (const char* effect_register = std::getenv("MOCK_EFFECT_REGISTER")) {
+        const char effect27[] = "StructuredBuffer<float4> e:register(t27); float4 main(float4 p:SV_POSITION):SV_TARGET{return e[uint(p.x)];}";
+        const char effect30[] = "StructuredBuffer<float4> e:register(t30); float4 main(float4 p:SV_POSITION):SV_TARGET{return e[uint(p.x)];}";
+        const char* src = !std::strcmp(effect_register,"30") ? effect30 : effect27;
+        ID3DBlob* effect_blob = nullptr;
+        if (FAILED(compile(src, std::strlen(src), "effect", nullptr, nullptr, "main", "ps_5_0", 0, 0, &effect_blob, nullptr)) ||
+            FAILED(device->CreatePixelShader(effect_blob->GetBufferPointer(),effect_blob->GetBufferSize(),nullptr,&effect_ps))) {
+            std::fprintf(out,"FAIL effect ps\n"); return 3;
+        }
+        effect_blob->Release();
+    }
     // The scene target: the display aspect at half scale, like an engine's internal render target. Square-ish or
     // final-sized targets are other passes; the render-target filter keyed on this distinction (live-passes mode).
     // live-odd uses a square scene target, which no aspect rule can recognise: the filter must then latch itself off
@@ -544,6 +662,47 @@ int wmain(int argc, wchar_t** argv) {
         else if (!std::strcmp(srgb, "rgba8")) mesh_srvs[0] = make_srv(4, 4, DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, rgba, 16, 0);
     }
     if (!mesh_srvs[0] || !mesh_srvs[1] || !mesh_srvs[2]) { std::fprintf(out, "FAIL textures\n"); return 3; }
+    // R2a (PLAN_2026-11-14): MOCK_TEX_SLOT16 binds a static 8x8 RGBA at PS slot 16 beside a render target at slot 17,
+    // both past the 0-15 range the capture enumerated, so widening the range can be told from capturing every slot.
+    ID3D11ShaderResourceView* wide_srvs[2] = {nullptr, nullptr};
+    if (GetEnvironmentVariableW(L"MOCK_TEX_SLOT16", nullptr, 0) > 0) {
+        static unsigned char wide_px[8 * 8 * 4];
+        for (unsigned i = 0; i < sizeof wide_px; ++i) wide_px[i] = static_cast<unsigned char>((i * 13 + 7) & 0xff);
+        wide_srvs[0] = make_srv(8, 8, DXGI_FORMAT_R8G8B8A8_UNORM, wide_px, 32, 0);
+        wide_srvs[1] = make_srv(16, 16, DXGI_FORMAT_R8G8B8A8_UNORM, nullptr, 0, D3D11_BIND_RENDER_TARGET);
+        if (!wide_srvs[0] || !wide_srvs[1]) { std::fprintf(out, "FAIL wide textures\n"); return 3; }
+    }
+    // R2b: MOCK_TEX_CUBE binds a six-face, two-level 4x4 cube at slot 3, every face and level a distinct pattern, so a
+    // writer that reads face 0 only can be told from one that carries all six under a cube header. MOCK_TEX_CUBE=face2d
+    // binds a Texture2D view of face 0 instead: the shader sampled one face, so the capture must write one.
+    ID3D11ShaderResourceView* cube_srv = nullptr;
+    if (const char* cube_mode = std::getenv("MOCK_TEX_CUBE")) {
+        static unsigned char cube_px[6][2][4 * 4 * 4];
+        D3D11_SUBRESOURCE_DATA cube_data[12] = {};
+        for (unsigned f = 0; f < 6; ++f)
+            for (unsigned m = 0; m < 2; ++m) {
+                const unsigned n = (m ? 2 * 2 : 4 * 4) * 4;
+                for (unsigned i = 0; i < n; ++i)
+                    cube_px[f][m][i] = static_cast<unsigned char>((i * 7 + f * 31 + m * 101 + 3) & 0xff);
+                cube_data[m + f * 2] = {cube_px[f][m], (m ? 2u : 4u) * 4, 0};  // mip-major within the slice
+            }
+        D3D11_TEXTURE2D_DESC cd{}; cd.Width = 4; cd.Height = 4; cd.MipLevels = 2; cd.ArraySize = 6;
+        cd.Format = DXGI_FORMAT_R8G8B8A8_UNORM; cd.SampleDesc.Count = 1; cd.Usage = D3D11_USAGE_DEFAULT;
+        cd.BindFlags = D3D11_BIND_SHADER_RESOURCE; cd.MiscFlags = D3D11_RESOURCE_MISC_TEXTURECUBE;
+        ID3D11Texture2D* ct = nullptr;
+        if (FAILED(device->CreateTexture2D(&cd, cube_data, &ct))) { std::fprintf(out, "FAIL cube texture\n"); return 3; }
+        bool made = false;
+        if (!std::strcmp(cube_mode, "face2d")) {
+            D3D11_SHADER_RESOURCE_VIEW_DESC vd{};
+            vd.Format = DXGI_FORMAT_R8G8B8A8_UNORM; vd.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+            vd.Texture2D.MipLevels = 2;
+            made = SUCCEEDED(device->CreateShaderResourceView(ct, &vd, &cube_srv));
+        } else {
+            made = SUCCEEDED(device->CreateShaderResourceView(ct, nullptr, &cube_srv));
+        }
+        ct->Release();
+        if (!made) { std::fprintf(out, "FAIL cube view\n"); return 3; }
+    }
     // The tiled-forward light arrays, bound the way the game binds them, so an F9 capture records them for the laptop
     // probe: points at t20 (48-byte elements, BUFFEREX view, the view starts at element 1), spots at t22 (80 bytes).
     ID3D11ShaderResourceView* capture_lights[2] = {};
@@ -579,8 +738,11 @@ int wmain(int argc, wchar_t** argv) {
         context->PSSetShader(mesh_ps, nullptr, 0);
         ID3D11Buffer* vertex_cb = camera_mode ? camera_buffer : mesh_cb_buf;
         context->VSSetConstantBuffers(0, 1, &vertex_cb);
+        if (hair_cb) context->PSSetConstantBuffers(1, 1, &hair_cb);
         context->PSSetConstantBuffers(0, 1, &mesh_cb_buf);  // one PS buffer at a slot the VS also uses
         context->PSSetShaderResources(0, 3, mesh_srvs);
+        if (wide_srvs[0]) context->PSSetShaderResources(16, 2, wide_srvs);
+        if (cube_srv) context->PSSetShaderResources(3, 1, &cube_srv);
         context->PSSetShaderResources(20, 1, &capture_lights[0]);
         context->PSSetShaderResources(22, 1, &capture_lights[1]);
         context->OMSetBlendState(probe_blend, nullptr, 0xFFFFFFFF);
@@ -1123,6 +1285,11 @@ int wmain(int argc, wchar_t** argv) {
             camera_cb[3] = second ? -40.f : -10.f;
             camera_cb[7] = second ? -5.f : -2.f;
             camera_cb[11] = second ? -60.f : -30.f;
+            if (std::getenv("MOCK_CAMERA_DRIFT")) {  // game camera moves every frame (until MOCK_CAMERA_DRIFT_UNTIL)
+                const char* until = std::getenv("MOCK_CAMERA_DRIFT_UNTIL");
+                const int stop = until ? std::atoi(until) : 1 << 30;
+                camera_cb[3] -= 0.5f * static_cast<float>(frame < stop ? frame : stop);
+            }
             if (!std::strcmp(camera_mode, "invalid") || (!std::strcmp(camera_mode, "invalid-late") && second))
                 camera_cb[0] = std::numeric_limits<float>::quiet_NaN();
             // MOCK_CAMERA_STATIC: the camera buffer is written on frame 1 only, before live capture is
@@ -1190,6 +1357,10 @@ int wmain(int argc, wchar_t** argv) {
                 context->VSSetShader(live_vs, nullptr, 0);
                 context->PSSetShader(mesh_ps, nullptr, 0);
                 if (uv_cb) context->PSSetConstantBuffers(1, 1, &uv_cb);
+                // MOCK_HAIR_PS: slot 0 carries the 64-byte buffer against the fixture's 80-byte TightBuffer, the way the
+                // captured hair shader has a declared buffer bound smaller than itself.
+                if (hair_cb) { context->PSSetConstantBuffers(0, 1, &mesh_cb_buf); context->PSSetConstantBuffers(1, 1, &hair_cb); }
+                if (sky_cbs[0]) { context->PSSetConstantBuffers(1, 1, &sky_cbs[0]); context->PSSetConstantBuffers(4, 1, &sky_cbs[1]); }
                 if (tint_cbs[0]) { context->PSSetConstantBuffers(4, 1, &tint_cbs[0]); context->PSSetConstantBuffers(8, 1, &tint_cbs[1]); }
                 context->VSSetConstantBuffers(0, 1, &camera_buffer);
                 context->VSSetConstantBuffers(11, 1, &live_cb11);
@@ -1267,13 +1438,17 @@ int wmain(int argc, wchar_t** argv) {
                 context->VSSetShader(live_vs, nullptr, 0);
                 context->PSSetShader(mesh_ps, nullptr, 0);
                 if (uv_cb) context->PSSetConstantBuffers(1, 1, &uv_cb);
+                // MOCK_HAIR_PS: slot 0 carries the 64-byte buffer against the fixture's 80-byte TightBuffer, the way the
+                // captured hair shader has a declared buffer bound smaller than itself.
+                if (hair_cb) { context->PSSetConstantBuffers(0, 1, &mesh_cb_buf); context->PSSetConstantBuffers(1, 1, &hair_cb); }
+                if (sky_cbs[0]) { context->PSSetConstantBuffers(1, 1, &sky_cbs[0]); context->PSSetConstantBuffers(4, 1, &sky_cbs[1]); }
                 if (tint_cbs[0]) { context->PSSetConstantBuffers(4, 1, &tint_cbs[0]); context->PSSetConstantBuffers(8, 1, &tint_cbs[1]); }
                 context->VSSetConstantBuffers(0, 1, &camera_buffer);
                 context->VSSetConstantBuffers(11, 1, &live_cb11);
                 context->PSSetShaderResources(0, 1, &mesh_srvs[0]);
                 // Blend state is explicit per mode: the live-capture path reads it to decide cutout vs opaque, so the
                 // "plain" runs must not inherit the probe state left bound by the camera-capture draws.
-                context->OMSetBlendState(live_blend ? probe_blend : (live_additive ? additive_blend : nullptr), nullptr, 0xFFFFFFFF);
+                context->OMSetBlendState(atoc_blend ? atoc_blend : (live_blend ? probe_blend : (live_additive ? additive_blend : nullptr)), nullptr, 0xFFFFFFFF);
                 // Slot 20 is bound only after the first (sky) draw: the light array must still be read from a later
                 // draw of the same frame, not lost because the first draw had none.
                 ID3D11ShaderResourceView* lights_now = frame >= 50 && live_lights_srv_moved ? live_lights_srv_moved : live_lights_srv;
@@ -1358,6 +1533,20 @@ int wmain(int argc, wchar_t** argv) {
                 }
                 // live-late keeps the texture order deterministic (A then B), so the sky dome is left out of it;
                 // the sky has its own scenarios.
+                if (sky_cbs[0] && std::getenv("MOCK_SKY_PS_ANIM") && frame % 8 == 0) {
+                    // The layer's own intensity changes, like an area transition: a fold that is part of the surface
+                    // must rebuild the mesh, a fold that is not never moves.
+                    // MOCK_SKY_PS_ANIM_BASE=n shifts the 1, 2, 3 cycle to n+0, n+1, n+2, so a *scaled* textured layer
+                    // (W1.3 step 1b) can be exercised without passing through factor 1, which asks for no copy.
+                    static const float anim_base = [] {
+                        const char* v = std::getenv("MOCK_SKY_PS_ANIM_BASE");
+                        return v ? static_cast<float>(std::atof(v)) : 1.f;
+                    }();
+                    float changed[28];
+                    std::memcpy(changed, sky_cb_template, sizeof changed);
+                    changed[5] = static_cast<float>(frame % 3) + anim_base;
+                    context->UpdateSubresource(sky_cbs[0], 0, nullptr, changed, 0, 0);
+                }
                 if (!empty_frame && !live_offset && live_sky_vb && !live_late) {
                     // A sky-sized draw every frame; it must be skipped, not uploaded.
                     context->IASetVertexBuffers(0, 1, &live_sky_vb, &mstride, &moff);
@@ -1416,7 +1605,36 @@ int wmain(int argc, wchar_t** argv) {
                             context->IASetVertexBuffers(1, 2, none, zero, zero);
                             context->IASetInputLayout(live_layout);
                         } else
-                        context->DrawIndexed(192, 0, 0);
+                        if (!std::getenv("MOCK_EFFECT_ONLY")) context->DrawIndexed(192, 0, 0);
+                        if (effect_ps && pass == 1) {
+                            const UINT slot = std::getenv("MOCK_EFFECT_REGISTER") && !std::strcmp(std::getenv("MOCK_EFFECT_REGISTER"),"30") ? 30 : 27;
+                            ID3D11ShaderResourceView* old_ps = nullptr; ID3D11ShaderResourceView* old_vs = nullptr;
+                            ID3D11DepthStencilState* old_depth = nullptr; UINT old_stencil = 0;
+                            context->PSGetShaderResources(slot,1,&old_ps);
+                            context->VSGetShaderResources(31,1,&old_vs);
+                            context->OMGetDepthStencilState(&old_depth,&old_stencil);
+                            context->PSSetShaderResources(slot,1,&capture_lights[0]);  // structured, stride48, view first1/count2
+                            context->VSSetShaderResources(31,1,&capture_lights[1]);   // structured, stride80, first0/count1
+                            context->OMSetDepthStencilState(probe_depth,0);
+                            // MOCK_EFFECT_NO_TEX: an effect draw with no albedo bound, so the capture can give it no
+                            // material (E1.6: such a draw must not be submitted as a particle).
+                            ID3D11ShaderResourceView* old_albedo = nullptr;
+                            if (std::getenv("MOCK_EFFECT_NO_TEX")) {
+                                context->PSGetShaderResources(0,1,&old_albedo);
+                                ID3D11ShaderResourceView* no_albedo = nullptr;
+                                context->PSSetShaderResources(0,1,&no_albedo);
+                            }
+                            context->PSSetShader(effect_ps,nullptr,0);
+                            context->DrawIndexed(std::getenv("MOCK_EFFECT_SMALL") ? 6 : 192,0,0);
+                            if (old_albedo) { context->PSSetShaderResources(0,1,&old_albedo); old_albedo->Release(); }
+                            context->PSSetShader(mesh_ps,nullptr,0);
+                            context->PSSetShaderResources(slot,1,&old_ps);
+                            context->VSSetShaderResources(31,1,&old_vs);
+                            context->OMSetDepthStencilState(old_depth,old_stencil);
+                            if (old_ps) old_ps->Release();
+                            if (old_vs) old_vs->Release();
+                            if (old_depth) old_depth->Release();
+                        }
                         if (small_draw && pass == 1) context->DrawIndexed(6, 0, 0);
                         if (live_evict && pass == 1 && frame >= 55) context->DrawIndexed(189, 0, 0);  // mesh C
                         if (shared_ib && pass == 1) {  // same rewritten VB, its own IB: a second object, drawn after A
@@ -1463,6 +1681,12 @@ int wmain(int argc, wchar_t** argv) {
         if (frame == 48 && (click_x || click_y)) move_mouse(click);
         if (frame == 50 && (click_x || click_y)) button(true);
         if (frame == 53 && (click_x || click_y)) button(false);
+        if (std::getenv("MOCK_UPSCALER_KEY")) {
+            if (frame == 56) key(VK_LEFT, true);
+            if (frame == 58) key(VK_LEFT, false);
+            if (frame == 64) key(VK_RETURN, true);
+            if (frame == 66) key(VK_RETURN, false);
+        }
         if (frame == 25) request(L"capture-closed.raw");
         if (frame == 26) std::fprintf(out, "di_mouse_closed=%d\n", blanked(di_mouse, sizeof(DIMOUSESTATE)));
         if (frame == 40) {
@@ -1509,7 +1733,56 @@ int wmain(int argc, wchar_t** argv) {
                 context->VSSetConstantBuffers(0,1,&hud_cb11);  // real HUD uses CB0, not CB11
                 context->PSSetShaderResources(1,1,&hud_srvs); // native mask sampler reads alpha=1
             }
-            context->DrawIndexed(6, 0, 0);
+            // MOCK_EFFECT_AFTER_SPRITE: the effect quad comes after the first sprite instead of before it (draw-order probe).
+            const bool effect_after = std::getenv("MOCK_EFFECT_AFTER_SPRITE") != nullptr;
+            for (int slot = 0; slot < 2; ++slot) {
+                if (slot == (effect_after ? 1 : 0) && live_native_hud && effect_ps && std::getenv("MOCK_EFFECT_INTO_HUD")) {
+                    // E1: an effect quad drawn into the HUD target itself, before the sprites (real-game census: rt26 full size).
+                    // MOCK_EFFECT_COLOR: a constant (1,0.5,0) alpha-0.5 effect at x 1632..1920, clear of both sprites.
+                    static ID3D11PixelShader* color_ps = nullptr;
+                    static ID3D11Buffer* right_cb = nullptr;
+                    const bool colored = std::getenv("MOCK_EFFECT_COLOR") != nullptr;
+                    if (colored && !color_ps) {
+                        const char src[] = "struct S{float4 a,b,c;};StructuredBuffer<S> e:register(t27);"
+                                           "float4 main(float4 p:SV_POSITION):SV_TARGET{return float4(1,0.5,0,0.5)+e[0].a.x*1e-30;}";
+                        ID3DBlob* b = nullptr;
+                        if (FAILED(compile(src, sizeof src - 1, "effectcolor", nullptr, nullptr, "main", "ps_5_0", 0, 0, &b, nullptr)) ||
+                            FAILED(device->CreatePixelShader(b->GetBufferPointer(), b->GetBufferSize(), nullptr, &color_ps))) {
+                            std::fprintf(out, "FAIL effect colour ps\n"); return 3;
+                        }
+                        b->Release();
+                        const float right[16] = {1, 0, 0, 2.0f, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+                        D3D11_BUFFER_DESC rcd{}; rcd.ByteWidth = sizeof right; rcd.Usage = D3D11_USAGE_IMMUTABLE;
+                        rcd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+                        D3D11_SUBRESOURCE_DATA rsd{}; rsd.pSysMem = right;
+                        if (FAILED(device->CreateBuffer(&rcd, &rsd, &right_cb))) { std::fprintf(out, "FAIL effect cb\n"); return 3; }
+                    }
+                    ID3D11PixelShader* sprite_ps = nullptr; context->PSGetShader(&sprite_ps, nullptr, nullptr);
+                    context->PSSetShaderResources(27, 1, &capture_lights[0]);
+                    context->PSSetShader(colored ? color_ps : effect_ps, nullptr, 0);
+                    if (colored) context->VSSetConstantBuffers(0, 1, &right_cb);
+                    if (std::getenv("MOCK_EFFECT_INTO_SCENE_HDR")) {
+                        // Live game: pre-tone-map scene targets have the HUD target's format and size; an effect drawn
+                        // there first must not be taken for the HUD target.
+                        static ID3D11Texture2D* scene_hdr = nullptr;
+                        static ID3D11RenderTargetView* scene_hdr_rtv = nullptr;
+                        if (!scene_hdr) {
+                            D3D11_TEXTURE2D_DESC sd{}; native_hdr->GetDesc(&sd);
+                            if (FAILED(device->CreateTexture2D(&sd, nullptr, &scene_hdr)) ||
+                                FAILED(device->CreateRenderTargetView(scene_hdr, nullptr, &scene_hdr_rtv))) { std::fprintf(out, "FAIL scene hdr\n"); return 3; }
+                        }
+                        context->OMSetRenderTargets(1, &scene_hdr_rtv, nullptr);
+                        context->DrawIndexed(6, 0, 0);
+                        context->OMSetRenderTargets(1, &native_hdr_rtv, nullptr);
+                    }
+                    context->DrawIndexed(6, 0, 0);
+                    if (colored) context->VSSetConstantBuffers(0, 1, &hud_cb11);
+                    context->PSSetShader(sprite_ps, nullptr, 0);
+                    if (sprite_ps) sprite_ps->Release();
+                    ID3D11ShaderResourceView* none = nullptr; context->PSSetShaderResources(27, 1, &none);
+                }
+                if (slot == 0) context->DrawIndexed(6, 0, 0);  // first sprite
+            }
             if (live_native_hud) {
                 // Second sprite is left of the first: replacing the background twice would erase the first.
                 context->VSSetConstantBuffers(0,1,&native_identity);
@@ -1592,7 +1865,8 @@ int wmain(int argc, wchar_t** argv) {
                                  failure_observed ? camera_reads - reads_at_failure : 0, reads_after_failed_present,
                                  failure_observed ? 1u : 0u, reads_while_bypassed);
     downstream_draw = {};
-    for (ID3D11Buffer* b : {live_vb, live_ib, live_vb2, live_ib2, live_cb11, live_sky_vb, live_sky_ib}) if (b) b->Release();
+    for (ID3D11Buffer* b : {live_vb, live_ib, live_vb2, live_ib2, live_cb11, live_sky_vb, live_sky_ib, sky_cbs[0],
+                            sky_cbs[1], hair_cb}) if (b) b->Release();
     if (live_layout) live_layout->Release();
     if (live_layout_slot1) live_layout_slot1->Release();
     if (live_layout_split) live_layout_split->Release();
@@ -1600,10 +1874,16 @@ int wmain(int argc, wchar_t** argv) {
     for (IUnknown* p : std::initializer_list<IUnknown*>{native_hdr, native_hdr_rtv, native_hdr_srv, native_hud_ps,
                                                           native_hud_vs, native_blit_vs, native_blit_ps, native_identity, native_raster})
         if (p) p->Release();
+    if (effect_ps) effect_ps->Release();
     if (camera_buffer) camera_buffer->Release();
     cs->Release();
     di_keyboard->Release(); di_mouse->Release(); di->Release();
+    // MOCK_EXIT=exitprocess: leave like NieR does, through this executable's own KERNEL32!ExitProcess import.
+    const char* mock_exit = std::getenv("MOCK_EXIT");
+    const bool exit_process = mock_exit && !std::strcmp(mock_exit, "exitprocess");
+    std::fprintf(out, "exit_via=%s\n", exit_process ? "exitprocess" : "return");
     std::fclose(out);
     swapchain->Release(); factory->Release(); adapter->Release(); dxgi->Release(); context->Release(); device->Release();
+    if (exit_process) ExitProcess(0);
     return 0;
 }

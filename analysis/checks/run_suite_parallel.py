@@ -71,17 +71,24 @@ def run(test, out, display=99):
     return {'test': test.name, 'exit': code, 'seconds': round(time.monotonic() - started, 1)}
 
 
+def sandbox_environment(out):
+    for key, folder in [('HOME', 'home'), ('XDG_CACHE_HOME', 'cache'), ('XDG_CONFIG_HOME', 'config'),
+                        ('XDG_DATA_HOME', 'data'), ('XDG_STATE_HOME', 'state'), ('TMPDIR', 'tmp')]:
+        path = (out / folder).resolve()
+        path.mkdir(parents=True, exist_ok=True)
+        os.environ[key] = str(path)
+
+
 def main():
     out = pathlib.Path(sys.argv[1]).resolve()
     jobs = int(sys.argv[sys.argv.index('-j') + 1]) if '-j' in sys.argv else os.cpu_count() // 2
     out.mkdir(parents=True, exist_ok=True)
-    (out / 'tmp').mkdir(exist_ok=True)
-    os.environ['TMPDIR'] = str(out / 'tmp')
+    sandbox_environment(out)
     (out / 'bin').mkdir(exist_ok=True)
     (out / 'bin/xvfb-run').write_text(SHIM)
     (out / 'bin/xvfb-run').chmod(0o755)
     os.environ['PATH'] = str(out / 'bin') + os.pathsep + os.environ['PATH']
-    files = list(C.glob('*.h')) + list(C.glob('*.cpp')) + list(C.glob('test_*.py'))
+    files = list(C.glob('*.h')) + list(C.glob('*.cpp')) + list(C.glob('*.py'))
     snapshot = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in files}
     tests = sorted(C.glob('test_*.py'))
     first = [t for t in tests if t.name in FIRST]

@@ -44,13 +44,13 @@ BACKUP = WORK + r'\backup'
 RUNTIME = r'C:\Program Files\NVIDIA Corporation\RTX Remix\deps\remix_runtime\runtime\.trex\d3d9.dll'
 ORIGINAL_D3D11 = '6ba266d64a8f6776'                           # NIER_DLAA proxy found in the game folder 2026-10-30
 ADDED = ['d3d11_dlaa.dll', 'NIER_RENDER.ini', 'steam_appid.txt', 'nier_render_fonts', 'NIER_SCALE.log', 'NIER_ENV.ini',
-         'NIER_CAPTURE', r'data\rtx-remix', r'data\metrics.txt', 'RtxOptions.md', 'rtx.conf']  # --options-doc; rtx.conf: earlier --rtx-conf runs  # last three: written by our runs (shader capture, Remix)
+         'NIER_REMIX.ini', 'NIER_CAPTURE', r'data\rtx-remix', r'data\metrics.txt', 'RtxOptions.md', 'rtx.conf']  # --options-doc; rtx.conf: earlier --rtx-conf runs  # last three: written by our runs (shader capture, Remix)
 # Created by the user during a run: restore MOVES these into WORK\kept\<stamp>\ instead of deleting them. (2026-10-30:
 # an F9 capture, 168 MB, was deleted by the old restore two minutes after it was taken.) The Remix consent answer is
 # kept the same way and put back by install, so the runtime does not ask again on every launch.
 # The whole .sentry-native folder: the runtime's crash handler writes its minidump there and ends the process before
 # WER sees it (2026-10-31: a live crash left no Application event, and restore deleted the only dump).
-KEEP = ['NIER_CAPTURE', r'data\rtx-remix\logs\.sentry-native']
+KEEP = ['NIER_CAPTURE', 'NIER_REMIX.ini', r'data\rtx-remix\logs\.sentry-native']  # NIER_REMIX.ini: the menu's upscaler pick (P1)
 OPTS = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10']
 
 
@@ -230,6 +230,11 @@ if ($now -ne $h) {{ throw 'restore hash mismatch' }}
 
 if __name__ == '__main__':
     cmd = sys.argv[1:] or ['']
+    if cmd[0] in ('install', 'restore', 'run'):
+        sys.path.insert(0, str(A / 'checks'))
+        from unattended_guard import authorize
+        # a run counts by its label so per-item attempts are per experiment; install/restore count by name
+        authorize('laptop', cmd[1] if cmd[0] == 'run' and len(cmd) >= 2 else cmd[0])   # no-op unless NIER_UNATTENDED=1
     if cmd[0] == 'install':
         install()
     elif cmd[0] == 'restore':

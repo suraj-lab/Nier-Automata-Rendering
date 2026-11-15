@@ -13,6 +13,8 @@
 #include <vector>
 #include <remix_c.h>
 #include "live_types.h"
+#include "sky_scale.h"
+#include "hair_class.h"
 #include "terrain_bake.h"
 #include "funnel.h"
 #include "visibility_math.h"
@@ -24,6 +26,7 @@ inline float light_scale = 1.f;  // NIER_REMIX_LIGHT_SCALE: tuned on the laptop 
 // NIER_REMIX_LIVE_NO_ALPHA_TEST=1: send every material with "always keep". A/B switch for the layer we cannot see:
 // our counters say drawn, the picture says gone, and an over-strict parsed threshold discards every texel.
 inline bool alpha_test_enabled = true;
+inline bool terrain_mips = false;  // NIER_REMIX_LIVE_TERRAIN_MIPS=1: versioned full-chain bake assets.
 // Per-window coverage accounting: instances Remix's camera should see, and the ones it should not. Measured with the
 // same camera basis we hand SetupCamera, so this is the runtime's own view of the scene, not ours.
 struct CoverageTotals {
@@ -57,7 +60,7 @@ struct State {
     // grey_first (item T1): materials sent while a file they name was not on disk yet, by material key, with the ids
     // they were asked for. Re-created under the same hash once every file has landed, so the mesh keeps its identity.
     struct Incomplete { std::uint32_t texture, normal, metallic, roughness; int alpha_op; std::uint8_t alpha_ref;
-                        live_capture::MaterialConstants constants; };
+                        live_capture::MaterialConstants constants; bool draw_call_alpha; bool water; bool hair; };
     std::map<std::uint64_t, Incomplete> incomplete;
     unsigned long long refreshed = 0;   // grey_first: materials re-created once their files landed (reported)
     // L4: geometry -> triangles of meshes built with no material. Counted against `meshes` at report time, so an
@@ -68,6 +71,10 @@ struct State {
     std::map<std::uint64_t, PendingBake> pending_bakes;
     std::deque<std::wstring> baked_paths;   // stable addresses: Remix keeps each c_str()
     unsigned long long bakes_done = 0, bakes_failed = 0;   // reported with grey_first's line
+    // W1.3 step 1b: sky_<id>_<factor>.dds copies this session wrote, by file name; an empty path is a copy that was
+    // refused, kept so the same (texture, factor) is not decoded again. Map nodes: the c_str() Remix keeps stays valid.
+    std::map<std::wstring, std::wstring> scaled_paths;
+    unsigned scaled_copies = 0;   // copies written (not refusals: a refused name must not use up a good one's slot)
     // NIER_REMIX_LIVE_BUILD_LOG=1: one entry per built mesh (geometry, pixel shader, triangles, material handle, first
     // vertex), drained and logged by remix_live.cpp. Diagnostic: links a mesh in the fake runtime's log to its shader.
     struct Built { std::uint64_t geometry, ps; std::size_t triangles; std::uint64_t material; float v0[3];
@@ -114,6 +121,8 @@ inline void destroy(const remixapi_Interface& api, State& s) {
     s.incomplete.clear();
     s.bare.clear();
     s.pending_bakes.clear();
+    s.baked_paths.clear();
+    s.scaled_paths.clear();
     s.texture_paths.clear();
     s.landed.clear();
     s.sun = s.sky = nullptr;
@@ -158,14 +167,76 @@ inline bool files_landed(const State& s, const live_capture::Upload& u) {
     return true;
 }
 
+// ---- file I/O on the worker: the bake and W1.3's scaled sky copies both read and write DDS files here ----------
+inline bool read_whole(const std::wstring& path, std::vector<unsigned char>& out) {
+#ifdef _WIN32
+    FILE* f = _wfopen(path.c_str(), L"rb");
+#else
+    std::string narrow(path.begin(), path.end());   // tests: ASCII paths
+    FILE* f = std::fopen(narrow.c_str(), "rb");
+#endif
+    if (!f) return false;
+    out.clear();
+    unsigned char buf[65536];
+    std::size_t n;
+    while ((n = std::fread(buf, 1, sizeof buf, f)) > 0) out.insert(out.end(), buf, buf + n);
+    std::fclose(f);
+    return !out.empty();
+}
+inline bool write_whole(const std::wstring& path, const std::vector<unsigned char>& bytes) {
+#ifdef _WIN32
+    FILE* f = _wfopen(path.c_str(), L"wb");
+#else
+    std::string narrow(path.begin(), path.end());
+    FILE* f = std::fopen(narrow.c_str(), "wb");
+#endif
+    if (!f) return false;
+    const bool ok = std::fwrite(bytes.data(), 1, bytes.size(), f) == bytes.size();
+    return (std::fclose(f) == 0) && ok;
+}
+// W1.3 step 1b: the scaled copy of a textured sky layer, written once per (texture, factor) beside the layer file.
+// Called where the bake already reads and writes DDS files: on the worker, before the material that names it is created,
+// so Remix never sees a half-written file. nullptr means today's texture stands (unreadable source, or the session cap).
+inline const wchar_t* scaled_path(State& s, std::uint32_t id, float factor) {
+    if (!id || !std::isfinite(factor) || factor <= 0.f || id > s.texture_paths.size() || s.texture_paths[id - 1].empty())
+        return nullptr;
+    const std::wstring name = sky_scale::file_name(id, factor);
+    const auto known = s.scaled_paths.find(name);
+    if (known != s.scaled_paths.end()) return known->second.empty() ? nullptr : known->second.c_str();
+    if (s.scaled_copies >= sky_scale::kMaxCopies || s.scaled_paths.size() >= 4 * sky_scale::kMaxCopies) {
+        ++sky_scale::refused;   // past the cap: today's texture, and the refused names stay bounded
+        s.scaled_paths.emplace(name, L"");
+        return nullptr;
+    }
+    const std::wstring& source = s.texture_paths[id - 1];
+    const std::wstring dir = source.substr(0, source.find_last_of(L"\\/") + 1);
+    std::vector<unsigned char> file, out;
+    if (!read_whole(source, file) || !sky_scale::scaled_dds(file, factor, out) || !write_whole(dir + name, out)) {
+        ++sky_scale::refused;
+        s.scaled_paths.emplace(name, L"");   // one attempt per (texture, factor), not one per rebuild
+        return nullptr;
+    }
+    ++sky_scale::copies;
+    ++s.scaled_copies;
+    return s.scaled_paths.emplace(name, dir + name).first->second.c_str();
+}
 // One material per (texture, normal map, metallic, roughness, alpha test). Opaque keeps the hash and settings the live
 // path has always used; an alpha-tested one carries the game shader's own comparison and reference (alpha_test.h).
+// W3: `water` adds the runtime's translucent extension and a hash of its own -- a material the runtime knows by hash
+// alone must not let a cache reuse the cutout surface this draw would otherwise be given.
+// W5: `hair` sets the runtime's anisotropy scalar, under a key and hash of its own for the same reason.
 inline remixapi_MaterialHandle material_for(const remixapi_Interface& api, State& s, std::uint32_t texture,
                                             int alpha_op = 7, std::uint8_t alpha_ref = 0,
                                             std::uint32_t normal = 0, std::uint32_t metallic = 0,
                                             std::uint32_t roughness = 0,
-                                            const live_capture::MaterialConstants& constants = {}) {
+                                            const live_capture::MaterialConstants& constants = {},
+                                            bool draw_call_alpha = false, bool water = false, bool hair = false) {
     if (!texture && !constants.has_albedo()) return nullptr;   // L3: a constant albedo is a material with no texture
+    // W3: with grey_first off, a water draw whose albedo file is not on disk yet takes today's path -- the same rule the
+    // non-water path already applies below (no material, so the mesh is bare this frame and is rebuilt when the file lands).
+    if (water && !grey_first && texture &&
+        (texture > s.texture_paths.size() || s.texture_paths[texture - 1].empty()))
+        water = false;
     const bool tested = alpha_op != 7;
     // shortcut: the normal id rides in bits 48-63, so two ids that differ only above 65535 would share a material; a
     // session that captures more than 65535 textures needs a struct key instead. PBR ids are mixed in separately below.
@@ -186,14 +257,24 @@ inline remixapi_MaterialHandle material_for(const remixapi_Interface& api, State
     // Item L3: two draws with one texture and different constants are two materials, in the key and in the hash.
     std::uint64_t constants_key = 0;
     if (constants.any()) {
-        std::uint32_t bits[5];
+        std::uint32_t bits[6];
         std::memcpy(&bits[0], constants.albedo, 12);
         std::memcpy(&bits[3], &constants.metallic, 4);
         std::memcpy(&bits[4], &constants.roughness, 4);
+        std::memcpy(&bits[5], &constants.albedo_scale, 4);
+        // The scale word is mixed in only when it is set, so every material the accepted paths create keeps its key and
+        // its hash (W1.3 step 1b's parity case).
+        const unsigned words = constants.scales_albedo() ? 6 : 5;
         constants_key = 0xcbf29ce484222325ull;
-        for (const std::uint32_t b : bits) constants_key = (constants_key ^ b) * 0x100000001b3ull;
+        for (unsigned i = 0; i < words; ++i) constants_key = (constants_key ^ bits[i]) * 0x100000001b3ull;
         key = key * 0x9e3779b97f4a7c15ull ^ (constants_key + 0x2545f4914f6cdd1dull);
     }
+    // E1.6: the draw-call-alpha material is its own material, or a particle would change the world's surface instead.
+    if (draw_call_alpha) key = key * 0x9e3779b97f4a7c15ull ^ 0x7061727469636c65ull;
+    // W3: the water material is its own material too, for the same reason.
+    if (water) key = key * 0x9e3779b97f4a7c15ull ^ 0x77617465725f6d61ull;
+    // W5: and so is the hair material: a key that ignored the anisotropy would answer with the isotropic material.
+    if (hair) key = key * 0x9e3779b97f4a7c15ull ^ 0x686169725f6d61ull;
     const auto known = s.materials.find(key);
     if (known != s.materials.end()) return known->second;
     // A missing albedo file is not a reason to send no material (user decision D2): the surface shows at once in plain
@@ -222,12 +303,21 @@ inline remixapi_MaterialHandle material_for(const remixapi_Interface& api, State
     if (pbr) hash = (1ull << 63) | ((hash * 0x9e3779b97f4a7c15ull ^ (pbr_key * 0xbf58476d1ce4e5b9ull)) >> 1);
     // Item L3: constants live in [2^62, 2^63), clear of every range above (PBR has bit 63 set, the rest are small).
     if (constants_key) hash = (1ull << 62) | ((hash * 0x9e3779b97f4a7c15ull ^ (constants_key * 0x94d049bb133111ebull)) >> 2);
+    // E1.6: the same rule for the runtime's own handle, which knows a material by its hash alone.
+    if (draw_call_alpha) hash = hash * 0x9e3779b97f4a7c15ull ^ 0x7061727469636c65ull;
+    // W3: and for a water material, which must not resolve to the cutout surface cached under the same texture.
+    if (water) hash = hash * 0x9e3779b97f4a7c15ull ^ 0x77617465725f6d61ull;
+    // W5: the same rule for the hair material: the runtime knows a material by its hash alone.
+    if (hair) hash = hash * 0x9e3779b97f4a7c15ull ^ 0x686169725f6d61ull;
     nscn::detail::make_material_info(info, ext, has_albedo ? s.texture_paths[texture - 1].c_str() : nullptr, hash, tested,
                                      (grey_first ? on_disk(normal) : has_normal) ? path_of(normal) : nullptr,
                                      grey_first ? (on_disk(roughness) ? roughness_path : nullptr) : roughness_path,
                                      grey_first ? (on_disk(metallic) ? metallic_path : nullptr) : metallic_path);
     if (grey_first && !has_albedo && texture)   // the plan's grey until the albedo file is on disk (D2)
         ext.albedoConstant.x = ext.albedoConstant.y = ext.albedoConstant.z = 0.5f;
+    if (has_albedo && constants.scales_albedo() && !constants.has_albedo()) {   // W1.3 step 1b: t0 * factor, see sky_scale.h
+        if (const wchar_t* copy = scaled_path(s, texture, constants.albedo_scale)) info.albedoTexture = copy;
+    }
     if (constants.has_albedo()) {   // replaces the texture: albedoConstant does not multiply it
         info.albedoTexture = nullptr;
         ext.albedoConstant.x = constants.albedo[0];
@@ -237,13 +327,36 @@ inline remixapi_MaterialHandle material_for(const remixapi_Interface& api, State
     if (constants.metallic >= 0.f) { ext.metallicConstant = constants.metallic; ext.metallicTexture = nullptr; }
     if (constants.roughness >= 0.f) { ext.roughnessConstant = constants.roughness; ext.roughnessTexture = nullptr; }
     if (tested && alpha_test_enabled) { ext.alphaTestType = alpha_op; ext.alphaReferenceValue = alpha_ref; }
+    // The runtime reads blend and alpha state from the instance's InstanceInfoBlendEXT only with this set; without it the
+    // particle would be drawn opaque (opaque_surface_material: useDrawCallAlphaState -> UseLegacyAlphaState).
+    ext.useDrawCallAlphaState = draw_call_alpha ? 1 : 0;
+    // W3: the runtime's translucent extension, chained after today's opaque one, so the surface keeps its albedo, normal,
+    // metal, roughness and alpha test and gains refraction. refractiveIndex 1.33 is water's. Both remaining fields are left
+    // at the struct default because nothing offline establishes their units: `thinWallThickness_hasvalue` stays 0 (no thin
+    // wall), and there is no has-value flag for `transmittanceMeasurementDistance`, so the 0 this sends is "not measured
+    // yet" -- the gate pins that 0 and W3 step 3 measures it on the pond. `useDiffuseLayer` is 1 as an unmeasured choice
+    // for that same step, not because the documentation says it restores today's look.
+    remixapi_MaterialInfoTranslucentEXT trans{};
+    if (water) {
+        trans.sType = REMIXAPI_STRUCT_TYPE_MATERIAL_INFO_TRANSLUCENT_EXT;
+        trans.pNext = nullptr;
+        trans.refractiveIndex = 1.33f;
+        trans.transmittanceColor = {1.f, 1.f, 1.f};
+        trans.thinWallThickness_hasvalue = 0;
+        trans.useDiffuseLayer = 1;
+        ext.pNext = &trans;
+    }
+    // W5: the runtime's anisotropy scalar, set on a classified hair draw only. 0 is the runtime's own isotropic default,
+    // so with the switch off nothing here changes the material's contents.
+    if (hair) ext.anisotropy = hair_class::kAnisotropy;
     remixapi_MaterialHandle handle = nullptr;
     if (api.CreateMaterial(&info, &handle) || !handle) return nullptr;
     s.materials.emplace(key, handle);
     if (grey_first) {
         bool missing = false;
         for (const std::uint32_t id : {texture, normal, metallic, roughness}) missing |= id && !on_disk(id);
-        if (missing) s.incomplete[key] = {texture, normal, metallic, roughness, alpha_op, alpha_ref, constants};
+        if (missing) s.incomplete[key] = {texture, normal, metallic, roughness, alpha_op, alpha_ref, constants,
+                                          draw_call_alpha, water, hair};
     }
     return handle;
 }
@@ -251,32 +364,10 @@ inline remixapi_MaterialHandle material_for(const remixapi_Interface& api, State
 // Item T1: a material sent grey (or without a PBR / normal file) is destroyed and created again under its own hash once
 // every file it names is on disk. The runtime knows a material by hash and ignores a repeat create under a live one, so
 // destroy-then-create is the only way the surface changes; the mesh, which names the hash, is not rebuilt.
-// ---- terrain_bake: file I/O on the worker and the baked material -------------------------------------------------
-inline bool read_whole(const std::wstring& path, std::vector<unsigned char>& out) {
-#ifdef _WIN32
-    FILE* f = _wfopen(path.c_str(), L"rb");
-#else
-    std::string narrow(path.begin(), path.end());   // tests: ASCII paths
-    FILE* f = std::fopen(narrow.c_str(), "rb");
-#endif
-    if (!f) return false;
-    out.clear();
-    unsigned char buf[65536];
-    std::size_t n;
-    while ((n = std::fread(buf, 1, sizeof buf, f)) > 0) out.insert(out.end(), buf, buf + n);
-    std::fclose(f);
-    return !out.empty();
-}
-inline bool write_whole(const std::wstring& path, const std::vector<unsigned char>& bytes) {
-#ifdef _WIN32
-    FILE* f = _wfopen(path.c_str(), L"wb");
-#else
-    std::string narrow(path.begin(), path.end());
-    FILE* f = std::fopen(narrow.c_str(), "wb");
-#endif
-    if (!f) return false;
-    const bool ok = std::fwrite(bytes.data(), 1, bytes.size(), f) == bytes.size();
-    return (std::fclose(f) == 0) && ok;
+// ---- terrain_bake: the baked material ---------------------------------------------------------------
+inline bool bake_input_landed(const State& s, std::uint32_t id) {
+    return id && id <= s.landed.size() && id <= s.texture_paths.size() &&
+           s.landed[id - 1] != 0 && !s.texture_paths[id - 1].empty();
 }
 // Bake the tile and write it next to layer 0's file; the path is kept in `s.baked_paths` (Remix keeps the c_str()).
 inline const wchar_t* bake_file(State& s, std::uint32_t t0, std::uint32_t t1, unsigned level, float sharpness) {
@@ -293,8 +384,10 @@ inline const wchar_t* bake_file(State& s, std::uint32_t t0, std::uint32_t t1, un
     const float r = (static_cast<float>(level) + 0.5f) / static_cast<float>(terrain_bake::kLevels);
     const std::wstring dir = p0->substr(0, p0->find_last_of(L"\\/") + 1);
     const std::wstring path = dir + L"bake_" + std::to_wstring(t0) + L"_" + std::to_wstring(t1) + L"_" +
-                              std::to_wstring(level) + L"_" + std::to_wstring(static_cast<int>(sharpness * 10000.f)) + L".dds";
-    if (!write_whole(path, terrain_bake::dds_bytes(terrain_bake::bake(i0, i1, r, sharpness)))) return nullptr;
+                              std::to_wstring(level) + L"_" + std::to_wstring(static_cast<int>(sharpness * 10000.f)) +
+                              (terrain_mips ? L"_mips1.dds" : L".dds");
+    const auto bytes = terrain_bake::dds_bytes(terrain_bake::bake(i0, i1, r, sharpness), terrain_mips);
+    if (bytes.empty() || !write_whole(path, bytes)) return nullptr;
     s.baked_paths.push_back(path);
     return s.baked_paths.back().c_str();
 }
@@ -302,11 +395,13 @@ inline const wchar_t* bake_file(State& s, std::uint32_t t0, std::uint32_t t1, un
 // swapped in under the same hash (refresh_incomplete_materials), like a late texture.
 inline remixapi_MaterialHandle baked_material_for(const remixapi_Interface& api, State& s, std::uint32_t t0,
                                                   std::uint32_t t1, unsigned level, float sharpness) {
+    if (!t0 || !t1) return nullptr;
     std::uint32_t sbits = 0;
     std::memcpy(&sbits, &sharpness, sizeof sbits);
     std::uint64_t key = 0x7a4b5c0000000000ull;
     for (const std::uint64_t v : {std::uint64_t(t0), std::uint64_t(t1), std::uint64_t(level), std::uint64_t(sbits)})
         key = (key ^ v) * 0x100000001b3ull;
+    if (terrain_mips) key = (key ^ 0x6d69707331ull) * 0x100000001b3ull;
     const auto known = s.materials.find(key);
     if (known != s.materials.end()) return known->second;
     const std::uint64_t hash = (1ull << 61) | (key & ((1ull << 61) - 1));   // bit 61 alone: clear of every other range
@@ -319,6 +414,7 @@ inline remixapi_MaterialHandle baked_material_for(const remixapi_Interface& api,
     if (api.CreateMaterial(&info, &handle) || !handle) return nullptr;
     s.materials.emplace(key, handle);
     if (path) ++s.bakes_done;
+    else if (bake_input_landed(s, t0) && bake_input_landed(s, t1)) ++s.bakes_failed;
     else s.pending_bakes[key] = {t0, t1, level, sharpness, hash};
     return handle;
 }
@@ -334,10 +430,7 @@ inline std::pair<std::size_t, std::size_t> bare_meshes(const State& s) {
 inline void refresh_incomplete_materials(const remixapi_Interface& api, State& s) {
     for (auto it = s.pending_bakes.begin(); it != s.pending_bakes.end();) {   // terrain_bake: both files landed?
         const State::PendingBake b = it->second;
-        const auto landed = [&s](std::uint32_t id) {
-            return id <= s.landed.size() && s.landed[id - 1] != 0 && !s.texture_paths[id - 1].empty();
-        };
-        if (!landed(b.t0) || !landed(b.t1)) { ++it; continue; }
+        if (!bake_input_landed(s, b.t0) || !bake_input_landed(s, b.t1)) { ++it; continue; }
         const std::uint64_t key = it->first;
         it = s.pending_bakes.erase(it);
         const auto known = s.materials.find(key);
@@ -359,7 +452,8 @@ inline void refresh_incomplete_materials(const remixapi_Interface& api, State& s
         if (known == s.materials.end()) continue;
         if (known->second) api.DestroyMaterial(known->second);
         s.materials.erase(known);
-        material_for(api, s, m.texture, m.alpha_op, m.alpha_ref, m.normal, m.metallic, m.roughness, m.constants);
+        material_for(api, s, m.texture, m.alpha_op, m.alpha_ref, m.normal, m.metallic, m.roughness, m.constants,
+                     m.draw_call_alpha, m.water, m.hair);   // E1.6/W3/W5: a particle, water or hair material must stay one
         ++s.refreshed;
         if (m.texture && (m.texture > s.texture_paths.size() || s.texture_paths[m.texture - 1].empty())) ++s.refreshed_blank;
     }
@@ -383,7 +477,8 @@ inline bool build_mesh(const remixapi_Interface& api, State& s, const live_captu
     surface.indices_values = upload.indices.data();
     surface.indices_count = upload.indices.size();
     surface.material = material_for(api, s, upload.texture, upload.alpha_op, upload.alpha_ref, upload.normal,
-                                    upload.metallic, upload.roughness, upload.constants);
+                                    upload.metallic, upload.roughness, upload.constants, upload.particle, upload.water,
+                                    upload.hair);
     if (surface.material) s.bare.erase(upload.geometry);
     else s.bare[upload.geometry] = upload.indices.size() / 3;
     if (build_log_enabled && s.build_log.size() < 65536)
@@ -707,6 +802,27 @@ inline remixapi_ErrorCode submit(const remixapi_Interface& api, const live_captu
             remixapi_InstanceInfoBoneTransformsEXT bones{};
             bones.sType = REMIXAPI_STRUCT_TYPE_INSTANCE_INFO_BONE_TRANSFORMS_EXT;
             bones.pNext = nullptr;
+            // E1.6: the game's own blend state rides the instance, so the runtime can light the scene with the particle
+            // instead of drawing it solid (the material carries useDrawCallAlphaState, or this is ignored).
+            const particle_blend::Mapped mapped = item.particle ? particle_blend::map(item.blend)
+                                                              : particle_blend::Mapped{};
+            remixapi_InstanceInfoBlendEXT blend{};
+            blend.sType = REMIXAPI_STRUCT_TYPE_INSTANCE_INFO_BLEND_EXT;
+            blend.alphaBlendEnabled = mapped.enable_blending;
+            blend.srcColorBlendFactor = mapped.src_color;
+            blend.dstColorBlendFactor = mapped.dst_color;
+            blend.colorBlendOp = mapped.color_op;
+            blend.srcAlphaBlendFactor = mapped.src_alpha;
+            blend.dstAlphaBlendFactor = mapped.dst_alpha;
+            blend.alphaBlendOp = mapped.alpha_op;
+            blend.writeMask = mapped.write_mask;
+            // The EXT's alpha-test state is read unconditionally when the material asks for the draw-call alpha state
+            // (rtx_instance_manager.cpp:745-746), and 0 is kNever: a zero-filled op would discard every sample. This path
+            // keeps the shader's own discard out of the particle, so the test is "always pass".
+            blend.alphaTestCompareOp = 7;   // AlphaTestType::kAlways / VK_COMPARE_OP_ALWAYS
+            // Capture refused every state this fails on, and a mesh with no material cannot carry useDrawCallAlphaState:
+            // the runtime would ignore the EXT and draw the quad solid. A carried stand-in is another key's mesh.
+            const bool blend_chain = item.particle && mapped.ok && !carried && !s.bare.count(item.geometry);
             const std::size_t bone_base = static_cast<std::size_t>(item.first_bone) * 12;
             if (item.bone_count && bone_base + 12ull * item.bone_count <= bone_array.size()) {
                 bones.boneTransforms_values = reinterpret_cast<const remixapi_Transform*>(bone_array.data() + bone_base);
@@ -714,12 +830,27 @@ inline remixapi_ErrorCode submit(const remixapi_Interface& api, const live_captu
             }
             remixapi_InstanceInfo instance{};
             instance.sType = REMIXAPI_STRUCT_TYPE_INSTANCE_INFO;
-            instance.pNext = bones.boneTransforms_count ? &bones : nullptr;
+            // The runtime finds both extensions by sType, so the chain order is ours: bones first, then the blend state.
+            instance.pNext = nullptr;
+            if (blend_chain) instance.pNext = &blend;
+            if (bones.boneTransforms_count) {
+                bones.pNext = blend_chain ? static_cast<void*>(&blend) : nullptr;
+                instance.pNext = &bones;
+            }
             instance.mesh = mesh->second;
             instance.doubleSided = 1;
+            if (blend_chain) instance.categoryFlags |= REMIXAPI_INSTANCE_CATEGORY_BIT_PARTICLE;
             // The game drew this with alpha blending. Remix cannot blend per draw, so the closest faithful read is
-            // cutout: foliage cards and grilles lose their transparent texels instead of rendering solid.
-            if (item.blended) instance.categoryFlags |= REMIXAPI_INSTANCE_CATEGORY_BIT_ALPHA_BLEND_TO_CUTOUT;
+            // cutout: foliage cards and grilles lose their transparent texels instead of rendering solid. Never for a
+            // particle: the cutout flag forces the alpha test, which switches the blend off again (rtx_instance_manager.cpp:720).
+            // W3: never for a classified water draw either -- its translucent material is the whole point of the switch.
+            if (item.blended && !blend_chain && !item.water)
+                instance.categoryFlags |= REMIXAPI_INSTANCE_CATEGORY_BIT_ALPHA_BLEND_TO_CUTOUT;
+            // W3: the runtime's own water category, on the instance whose mesh was built with the translucent material.
+            // Not on a bare mesh: with grey_first off a water draw whose albedo never landed keeps today's bare-mesh
+            // outcome, and a water category over no material would claim a surface the runtime cannot make.
+            if (item.water && !s.bare.count(item.geometry))
+                instance.categoryFlags |= REMIXAPI_INSTANCE_CATEGORY_BIT_ANIMATED_WATER;
             if (item.sky) instance.categoryFlags |= REMIXAPI_INSTANCE_CATEGORY_BIT_SKY;
             for (unsigned r = 0; r < 3; ++r)
                 for (unsigned c = 0; c < 4; ++c) instance.transform.matrix[r][c] = transforms[base + 4 * r + c];

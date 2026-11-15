@@ -71,6 +71,16 @@ inline Snapshot latest() {
     return published;
 }
 
+// The camera decoded for the game frame still being drawn (game thread), with the sequence end_frame will give it.
+inline bool current(Snapshot& out) {
+    std::lock_guard<std::mutex> lock(frame_mutex);
+    if (!frame_open.load(std::memory_order_acquire) || !pending_valid || !permitted.load(std::memory_order_acquire)) return false;
+    std::lock_guard<std::mutex> snapshot_lock(snapshot_mutex);
+    out.camera = pending;
+    out.sequence = published.sequence + 1;
+    return true;
+}
+
 // Called with frame_mutex held; all COM references and mappings are released before decoding.
 inline bool read_cb0(ID3D11DeviceContext* context, std::array<float, 14>& result) {
     ID3D11Buffer* source = nullptr;

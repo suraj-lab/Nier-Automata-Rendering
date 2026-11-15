@@ -27,8 +27,11 @@ inline float linear_to_srgb(float c) {
 }
 
 // Mip 0 of one of our own DDS files (texture_capture::write_dds: 128-byte header, DX10 extension, mips tightly packed).
-// BC1 (71/72), BC3 (77/78), RGBA8 (28/29), BGRA8 (87/91); the *_SRGB formats are decoded to linear.
-inline bool read_dds(const std::vector<unsigned char>& file, Image& out) {
+// BC1 (71/72), BC2 (74/75), BC3 (77/78), RGBA8 (28/29), BGRA8 (87/91); the *_SRGB formats are decoded to linear and
+// `srgb` (when given) says which encoding the file was in, so a copy can be written in the same one. BC2 matters here
+// because the sky's 2048x2048 cloud layers are BC2 (W1.3 step 1b); `bc2` selects it so the default-on terrain bake keeps
+// refusing those files exactly as before.
+inline bool read_dds(const std::vector<unsigned char>& file, Image& out, bool* srgb = nullptr, bool bc2 = false) {
     if (file.size() < 148 || std::memcmp(file.data(), "DDS ", 4) != 0) return false;
     std::uint32_t h[32], dx10[5];
     std::memcpy(h, file.data(), sizeof h);
@@ -36,17 +39,22 @@ inline bool read_dds(const std::vector<unsigned char>& file, Image& out) {
     std::memcpy(dx10, file.data() + 128, sizeof dx10);
     const unsigned w = h[4], hh = h[3], fmt = dx10[0];
     if (!w || !hh || w > 16384 || hh > 16384) return false;
+    // R2b: a cube DDS is TEXTURE2D (3) with DDS_RESOURCE_MISC_TEXTURECUBE, and its face 0 chain starts at 148 like
+    // any 2D texture. Any other resource dimension is refused rather than decoded as if it were one.
+    if (dx10[1] != 3) return false;
     mask_channels::Source source;
-    bool srgb = false;
+    bool tagged = false;
     switch (fmt) {
         case 71: source = mask_channels::Source::Bc1; break;
-        case 72: source = mask_channels::Source::Bc1; srgb = true; break;
+        case 72: source = mask_channels::Source::Bc1; tagged = true; break;
+        case 74: if (!bc2) return false; source = mask_channels::Source::Bc2; break;
+        case 75: if (!bc2) return false; source = mask_channels::Source::Bc2; tagged = true; break;
         case 77: source = mask_channels::Source::Bc3; break;
-        case 78: source = mask_channels::Source::Bc3; srgb = true; break;
+        case 78: source = mask_channels::Source::Bc3; tagged = true; break;
         case 28: source = mask_channels::Source::Rgba8; break;
-        case 29: source = mask_channels::Source::Rgba8; srgb = true; break;
+        case 29: source = mask_channels::Source::Rgba8; tagged = true; break;
         case 87: source = mask_channels::Source::Bgra8; break;
-        case 91: source = mask_channels::Source::Bgra8; srgb = true; break;
+        case 91: source = mask_channels::Source::Bgra8; tagged = true; break;
         default: return false;
     }
     const std::size_t pixels = static_cast<std::size_t>(w) * hh;
@@ -58,9 +66,10 @@ inline bool read_dds(const std::vector<unsigned char>& file, Image& out) {
             return false;
         for (std::size_t i = 0; i < pixels; ++i) {
             const float v = channel[i] / 255.f;
-            out.rgba[i * 4 + c] = (srgb && c < 3) ? srgb_to_linear(v) : v;
+            out.rgba[i * 4 + c] = (tagged && c < 3) ? srgb_to_linear(v) : v;
         }
     }
+    if (srgb) *srgb = tagged;
     return true;
 }
 
@@ -103,20 +112,62 @@ inline Image bake(const Image& t0, const Image& t1, float r, float sharpness) {
     return shrink(std::move(o));
 }
 
-// One mip of R8G8B8A8_UNORM_SRGB (29), in write_dds's layout.
-inline std::vector<unsigned char> dds_bytes(const Image& im) {
+// Floor-halved integer-area box bins include odd tails (3x1 [0,0,1] -> 1/3).
+inline Image half(const Image& im) {
+    const unsigned w = std::max(1u, im.w / 2), h = std::max(1u, im.h / 2);
+    Image o; o.w = w; o.h = h; o.rgba.assign(static_cast<std::size_t>(w) * h * 4, 0.f);
+    for (unsigned y = 0; y < h; ++y)
+        for (unsigned x = 0; x < w; ++x) {
+            const unsigned x0 = im.w * x / w, x1 = im.w * (x + 1) / w;
+            const unsigned y0 = im.h * y / h, y1 = im.h * (y + 1) / h;
+            const unsigned count = (x1 - x0) * (y1 - y0);
+            for (unsigned c = 0; c < 4; ++c) {
+                float sum = 0.f;
+                for (unsigned sy = y0; sy < y1; ++sy)
+                    for (unsigned sx = x0; sx < x1; ++sx)
+                        sum += im.rgba[(static_cast<std::size_t>(sy) * im.w + sx) * 4 + c];
+                o.rgba[(static_cast<std::size_t>(y) * w + x) * 4 + c] = sum / count;
+            }
+        }
+    return o;
+}
+
+// R8G8B8A8_UNORM_SRGB (29), in write_dds's layout. full_mips false (default) is the legacy
+// single-mip file, byte for byte; true appends the whole floor-halved chain to 1x1, box-filtered
+// in linear light (RGB and alpha) before sRGB encoding, using half()'s integer-area bins.
+// srgb false writes R8G8B8A8_UNORM (28) with the values passed through instead of re-encoded, for a source that was
+// UNORM (W1.3 step 1b's scaled copies keep the encoding of the layer they came from).
+inline std::vector<unsigned char> dds_bytes(const Image& im, bool full_mips = false, bool srgb = true) {
+    if (!im.w || !im.h || im.w > 16384 || im.h > 16384) return {};   // 16384 keeps the writer in read_dds's range
+    const std::size_t px = static_cast<std::size_t>(im.w) * im.h;
+    if (im.rgba.size() != px * 4) return {};
+    for (float v : im.rgba)
+        if (!std::isfinite(v)) return {};
+    std::vector<Image> chain(1, im);
+    while (full_mips && (chain.back().w > 1 || chain.back().h > 1)) chain.push_back(half(chain.back()));
+    std::size_t total = 148;
+    for (const Image& c : chain) total += static_cast<std::size_t>(c.w) * c.h * 4;
     std::uint32_t h[32] = {};
-    h[0] = 0x20534444; h[1] = 124; h[2] = 0x1 | 0x2 | 0x4 | 0x1000 | 0x8; h[3] = im.h; h[4] = im.w; h[5] = im.w * 4;
-    h[7] = 1; h[19] = 32; h[20] = 0x4; h[21] = 0x30315844; h[27] = 0x1000;
-    const std::uint32_t dx10[5] = {29, 3, 0, 1, 0};
-    std::vector<unsigned char> out(148 + static_cast<std::size_t>(im.w) * im.h * 4);
+    h[0] = 0x20534444; h[1] = 124;
+    h[2] = 0x1 | 0x2 | 0x4 | 0x1000 | 0x8 | (full_mips ? 0x20000 : 0);   // 0x20000 = DDS_FLAGS_MIPMAP
+    h[3] = im.h; h[4] = im.w; h[5] = im.w * 4;
+    h[7] = full_mips ? static_cast<unsigned>(chain.size()) : 1;
+    h[19] = 32; h[20] = 0x4; h[21] = 0x30315844;
+    h[27] = 0x1000 | (full_mips ? 0x8 | 0x400000 : 0);                  // 0x8 COMPLEX, 0x400000 MIPMAP
+    const std::uint32_t dx10[5] = {srgb ? 29u : 28u, 3, 0, 1, 0};
+    std::vector<unsigned char> out(total);
     std::memcpy(out.data(), h, sizeof h);
     std::memcpy(out.data() + 128, dx10, sizeof dx10);
-    for (std::size_t i = 0; i < static_cast<std::size_t>(im.w) * im.h; ++i)
-        for (unsigned c = 0; c < 4; ++c) {
-            const float v = c < 3 ? linear_to_srgb(im.rgba[i * 4 + c]) : im.rgba[i * 4 + c];
-            out[148 + i * 4 + c] = mask_channels::to_byte(v);
-        }
+    std::size_t off = 148;
+    for (const Image& c : chain) {
+        for (std::size_t i = 0; i < static_cast<std::size_t>(c.w) * c.h; ++i)
+            for (unsigned ch = 0; ch < 4; ++ch) {
+                const float raw = c.rgba[i * 4 + ch];
+                const float v = ch < 3 && srgb ? linear_to_srgb(raw) : raw;
+                out[off + i * 4 + ch] = mask_channels::to_byte(v);
+            }
+        off += static_cast<std::size_t>(c.w) * c.h * 4;
+    }
     return out;
 }
 

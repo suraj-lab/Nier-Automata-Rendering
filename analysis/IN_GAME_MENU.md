@@ -5,7 +5,34 @@ both save directions commit, the camera no longer moves while the panel is open.
 F9 frame capture used by the RTX Remix work (see below). Stage history at the end.
 
 The proxy `d3d11.dll` now hosts the settings panel inside the game. Press **Insert** to open or close it;
-**Esc** closes it. Save writes `NIER_RENDER.ini` for the **next launch** only. Nothing changes live.
+**Esc** closes it. Save writes `NIER_RENDER.ini` for the **next launch** only. The render preset never changes
+live; the Remix upscaler row below is the one live setting.
+
+## Remix upscaler row (P1, 2026-11-14) — live, gated offline, not yet measured in the game
+
+Shown only while live Remix runs (`NIER_REMIX=1` and the worker has started). Five one-click buttons under
+**REMIX UPSCALER (LIVE)**: Config, Ultra Perf, Perf, Balanced, Quality.
+
+- **Config** (default) sends nothing to the runtime: `rtx.conf`/`user.conf` decide, exactly as before P1.
+- Any other mode queues one latest-wins request; the Remix worker thread (never the game or UI thread) sends
+  `rtx.dlssPreset=2` (Custom, or a preset would override the choice), then `rtx.qualityDLSS` and `rtx.xess.preset`
+  with the same value: Ultra Performance 0, Performance 1, Balanced 2, Quality 3. If the runtime refuses the
+  first key, nothing more is sent and the refusal is logged. If any later key fails, prior writes may already be effective: the row warns about a partial override and highlights no mode. Rapid clicks: the newest pending pick wins.
+- **Back to Config after a mode was applied takes effect on restart.** The runtime has no "return to config"
+  call; the panel says so and keeps the effective mode highlighted until restart.
+- Mouse click or keyboard navigation (Tab/arrows, Enter/Space) selects a mode. The pick is saved to
+  `NIER_REMIX.ini` beside the DLL (`upscaler = quality`; atomic replace, other lines kept)
+  and applied at the next start. `NIER_REMIX_LIVE_UPSCALER=<mode>` in the environment or `NIER_ENV.ini` wins over
+  the file. An invalid value in either is logged (`remix: upscaler selection ... rejected`) and nothing is sent.
+  `NIER_RENDER.ini` is never written by this row. The laptop helper keeps the file on restore (`KEEP`).
+- Log lines: `remix: upscaler selection <mode> (<source>) -> <key>=<value> (ok|refused)`,
+  `menu: upscaler <mode> requested queued=<0|1> saved=<0|1> env_override=<0|1>`, `menu: upscaler row <mode> x0,y0,x1,y1`.
+
+Gates: `checks/test_upscaler_modes.py`, `test_upscaler_settings.py` (native), `test_upscaler_live.py`,
+`test_upscaler_menu.py` (Wine mock + recording fake runtime), `test_upscaler_panel.py` (native scale/input): saved relaunch, environment precedence, invalid file,
+refused preset, row geometry, live Quality click, Config-after-write). Limits: the fake runtime records calls; it
+does not prove the real runtime changes its render size. DLSS modes are measured only on the laptop (US1);
+the desktop RX 6800 XT can only exercise XeSS.
 
 ## How it attaches
 - Existing layers, from shipped binaries: NIER_DLAA (`d3d11_dlaa.dll`) hooks `IDXGIFactory::CreateSwapChain` /

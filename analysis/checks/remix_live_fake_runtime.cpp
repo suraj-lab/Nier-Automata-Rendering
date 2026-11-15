@@ -40,11 +40,28 @@ unsigned frames = 0, copies = 0, fail_copy_at = 0, materials = 0, meshes = 0, li
 UINT last_w = 0, last_h = 0;
 unsigned long long handle = 0x5000;
 std::map<unsigned long long, unsigned long long> material_hashes;  // handle -> hash, so a destroy can be logged by hash
+// W3 step 2: resource lifetimes. The runtime resolves a mesh's material by hash, so what must stay alive is the *hash*:
+// a grey_first refresh destroys a material and re-creates it under its own hash (accepted path), while a hash that
+// disappears for good leaves every mesh drawn with it pointing at nothing. Counted per hash, checked at DrawInstance.
+std::map<unsigned long long, unsigned> material_live;                 // material hash -> how many handles are live
+std::map<unsigned long long, unsigned long long> mesh_material_hash;  // mesh hash -> the material hash its surfaces name
 // Mesh handles are the hash, as in the real runtime. Laptop probe 2026-10-30 (analysis/remix-probe REPROBE_REPLACE):
 // CreateMesh under a hash that is still live keeps the OLD geometry, and re-creating a hash after DestroyMesh crashed
 // the runtime (access violation). Both are contract violations here, so the mock gates see what the runtime does.
 std::set<unsigned long long> live_meshes, destroyed_meshes;
 std::map<unsigned long long, std::pair<unsigned, unsigned long long>> skinned_this_frame;  // mesh -> (frame+1, bone hash)
+// The runtime finds an extension in the pNext chain by sType (pnext::find), so the fixture walks the chain too instead of
+// assuming which struct comes first.
+template <typename T>
+const T* pnext_find(const void* p, remixapi_StructType type) {
+    struct Head { remixapi_StructType sType; const void* pNext; };
+    const Head* h = static_cast<const Head*>(p);
+    while (h) {
+        if (h->sType == type) return reinterpret_cast<const T*>(h);
+        h = static_cast<const Head*>(h->pNext);
+    }
+    return nullptr;
+}
 
 remixapi_ErrorCode REMIXAPI_CALL create_d3d9(remixapi_Bool, IDirect3D9Ex** out9) {
     note("CreateD3D9 registered=%d started=%d", registered != nullptr, started);
@@ -67,6 +84,7 @@ remixapi_ErrorCode REMIXAPI_CALL startup(const remixapi_StartupInfo* info) {
     }
     note("Startup hwnd_visible=%d combineGui=%d registered=%d", info && IsWindowVisible(info->hwnd), info ? info->combineGuiInFinalColor : -1,
          registered != nullptr);
+    note("Startup-thread tid=%lu", GetCurrentThreadId());
     if (!registered) note("VIOLATION Startup before Register");
     started = true;
     live_meshes.clear();
@@ -74,14 +92,15 @@ remixapi_ErrorCode REMIXAPI_CALL startup(const remixapi_StartupInfo* info) {
     if (info) startup_window = info->hwnd;
     return registered ? REMIXAPI_ERROR_CODE_ALREADY_EXISTS : REMIXAPI_ERROR_CODE_SUCCESS;
 }
-// The real runtime loads a material's DDS files when it creates the material: a live texture (live_*.dds) that is not
-// completely on disk yet would load as nothing. Checked: present, "DDS " magic, DX10 header, more than the 148 header bytes.
-// Scene-file textures (nscn fixtures) are not checked; those gates do not write them.
+// The real runtime loads a material's DDS files when it creates the material: a live texture (live_*.dds) or a W1.3
+// scaled sky copy (sky_*.dds) that is not completely on disk yet would load as nothing. Checked: present, "DDS " magic,
+// DX10 header, more than the 148 header bytes. Scene-file textures (nscn fixtures) are not checked; those gates do not
+// write them.
 void check_on_disk(const wchar_t* path) {
     if (!path) return;
     const wchar_t* name = std::wcsrchr(path, L'\\');
     name = name ? name + 1 : path;
-    if (std::wcsncmp(name, L"live_", 5)) return;
+    if (std::wcsncmp(name, L"live_", 5) && std::wcsncmp(name, L"sky_", 4)) return;
     char shown[MAX_PATH * 3] = "";
     WideCharToMultiByte(CP_UTF8, 0, name, -1, shown, sizeof shown, nullptr, nullptr);
     FILE* f = _wfopen(path, L"rb");
@@ -98,14 +117,27 @@ remixapi_ErrorCode REMIXAPI_CALL create_material(const remixapi_MaterialInfo* i,
     if (i) {
         check_on_disk(i->albedoTexture);
         check_on_disk(i->normalTexture);
-        const auto* e = static_cast<const remixapi_MaterialInfoOpaqueEXT*>(i->pNext);
-        if (e && e->sType == REMIXAPI_STRUCT_TYPE_MATERIAL_INFO_OPAQUE_EXT) { check_on_disk(e->roughnessTexture); check_on_disk(e->metallicTexture); }
+        const auto* e = pnext_find<remixapi_MaterialInfoOpaqueEXT>(i->pNext, REMIXAPI_STRUCT_TYPE_MATERIAL_INFO_OPAQUE_EXT);
+        if (e) { check_on_disk(e->roughnessTexture); check_on_disk(e->metallicTexture); }
     }
+    // W3: the translucent extension, if this material carries one (the water path), and always a `trans=` field so a
+    // switch-off run can be told apart from a missing report rather than from a shorter line.
+    char translucent[192];
+    if (const auto* t = i ? pnext_find<remixapi_MaterialInfoTranslucentEXT>(
+                                i->pNext, REMIXAPI_STRUCT_TYPE_MATERIAL_INFO_TRANSLUCENT_EXT)
+                          : nullptr)
+        std::snprintf(translucent, sizeof translucent,
+                      "trans=1 index=%.3f diffuse=%d thinwall=%d,%.3f transcol=%.3f,%.3f,%.3f dist=%.3f",
+                      t->refractiveIndex, int(t->useDiffuseLayer), int(t->thinWallThickness_hasvalue),
+                      t->thinWallThickness_value, t->transmittanceColor.x, t->transmittanceColor.y,
+                      t->transmittanceColor.z, t->transmittanceMeasurementDistance);
+    else
+        std::snprintf(translucent, sizeof translucent, "trans=0");
     if (i && !i->albedoTexture) {
         // Item T1: the surface is sent in grey until its albedo file is on disk, so this is a real material - log it
         // (path=-) and hand out a handle, or the mesh would be built with no material at all.
-        const auto* e = static_cast<const remixapi_MaterialInfoOpaqueEXT*>(i->pNext);
-        const bool opaque_ext = e && e->sType == REMIXAPI_STRUCT_TYPE_MATERIAL_INFO_OPAQUE_EXT;
+        const auto* e = pnext_find<remixapi_MaterialInfoOpaqueEXT>(i->pNext, REMIXAPI_STRUCT_TYPE_MATERIAL_INFO_OPAQUE_EXT);
+        const bool opaque_ext = e != nullptr;
         const auto base_name = [](const wchar_t* w, char* out, int n) {
             out[0] = 0;
             if (!w) return;
@@ -117,14 +149,16 @@ remixapi_ErrorCode REMIXAPI_CALL create_material(const remixapi_MaterialInfo* i,
         base_name(opaque_ext ? e->roughnessTexture : nullptr, rough, sizeof rough);
         base_name(opaque_ext ? e->metallicTexture : nullptr, metal, sizeof metal);
         note("CreateMaterial path=- normal=%s presented=%u alpha=%d/%u hash=%llu roughness=%s metallic=%s id=%llu "
-             "aconst=%.3f,%.3f,%.3f mconst=%.3f rconst=%.3f",
+             "aconst=%.3f,%.3f,%.3f mconst=%.3f rconst=%.3f drawcall=%d aniso=%.3f %s",
              normal[0] ? normal : "-", 0u, opaque_ext ? e->alphaTestType : -1,
              opaque_ext ? unsigned(e->alphaReferenceValue) : 0u, static_cast<unsigned long long>(i->hash),
              rough[0] ? rough : "-", metal[0] ? metal : "-", handle,
              opaque_ext ? e->albedoConstant.x : -1.f, opaque_ext ? e->albedoConstant.y : -1.f,
              opaque_ext ? e->albedoConstant.z : -1.f, opaque_ext ? e->metallicConstant : -1.f,
-             opaque_ext ? e->roughnessConstant : -1.f);
+             opaque_ext ? e->roughnessConstant : -1.f, opaque_ext ? e->useDrawCallAlphaState : -1,
+             opaque_ext ? e->anisotropy : -1.f, translucent);
         material_hashes[handle] = static_cast<unsigned long long>(i->hash);
+        ++material_live[static_cast<unsigned long long>(i->hash)];
         *h = reinterpret_cast<remixapi_MaterialHandle>(handle++);
         return REMIXAPI_ERROR_CODE_SUCCESS;
     }
@@ -132,8 +166,8 @@ remixapi_ErrorCode REMIXAPI_CALL create_material(const remixapi_MaterialInfo* i,
         char path[MAX_PATH * 3] = "";
         WideCharToMultiByte(CP_UTF8, 0, i->albedoTexture, -1, path, sizeof path, nullptr, nullptr);
         const char* slash = std::strrchr(path, '\\');
-        const auto* ext = static_cast<const remixapi_MaterialInfoOpaqueEXT*>(i->pNext);
-        const bool opaque_ext = ext && ext->sType == REMIXAPI_STRUCT_TYPE_MATERIAL_INFO_OPAQUE_EXT;
+        const auto* ext = pnext_find<remixapi_MaterialInfoOpaqueEXT>(i->pNext, REMIXAPI_STRUCT_TYPE_MATERIAL_INFO_OPAQUE_EXT);
+        const bool opaque_ext = ext != nullptr;
         char normal[MAX_PATH * 3] = "";
         if (i->normalTexture) {
             WideCharToMultiByte(CP_UTF8, 0, i->normalTexture, -1, normal, sizeof normal, nullptr, nullptr);
@@ -149,15 +183,17 @@ remixapi_ErrorCode REMIXAPI_CALL create_material(const remixapi_MaterialInfo* i,
         base_name(opaque_ext ? ext->roughnessTexture : nullptr, rough, sizeof rough);
         base_name(opaque_ext ? ext->metallicTexture : nullptr, metal, sizeof metal);
         note("CreateMaterial path=%s normal=%s presented=%u alpha=%d/%u hash=%llu roughness=%s metallic=%s id=%llu "
-             "aconst=%.3f,%.3f,%.3f mconst=%.3f rconst=%.3f",
+             "aconst=%.3f,%.3f,%.3f mconst=%.3f rconst=%.3f drawcall=%d aniso=%.3f %s",
              slash ? slash + 1 : path, normal[0] ? normal : "-", frames,
              opaque_ext ? ext->alphaTestType : -1, opaque_ext ? unsigned(ext->alphaReferenceValue) : 0u,
              static_cast<unsigned long long>(i->hash), rough[0] ? rough : "-", metal[0] ? metal : "-", handle,
              opaque_ext ? ext->albedoConstant.x : -1.f, opaque_ext ? ext->albedoConstant.y : -1.f,
              opaque_ext ? ext->albedoConstant.z : -1.f, opaque_ext ? ext->metallicConstant : -1.f,
-             opaque_ext ? ext->roughnessConstant : -1.f);
+             opaque_ext ? ext->roughnessConstant : -1.f, opaque_ext ? ext->useDrawCallAlphaState : -1,
+             opaque_ext ? ext->anisotropy : -1.f, translucent);
     }
     material_hashes[handle] = static_cast<unsigned long long>(i->hash);
+    ++material_live[static_cast<unsigned long long>(i->hash)];
     *h = reinterpret_cast<remixapi_MaterialHandle>(handle++); return REMIXAPI_ERROR_CODE_SUCCESS;
 }
 remixapi_ErrorCode REMIXAPI_CALL create_mesh(const remixapi_MeshInfo* i, remixapi_MeshHandle* h) {
@@ -202,11 +238,14 @@ remixapi_ErrorCode REMIXAPI_CALL create_mesh(const remixapi_MeshInfo* i, remixap
             uv0[1] += i->surfaces_values[0].vertices_values[k].texcoord[1];
         }
     }
-    note("CreateMesh hash=%llu surfaces=%u verts=%llu indices=%llu materials=%u skinned=%d bonesPerVertex=%u weights=%llu v0=%.3f,%.3f,%.3f presented=%u started=%d key=%llu uvsum=%.4f,%.4f mat=%llu",
+    const unsigned long long mesh_material =
+        i && i->surfaces_count ? static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(i->surfaces_values[0].material)) : 0ull;
+    note("CreateMesh hash=%llu surfaces=%u verts=%llu indices=%llu materials=%u skinned=%d bonesPerVertex=%u weights=%llu v0=%.3f,%.3f,%.3f presented=%u started=%d key=%llu uvsum=%.4f,%.4f mat=%llu mathash=%llu",
          i ? static_cast<unsigned long long>(i->hash) : 0ull, i ? i->surfaces_count : 0u, verts, indices, materials,
          skinned ? 1 : 0, bones_per_vertex, weights, v0[0], v0[1], v0[2], frames, started,
-         i ? static_cast<unsigned long long>(i->hash) >> 32 : 0ull, uv0[0], uv0[1],
-         i && i->surfaces_count ? static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(i->surfaces_values[0].material)) : 0ull);
+         i ? static_cast<unsigned long long>(i->hash) >> 32 : 0ull, uv0[0], uv0[1], mesh_material,
+         // The material's hash, not its handle: a grey material is re-created under the same hash when its file lands.
+         mesh_material && material_hashes.count(mesh_material) ? material_hashes[mesh_material] : 0ull);
     // Item L5b: one line per surface when a mesh has several (terrain layers): material, indices, UV sum.
     if (i && i->surfaces_count > 1)
         for (std::uint32_t k = 0; k < i->surfaces_count; ++k) {
@@ -223,6 +262,8 @@ remixapi_ErrorCode REMIXAPI_CALL create_mesh(const remixapi_MeshInfo* i, remixap
     if (live_meshes.count(hash)) note("VIOLATION CreateMesh hash=%llu reused while live: the runtime keeps the old geometry", hash);
     if (destroyed_meshes.count(hash)) note("VIOLATION CreateMesh hash=%llu re-created after DestroyMesh: the runtime crashed", hash);
     live_meshes.insert(hash);
+    // W3: which material hash every mesh's surface names, so DrawInstance can say whether it is still live.
+    mesh_material_hash[hash] = mesh_material && material_hashes.count(mesh_material) ? material_hashes[mesh_material] : 0ull;
     *h = reinterpret_cast<remixapi_MeshHandle>(hash); return REMIXAPI_ERROR_CODE_SUCCESS;
 }
 remixapi_ErrorCode REMIXAPI_CALL create_light(const remixapi_LightInfo* info, remixapi_LightHandle* h) {
@@ -261,9 +302,10 @@ remixapi_ErrorCode REMIXAPI_CALL draw_instance(const remixapi_InstanceInfo* i) {
     // The real runtime skins into the mesh's BLAS entry (remix-1.6.1 rtx_scene_manager.cpp:400-428, modifiedGeometryData
     // and lastBoneHash live on the BlasEntry), not per instance: one mesh drawn twice in a frame with two different bone
     // sets shows one pose for both. Live 2026-10-31: identical enemies sharing a Phase 4 mesh froze/jumped.
-    if (i && i->pNext && static_cast<const remixapi_InstanceInfoBoneTransformsEXT*>(i->pNext)->sType ==
-                             REMIXAPI_STRUCT_TYPE_INSTANCE_INFO_BONE_TRANSFORMS_EXT) {
-        const auto* b = static_cast<const remixapi_InstanceInfoBoneTransformsEXT*>(i->pNext);
+    if (i && pnext_find<remixapi_InstanceInfoBoneTransformsEXT>(i->pNext,
+                                                              REMIXAPI_STRUCT_TYPE_INSTANCE_INFO_BONE_TRANSFORMS_EXT)) {
+        const auto* b = pnext_find<remixapi_InstanceInfoBoneTransformsEXT>(
+            i->pNext, REMIXAPI_STRUCT_TYPE_INSTANCE_INFO_BONE_TRANSFORMS_EXT);
         unsigned long long h = 1469598103934665603ull;
         const unsigned char* bytes = reinterpret_cast<const unsigned char*>(b->boneTransforms_values);
         for (std::size_t k = 0; bytes && k < sizeof(remixapi_Transform) * b->boneTransforms_count; ++k) h = (h ^ bytes[k]) * 1099511628211ull;
@@ -275,14 +317,33 @@ remixapi_ErrorCode REMIXAPI_CALL draw_instance(const remixapi_InstanceInfo* i) {
     }
     if (std::getenv("FAKE_REMIX_INSTANCE_LOG") && i) {  // remixapi_Transform is float matrix[3][4]; there is no row 3
         const auto& m = i->transform.matrix;
-        const auto* bones = static_cast<const remixapi_InstanceInfoBoneTransformsEXT*>(i->pNext);
-        const std::uint32_t bone_count = bones && bones->sType == REMIXAPI_STRUCT_TYPE_INSTANCE_INFO_BONE_TRANSFORMS_EXT
-                                             ? bones->boneTransforms_count : 0u;
-        note("DrawInstance presented=%u mesh=%llu bones=%u flags=%u row0=%.3f,%.3f,%.3f,%.3f row1=%.3f,%.3f,%.3f,%.3f row2=%.3f,%.3f,%.3f,%.3f",
+        const auto* bones = pnext_find<remixapi_InstanceInfoBoneTransformsEXT>(
+            i->pNext, REMIXAPI_STRUCT_TYPE_INSTANCE_INFO_BONE_TRANSFORMS_EXT);
+        const std::uint32_t bone_count = bones ? bones->boneTransforms_count : 0u;
+        // E1.6: the per-instance blend state, as the runtime would cast it (VkBlendFactor / VkBlendOp / write mask).
+        struct Read { int enabled; unsigned src, dst, op, asrc, adst, aop, mask, atestop, atestref; }
+            b{-1, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+        if (const auto* bl = pnext_find<remixapi_InstanceInfoBlendEXT>(i->pNext,
+                                                                       REMIXAPI_STRUCT_TYPE_INSTANCE_INFO_BLEND_EXT))
+            b = {static_cast<int>(bl->alphaBlendEnabled), bl->srcColorBlendFactor, bl->dstColorBlendFactor, bl->colorBlendOp,
+                 bl->srcAlphaBlendFactor, bl->dstAlphaBlendFactor, bl->alphaBlendOp, bl->writeMask,
+                 bl->alphaTestCompareOp, bl->alphaTestReferenceValue};
+        // W3: the mesh's material must still exist as a hash. The runtime finds a material by hash, so a mesh whose
+        // surface was destroyed and never re-created draws with nothing -- a leak this line makes visible.
+        const unsigned long long drawn_mesh = static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(i->mesh));
+        const auto mesh_mat = mesh_material_hash.find(drawn_mesh);
+        const int matlive = mesh_mat == mesh_material_hash.end() || !mesh_mat->second
+                                ? -1   // not built through this fixture's CreateMesh: no claim
+                                : (material_live.count(mesh_mat->second) ? 1 : 0);
+        if (matlive == 0)
+            note("VIOLATION DrawInstance mesh=%llu names material hash=%llu, which is not live", drawn_mesh,
+                 static_cast<unsigned long long>(mesh_mat->second));
+        note("DrawInstance presented=%u mesh=%llu bones=%u flags=%u row0=%.3f,%.3f,%.3f,%.3f row1=%.3f,%.3f,%.3f,%.3f row2=%.3f,%.3f,%.3f,%.3f blend=%d src=%u dst=%u op=%u asrc=%u adst=%u aop=%u mask=%u atestop=%u atestref=%u matlive=%d",
              frames,
-             static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(i->mesh)), bone_count, i->categoryFlags,
+             drawn_mesh, bone_count, i->categoryFlags,
              m[0][0], m[0][1], m[0][2], m[0][3], m[1][0], m[1][1], m[1][2], m[1][3],
-             m[2][0], m[2][1], m[2][2], m[2][3]);
+             m[2][0], m[2][1], m[2][2], m[2][3],
+             b.enabled, b.src, b.dst, b.op, b.asrc, b.adst, b.aop, b.mask, b.atestop, b.atestref, matlive);
         if (bone_count && bones->boneTransforms_values) {
             const remixapi_Transform& b0 = bones->boneTransforms_values[0];
             const remixapi_Transform& b1 = bones->boneTransforms_values[bone_count > 1 ? 1 : 0];
@@ -358,6 +419,14 @@ remixapi_ErrorCode REMIXAPI_CALL copy_output(IDirect3DSurface9* surface, remixap
 }
 }  // namespace
 
+static remixapi_ErrorCode REMIXAPI_CALL set_config_variable(const char* key, const char* value) {
+    const char* fail = std::getenv("FAKE_REMIX_CONFIG_FAIL");
+    if (fail && key && std::strcmp(fail, key) == 0) { note("SetConfigVariable REFUSED %s", key); return REMIXAPI_ERROR_CODE_INVALID_ARGUMENTS; }
+    note("SetConfigVariable %s %s", key ? key : "(null)", value ? value : "(null)");
+    note("Config-thread tid=%lu", GetCurrentThreadId());
+    return REMIXAPI_ERROR_CODE_SUCCESS;
+}
+
 extern "C" __declspec(dllexport) void fake_fail_copy_next() { fail_next_copy.store(true); }
 
 extern "C" __declspec(dllexport) remixapi_ErrorCode REMIXAPI_CALL remixapi_InitializeLibrary(const remixapi_InitializeLibraryInfo* info,
@@ -369,13 +438,20 @@ extern "C" __declspec(dllexport) remixapi_ErrorCode REMIXAPI_CALL remixapi_Initi
   if (const char* f = std::getenv("FAKE_REMIX_EXIT_ON_INIT")) { (void)f; std::exit(0); }
     note("InitializeLibrary version_minor=%llu", info ? static_cast<unsigned long long>(REMIXAPI_VERSION_GET_MINOR(info->version)) : 0ull);
     *api = remixapi_Interface{};
-    api->Shutdown = [] { return REMIXAPI_ERROR_CODE_SUCCESS; };
+    api->Shutdown = [] {
+        note("Shutdown tid=%lu", GetCurrentThreadId());
+        if (std::getenv("FAKE_REMIX_SHUTDOWN_HANG")) for (;;) Sleep(1000);  // a runtime whose teardown never returns
+        return REMIXAPI_ERROR_CODE_SUCCESS;
+    };
     api->CreateMaterial = create_material;
     api->DestroyMaterial = [](remixapi_MaterialHandle m) {
         const auto id = reinterpret_cast<unsigned long long>(m);
         const auto known = material_hashes.find(id);
         if (known == material_hashes.end()) { note("VIOLATION DestroyMaterial of unknown handle id=%llu", id); return REMIXAPI_ERROR_CODE_SUCCESS; }
         note("DestroyMaterial hash=%llu id=%llu presented=%u", known->second, id, frames);
+        // W3: the hash stops being live only when its last handle goes; a grey_first refresh re-creates it at once.
+        if (auto live = material_live.find(known->second); live != material_live.end() && --live->second == 0)
+            material_live.erase(live);
         material_hashes.erase(known);
         return REMIXAPI_ERROR_CODE_SUCCESS;
     };
@@ -395,5 +471,6 @@ extern "C" __declspec(dllexport) remixapi_ErrorCode REMIXAPI_CALL remixapi_Initi
     api->dxvk_CopyRenderingOutput = copy_output;
     api->Startup = startup;
     api->Present = present;
+    if (!std::getenv("FAKE_REMIX_NO_CONFIG")) api->SetConfigVariable = set_config_variable;
     return REMIXAPI_ERROR_CODE_SUCCESS;
 }

@@ -1,5 +1,25 @@
 # NieR:Automata Rendering — Progress & Resume
 
+## Project closed — 2026-11-15
+
+The RTX Remix route for NieR:Automata is stopped by the user's decision: not playable enough.
+- Laptop (RTX Spark N1X, 2880x1800): DLSS Ultra Performance median 24.1 fps (p10 20.0), up from 17.0 at Performance,
+  GPU-bound (`analysis/replay/execution-2026-11-15-LAPTOP_ULTRA_PERF.md`). DLSS frame generation cannot reach the screen
+  with the copied-output design; it would need the unbuilt P2 presentation work, on a ~24 fps base.
+- Desktop (RX 9070 XT, 3440x1440): 8–15 fps, GPU-bound; no DLSS on AMD.
+- Textures: Remix shows the original textures with approximated materials; better ones need asset work the plan
+  never covered.
+- Last state: suite 136/137 at iteration 7 (`test_private_run_prefix` red from a lead edit, fixed and rerun green
+  afterwards; no full suite after the fix). Offline work from the 2026-11-15 unattended night (W1.2–1.3, R2, E1.6, W3,
+  W5) is gated but never validated live. Still installed: laptop proxy (`deploy/laptop_port.py restore` undoes it) and the
+  desktop proxy `a6ed67c9…` (rollback folders in `analysis/backups/`).
+- Reusable beyond this project: the frozen-gate methodology, the unattended loop (`analysis/tools/overnight.sh`) with its
+  authorization guard (`analysis/checks/unattended_guard.py`), the hash-pinned installers, save guards and the research
+  notes.
+- Possible successor direction (not started, not planned): mod in DLSS/DLSS-FG directly, look at AMD FSR "Redstone",
+  and study how FAR uncaps the frame rate and improves textures.
+
+
 ## START HERE (2026-11-14): the plan's look phase is done where data allows; the laptop plays it
 
 Pushed on `main`. Suite **94/94** (`analysis/runtime/suite-s56`). Proxy DLL **`9555829d…`** installed on both machines:

@@ -18,4 +18,8 @@ void before_draw(ID3D11DeviceContext* context, UINT index_count);
 void on_present(IDXGISwapChain* swapchain, void (*log)(const char* format, ...));
 // After our overlay drawing, arm camera-only observation for the next game frame (off unless Remix is active).
 void begin_game_frame(IDXGISwapChain* swapchain);
+// P1 menu -> worker: request an upscaler::Mode (as int). False when no live worker has started (row not shown).
+bool request_upscaler(int mode);
+// Last fully accepted mode as int, 5 for a partial override (restart required), -1 before startup/off/failure.
+int upscaler_mode();
 }  // namespace remix_live

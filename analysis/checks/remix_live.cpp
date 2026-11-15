@@ -4,6 +4,7 @@
 #include <d3d9.h>
 #include <d3d11.h>
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cstdio>
 #include <mutex>
@@ -21,6 +22,7 @@
 #include "camera_orbit.h"
 #include "draw_capture.h"
 #include "live_scene.h"
+#include "upscaler_settings.h"
 #include "dropout_watch.h"
 #include "input_drive.h"
 #include <map>
@@ -107,7 +109,7 @@ bool game_camera(float out[3]) {
 }
 
 // source: the live capture sequence the frame was rendered from (0 for the static scene).
-struct Frame { std::vector<unsigned char> pixels; UINT width = 0, height = 0; DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN; unsigned long long seq = 0, source = 0; };
+struct Frame { std::vector<unsigned char> pixels; UINT width = 0, height = 0; DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN; unsigned long long seq = 0, source = 0, camera_sequence = 0, completed_us = 0; std::array<float, 14> remix_camera{}; };
 // Guarded by `published`: the newest finished frame, and what the game currently presents.
 std::mutex published;
 Frame ready;
@@ -301,6 +303,7 @@ State configure() {
         // NIER_REMIX_LIVE_NO_ALPHA_TEST=1: the renderer-side A/B, since the capture side is measured healthy.
         live_scene::alpha_test_enabled = env(L"NIER_REMIX_LIVE_NO_ALPHA_TEST") != L"1";
         live_scene::hold_enabled = env(L"NIER_REMIX_LIVE_HOLD") != L"0";
+        live_scene::terrain_mips = env(L"NIER_REMIX_LIVE_TERRAIN_MIPS") == L"1";
         // Item T1 switches are read at load (live_scene.h / live_capture.h): the first frames are captured before this
         // initialiser runs, so setting them here would be too late for the session's first mesh.
 
@@ -310,6 +313,10 @@ State configure() {
         if (const std::wstring s = env(L"NIER_REMIX_LIVE_HOLD_TOGGLE_S"); !s.empty())
             hold_toggle_us = 1000000ull * std::min<unsigned long long>(_wcstoui64(s.c_str(), nullptr, 10), 3600);
         live_capture::visibility_trace_enabled.store(env(L"NIER_REMIX_LIVE_TRACE") == L"1", std::memory_order_release);
+        const std::wstring census = env(L"NIER_REMIX_LIVE_EFFECT_CENSUS");
+        effect_census::sky_enabled.store(env(L"NIER_REMIX_LIVE_SKY_CENSUS") == L"1", std::memory_order_release);
+        effect_census::defer_until_handoff.store(census == L"handoff", std::memory_order_relaxed);
+        effect_census::enabled.store(census == L"1" || census == L"handoff", std::memory_order_release);
         if (const std::wstring n = env(L"NIER_REMIX_LIVE_STATS_EVERY"); !n.empty())
             if (const unsigned long long v = _wcstoui64(n.c_str(), nullptr, 10); v >= 2) stats_every = std::min<unsigned long long>(v, 100000);  // % 1 never == 1
         if (const std::wstring n = env(L"NIER_REMIX_LIVE_TEX_PER_FRAME"); !n.empty())
@@ -473,6 +480,90 @@ struct TextureWriter {
 };
 
 // Everything Remix-side lives on this thread.
+// P1: upscaler selection. Every runtime write happens on the worker thread that owns `api`: at startup (environment,
+// then the saved NIER_REMIX.ini beside the proxy) and when the menu requests a mode. Config sends nothing, which is
+// today's behaviour; the runtime has no "reset to config" call, so Config after a write takes effect on restart.
+std::atomic<int> upscaler_pending{-1};   // menu -> worker, latest request wins
+std::atomic<int> upscaler_current{-1};   // -1 until the worker has started
+std::atomic<bool> upscaler_partial{false};  // partial API success: do not highlight a fully accepted mode
+bool upscaler_written = false;           // worker thread only
+
+std::wstring proxy_dir() {  // empty when unknown or truncated: then no settings file is read
+    HMODULE self = nullptr;
+    wchar_t path[MAX_PATH] = {};
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                            reinterpret_cast<LPCWSTR>(&proxy_dir), &self))
+        return L"";
+    const DWORD n = GetModuleFileNameW(self, path, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return L"";
+    std::wstring dir(path, n);
+    const size_t slash = dir.find_last_of(L"\\/");
+    return slash == std::wstring::npos ? L"" : dir.substr(0, slash + 1);
+}
+
+void set_upscaler_current(upscaler::Mode mode) {
+    if (upscaler_current.exchange(static_cast<int>(mode)) == static_cast<int>(mode)) return;
+    logger.load()("remix: upscaler now %s", mode == upscaler::Mode::Config ? "config" : upscaler::mode_to_string(mode).c_str());
+}
+
+void apply_upscaler(const remixapi_Interface& api, upscaler::Mode mode, const char* source) {
+    const std::string name = mode == upscaler::Mode::Config ? "config" : upscaler::mode_to_string(mode);
+    const auto keep_current = [] {  // nothing applied: the row keeps showing what is really in effect
+        const int now = upscaler_current.load();
+        set_upscaler_current(now < 0 ? upscaler::Mode::Config : static_cast<upscaler::Mode>(now));
+    };
+    if (mode == upscaler::Mode::Config) {
+        if (upscaler_written) {
+            logger.load()("remix: upscaler selection config (%s): restart required to return to the runtime's own setting", source);
+            return;  // the current runtime override remains effective until restart
+        }
+        set_upscaler_current(mode);
+        return;
+    }
+    if (!api.SetConfigVariable) {
+        logger.load()("remix: upscaler selection '%s' skipped: this runtime has no SetConfigVariable", name.c_str());
+        return keep_current();
+    }
+    bool changed = false;
+    for (const auto& write : upscaler::writes_for(mode)) {
+        const remixapi_ErrorCode r = api.SetConfigVariable(write.key, write.value);
+        logger.load()("remix: upscaler selection %s (%s) -> %s=%s (%s)", name.c_str(), source, write.key, write.value,
+                      r == REMIXAPI_ERROR_CODE_SUCCESS ? "ok" : "refused");
+        if (r == REMIXAPI_ERROR_CODE_SUCCESS) { changed = upscaler_written = true; continue; }
+        if (changed) {
+            upscaler_partial.store(true);
+            logger.load()("remix: upscaler partial override: earlier keys may be effective; restart to restore config");
+        }
+        return keep_current();  // stop on any refusal; never present a partial override as an accepted mode
+    }
+    upscaler_partial.store(false);
+    set_upscaler_current(mode);
+}
+
+void apply_startup_upscaler(const remixapi_Interface& api) {
+    const char* env = std::getenv("NIER_REMIX_LIVE_UPSCALER");
+    upscaler::Mode mode = upscaler::Mode::Config;
+    if (env && *env) {
+        if (!upscaler::parse_mode(env, mode)) {
+            logger.load()("remix: upscaler selection rejected '%s' (not a known mode); runtime unchanged", env);
+            return set_upscaler_current(upscaler::Mode::Config);
+        }
+        return apply_upscaler(api, mode, "environment");
+    }
+    const std::wstring dir = proxy_dir();
+    if (dir.empty()) {
+        logger.load()("remix: upscaler selection: proxy folder unknown, NIER_REMIX.ini not read; runtime unchanged");
+        return set_upscaler_current(upscaler::Mode::Config);
+    }
+    std::string error;
+    mode = upscaler::load_mode(std::filesystem::path(dir) / L"NIER_REMIX.ini", &error);
+    if (!error.empty()) {
+        logger.load()("remix: upscaler selection from NIER_REMIX.ini rejected: %s; runtime unchanged", error.c_str());
+        return set_upscaler_current(upscaler::Mode::Config);
+    }
+    apply_upscaler(api, mode, "NIER_REMIX.ini");
+}
+
 struct Worker {
     remixapi_Interface api{};
     remixapi_HMODULE module = nullptr;
@@ -805,6 +896,7 @@ struct Worker {
         }
         logger.load()("remix: started %ux%u startup=%d surfaces=%u sky_skipped=%u untextured=%u live=%d", width, height,
                       static_cast<int>(started), built.surfaces, built.sky_skipped, built.untextured, live_enabled ? 1 : 0);
+        apply_startup_upscaler(api);
         live.budget = live_mesh_budget;
         live_capture::set_permitted(live_enabled);
         return true;
@@ -1027,6 +1119,24 @@ struct Worker {
                     if (live_capture::flag_constants)   // item L3: draws whose own flags chose constants over a texture
                         logger.load()("remix: live flag_constants draws=%llu normal_off=%llu",
                                       live_capture::flag_constant_draws.load(), live_capture::flag_normal_off_draws.load());
+                    if (live_capture::sky_layers)   // W1.3: sky draws seen, and why a layer kept today's material
+                        logger.load()("remix: live sky_layers draws=%llu folded=%llu textured=%llu unresolved=%llu "
+                                      "scaled=%llu copies=%llu copy_refused=%llu",
+                                      live_capture::sky_layer_draws.load(), live_capture::sky_layer_folded.load(),
+                                      live_capture::sky_layer_textured.load(), live_capture::sky_layer_unresolved.load(),
+                                      sky_scale::draws.load(), sky_scale::copies.load(), sky_scale::refused.load());
+                    if (live_capture::particle_blend_on)   // E1.6: effect draws handed to the runtime as particles
+                        logger.load()("remix: live particle_blend draws=%llu submitted=%llu refused=%llu",
+                                      live_capture::particle_draws.load(), live_capture::particle_submitted.load(),
+                                      live_capture::particle_refused.load());
+                    if (live_capture::water_on)   // W3: the pond's water family, and the draws its state refused
+                        logger.load()("remix: live water draws=%llu submitted=%llu refused=%llu",
+                                      live_capture::water_draws.load(), live_capture::water_submitted.load(),
+                                      live_capture::water_refused.load());
+                    if (live_capture::hair_on)   // W5: the hair family, and the draws its state or lobe flag refused
+                        logger.load()("remix: live hair draws=%llu submitted=%llu refused=%llu",
+                                      live_capture::hair_draws.load(), live_capture::hair_submitted.load(),
+                                      live_capture::hair_refused.load());
                     logger.load()("remix: live rebuilds first=%llu unknown=%llu buffer=%llu pose=%llu texture=%llu evicted=%llu "
                                   "buffer_skinned=%llu buffer_dynamic=%llu game_frames=%llu game_max_ms=%llu "
                                   "worst_capture_ms=%llu worst_hook_ms=%llu worst_present_ms=%llu build_deferred=%llu "
@@ -1149,10 +1259,13 @@ struct Worker {
         frame_copy::bgra(static_cast<const unsigned char*>(locked.pBits), locked.Pitch,
                          back.pixels.data(), width, height, rgba(format));
         readback->UnlockRect();
+        const unsigned long long t3 = live_capture::now_us();
         back.width = width; back.height = height; back.format = format; back.seq = ++seq; back.source = live_sequence;
+        back.camera_sequence = camera.sequence;
+        std::memcpy(back.remix_camera.data(), scene.camera, sizeof scene.camera);
+        back.completed_us = t3;
         if (live_capture::visibility_trace_enabled.load(std::memory_order_relaxed) && trace_frames <= 8192)
             logger.load()("remix: visibility render_ready seq=%llu render=%llu", static_cast<unsigned long long>(live_sequence), back.seq);
-        const unsigned long long t3 = live_capture::now_us();
         stage("publish");
         std::lock_guard<std::mutex> lock(published);
         std::swap(back, ready);
@@ -1173,6 +1286,14 @@ struct Worker {
         if (!start(w, h)) return;
         ULONGLONG window_start = GetTickCount64();
         while (state.load() != State::Failed) {
+            // Independent of a nonempty live frame: an all-small/all-effect scene must still produce diagnostics.
+            const auto census = effect_census::take();
+            for (const auto& record : census.records) logger.load()("remix: effect-census %s", record.c_str());
+            if (census.truncated) logger.load()("remix: effect-census-limit: bounded sample, records omitted (64/frame, 256/session); not a complete census");
+            for (const auto& record : effect_census::take_sky()) {
+                if (record == "limit") logger.load()("remix: sky-census-limit: 64 records per process reached; later builds omitted");
+                else logger.load()("remix: sky-census %s", record.c_str());
+            }
             const ULONGLONG begun = GetTickCount64();
             stage("messages");
             MSG msg;
@@ -1188,6 +1309,8 @@ struct Worker {
                 if (paused) logger.load()("remix: paused (game backbuffer %ux%u, Remix %ux%u); game frames shown", gw, gh, width, height);
                 else logger.load()("remix: resumed at %ux%u", width, height);
             }
+            const int requested = upscaler_pending.exchange(-1);
+            if (requested >= 0) apply_upscaler(api, static_cast<upscaler::Mode>(requested), "menu");
             if (paused) { stage("paused"); Sleep(50); continue; }
             if (!frame(gf)) return;
             if (seq == 1) { state.store(State::Running); logger.load()("remix: first frame ready"); window_start = GetTickCount64(); }
@@ -1230,6 +1353,7 @@ struct Worker {
             if (spent < floor_ms) Sleep(static_cast<DWORD>(floor_ms - spent));
         }
     }
+
 };
 
 void worker_main(UINT w, UINT h) {
@@ -1237,6 +1361,7 @@ void worker_main(UINT w, UINT h) {
     auto* worker = new Worker();
     try { worker->run(w, h); } catch (...) { fail("exception in worker"); }
 }
+
 }  // namespace
 
 // NieR drops to a 720x480 window whenever it loses focus. If a window of this process other than the game's (i.e. one
@@ -1258,6 +1383,123 @@ void keep_focus(HWND game, Log log) {
         last = GetForegroundWindow();
     }
 }
+
+namespace {
+bool truth_pair_file(const std::wstring& path, const void* data, std::size_t size) {
+    HANDLE file = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) return false;
+    const auto* bytes = static_cast<const unsigned char*>(data);
+    bool ok = true;
+    while (size) {
+        DWORD written = 0;
+        const DWORD chunk = static_cast<DWORD>(std::min<std::size_t>(size, 1u << 20));
+        if (!WriteFile(file, bytes, chunk, &written, nullptr) || !written) { ok = false; break; }
+        bytes += written; size -= written;
+    }
+    if (!CloseHandle(file)) ok = false;
+    return ok;
+}
+
+void truth_pair_tap(ID3D11DeviceContext* context, ID3D11Texture2D* target, const D3D11_TEXTURE2D_DESC& desc) {
+    static unsigned attempts = 0, candidates = 0, rejections = 0;  // <=4 pairs (GPU copies), <=8 rejection records
+    static ULONGLONG last_us = 0;
+    static bool configured = false;
+    static std::wstring directory;
+    static unsigned long long counter = 0;
+    if (!configured) {
+        configured = true;
+        wchar_t value[32768]{};
+        const DWORD n = GetEnvironmentVariableW(L"NIER_REMIX_LIVE_TRUTH_PAIR_DIR", value, static_cast<DWORD>(std::size(value)));
+        if (n && n < std::size(value) && ((n >= 3 && value[1] == L':' && (value[2] == L'\\' || value[2] == L'/')) || value[0] == L'\\')) {
+            directory = value;
+            if (directory.back() != L'\\' && directory.back() != L'/') directory += L'\\';
+        }
+    }
+    if (directory.empty() || candidates >= 4) return;
+    const Frame& frame = shown;
+    // The tapped image is the game frame being drawn now: pair it with that frame's camera, not the Remix frame's input.
+    camera_capture::Snapshot game{};
+    unsigned long long game_frame = 0;
+    { std::lock_guard<std::recursive_mutex> capture_lock(live_capture::mutex()); game_frame = live_capture::frame_number; }
+    if (!frame.seq || !frame.source || !game_frame || !frame.camera_sequence || !frame.completed_us || !camera_capture::current(game) ||
+        desc.ArraySize != 1 || desc.MipLevels != 1 ||  // subresource 0 must be the bound HUD target
+        !desc.Width || !desc.Height || desc.Width > 8192 || desc.Height > 8192 ||
+        static_cast<std::uint64_t>(desc.Width) * desc.Height * 4 > (256ull << 20)) return;
+    const ULONGLONG now = live_capture::now_us();
+    if (last_us && now - last_us < 250000) return;
+    last_us = now;
+    ++attempts;
+    bool matched = true;
+    for (std::size_t i = 0; i < game.camera.size(); ++i)
+        if (!std::isfinite(game.camera[i]) || !std::isfinite(frame.remix_camera[i]) ||
+            std::fabs(game.camera[i] - frame.remix_camera[i]) > 1e-4f) matched = false;
+    if (!matched && rejections >= 8) return;  // keep looking for a still camera, stop recording rejections
+    ++(matched ? candidates : rejections);
+    ULONGLONG capture_us = live_capture::now_us();
+    const unsigned long long id = ++counter;
+    wchar_t stem[128]{};
+    swprintf_s(stem, L"truth-pair-%u-%llu", attempts, id);
+    std::wstring game_name = stem; game_name += L"-game.raw";
+    std::wstring remix_name = stem; remix_name += L"-remix.raw";
+    if (matched) {
+        D3D11_TEXTURE2D_DESC staging_desc = desc;
+        staging_desc.Usage = D3D11_USAGE_STAGING; staging_desc.BindFlags = 0; staging_desc.MiscFlags = 0;
+        staging_desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+        ID3D11Device* device = nullptr;
+        context->GetDevice(&device);
+        ID3D11Texture2D* staging = nullptr;
+        if (!device || FAILED(device->CreateTexture2D(&staging_desc, nullptr, &staging))) { if (device) device->Release(); return; }
+        device->Release();
+        context->CopyResource(staging, target);
+        D3D11_MAPPED_SUBRESOURCE mapped{};
+        if (FAILED(context->Map(staging, 0, D3D11_MAP_READ, 0, &mapped))) { staging->Release(); return; }
+        capture_us = live_capture::now_us();
+        const std::uint32_t header[3] = { desc.Width, desc.Height, static_cast<std::uint32_t>(desc.Format) };
+        HANDLE game = CreateFileW((directory + game_name).c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
+        bool game_ok = game != INVALID_HANDLE_VALUE;
+        DWORD written = 0;
+        if (game_ok) game_ok = WriteFile(game, header, sizeof header, &written, nullptr) && written == sizeof header;
+        for (UINT y = 0; game_ok && y < desc.Height; ++y)
+            game_ok = WriteFile(game, static_cast<const unsigned char*>(mapped.pData) + static_cast<std::size_t>(y) * mapped.RowPitch,
+                                desc.Width * 4, &written, nullptr) && written == desc.Width * 4;
+        if (game != INVALID_HANDLE_VALUE) { if (!CloseHandle(game)) game_ok = false; }
+        context->Unmap(staging, 0); staging->Release();
+        if (!game_ok) return;
+        const std::uint32_t remix_header[3] = { frame.width, frame.height, static_cast<std::uint32_t>(frame.format) };
+        HANDLE remix = CreateFileW((directory + remix_name).c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
+        bool remix_ok = remix != INVALID_HANDLE_VALUE;
+        if (remix_ok) remix_ok = WriteFile(remix, remix_header, sizeof remix_header, &written, nullptr) && written == sizeof remix_header;
+        for (UINT y = 0; remix_ok && y < frame.height; ++y)
+            remix_ok = WriteFile(remix, frame.pixels.data() + static_cast<std::size_t>(y) * frame.width * 4,
+                                 frame.width * 4, &written, nullptr) && written == frame.width * 4;
+        if (remix != INVALID_HANDLE_VALUE) { if (!CloseHandle(remix)) remix_ok = false; }
+        if (!remix_ok) return;
+    }
+    char metadata[8192]{};
+    int used = std::snprintf(metadata, sizeof metadata,
+        "{\"version\":1,\"tap_stage\":\"before-native-hud-overwrite\",\"calibrated\":false,\"status\":\"%s\",\"camera_matched\":%s,\"game_frame_id\":%llu,\"game_frame_id_domain\":\"live_capture::frame_number\",\"remix_frame_id\":%llu,\"remix_source_id\":%llu,\"remix_source_id_domain\":\"live_capture sequence used to build this Remix frame; 0 denotes static scene\",\"game_camera_sequence\":%llu,\"remix_camera_sequence\":%llu,\"capture_us\":%llu,\"remix_completed_us\":%llu,\"game_camera\":[",
+        matched ? "candidate" : "rejected-camera", matched ? "true" : "false", game_frame, frame.seq, frame.source,
+        static_cast<unsigned long long>(game.sequence), frame.camera_sequence, static_cast<unsigned long long>(capture_us), frame.completed_us);
+    for (std::size_t i = 0; i < game.camera.size() && used > 0 && static_cast<std::size_t>(used) < sizeof metadata; ++i)
+        used += std::snprintf(metadata + used, sizeof metadata - static_cast<std::size_t>(used), "%s%.9g", i ? "," : "", game.camera[i]);
+    if (used > 0 && static_cast<std::size_t>(used) < sizeof metadata)
+        used += std::snprintf(metadata + used, sizeof metadata - static_cast<std::size_t>(used), "],\"remix_camera\":[");
+    for (std::size_t i = 0; i < frame.remix_camera.size() && used > 0 && static_cast<std::size_t>(used) < sizeof metadata; ++i)
+        used += std::snprintf(metadata + used, sizeof metadata - static_cast<std::size_t>(used), "%s%.9g", i ? "," : "", frame.remix_camera[i]);
+    if (used > 0 && static_cast<std::size_t>(used) < sizeof metadata) {
+        if (matched) used += std::snprintf(metadata + used, sizeof metadata - static_cast<std::size_t>(used),
+            "],\"game_encoding\":\"DXGI R11G11B10_FLOAT unknown radiometric encoding\",\"remix_encoding\":\"DXGI format %u %s bytes\",\"game_file\":\"%ls\",\"remix_file\":\"%ls\"}\n",
+            static_cast<unsigned>(frame.format), rgba(frame.format) ? "RGBA" : "BGRA", game_name.c_str(), remix_name.c_str());
+        else used += std::snprintf(metadata + used, sizeof metadata - static_cast<std::size_t>(used),
+            "],\"game_encoding\":\"DXGI R11G11B10_FLOAT unknown radiometric encoding\",\"remix_encoding\":\"DXGI format %u %s bytes\"}\n",
+            static_cast<unsigned>(frame.format), rgba(frame.format) ? "RGBA" : "BGRA");
+    }
+    if (used > 0 && static_cast<std::size_t>(used) < sizeof metadata) {
+        std::wstring json = stem; json += L".json";
+        truth_pair_file(directory + json, metadata, static_cast<std::size_t>(used));
+    }
+}
+}  // namespace
 
 void before_draw(ID3D11DeviceContext* context, UINT index_count) {
     if (state.load() != State::Running || !live_enabled || !live_capture::hud_enabled || original_view.load() ||
@@ -1294,7 +1536,12 @@ void before_draw(ID3D11DeviceContext* context, UINT index_count) {
     target->GetDesc(&desc);
     if (desc.Format != DXGI_FORMAT_R11G11B10_FLOAT || desc.Width != shown.width || desc.Height != shown.height ||
         desc.SampleDesc.Count != 1) return;  // only the verified full-resolution HUD target, never sprite atlases
+    if (effect_census::hud_target.exchange(target.get(), std::memory_order_relaxed) != target.get()) {
+        static unsigned changes = 0;  // pointer identity only; bounded so a ping-pong target cannot flood the log
+        if (changes < 8) if (Log l = logger.load()) l("remix: native HUD target 0x%llx change %u", static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(target.get())), ++changes);
+    }
     native_hud_attempted = true;
+    truth_pair_tap(context, target.get(), desc);
     static ID3D11Texture2D* source = nullptr;
     static ID3D11ShaderResourceView* srv = nullptr;
     static UINT width = 0, height = 0;
@@ -1333,6 +1580,7 @@ void before_draw(ID3D11DeviceContext* context, UINT index_count) {
     quad.draws.push_back(draw);
     quad.srvs.push_back(srv);
     native_hud_composed = hud_replay::draw(context, target.get(), quad, pipeline, true);
+    if (native_hud_composed) effect_census::handoff_this_frame.store(true, std::memory_order_relaxed);
     // The original DrawIndexed now renders its own sprite, and the game's final compositor remains untouched.
     static bool reported = false;
     if (native_hud_composed && !reported) {
@@ -1342,6 +1590,17 @@ void before_draw(ID3D11DeviceContext* context, UINT index_count) {
         if (Log l = logger.load()) l("remix: native HUD handoff %ux%u before game sprites target=%ux%u viewport=%.0f,%.0f %.0fx%.0f",
                                      width, height, desc.Width, desc.Height, vp.TopLeftX, vp.TopLeftY, vp.Width, vp.Height);
     }
+}
+
+bool request_upscaler(int mode) {
+    if (state.load() == State::Failed || upscaler_current.load() < 0 || mode < 0 || mode > static_cast<int>(upscaler::Mode::Quality)) return false;
+    upscaler_pending.store(mode);
+    return true;
+}
+
+int upscaler_mode() {
+    if (state.load() == State::Failed) return -1;
+    return upscaler_partial.load() ? 5 : upscaler_current.load();  // 5 = partial override, no button highlighted
 }
 
 void on_present(IDXGISwapChain* swapchain, Log log) {
@@ -1508,6 +1767,7 @@ void on_present(IDXGISwapChain* swapchain, Log log) {
 }
 void begin_game_frame(IDXGISwapChain* swapchain) {
     native_hud_composed = native_hud_attempted = false;
+    effect_census::handoff_this_frame.store(false, std::memory_order_relaxed);
     const State current = state.load();
     if ((current != State::Waiting && current != State::Running) || original_view.load()) return;
     ID3D11Texture2D* buffer = nullptr;

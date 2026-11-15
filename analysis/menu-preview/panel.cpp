@@ -93,7 +93,7 @@ void key_event(render_menu::State& state, ImGuiKey key) {
 }
 
 void draw_panel(render_menu::State& state, const RuntimeInfo& rt, const Fonts& fonts,
-                float s, SavePreset save, void* user, Geometry* geometry) {
+                float s, SavePreset save, void* user, Geometry* geometry, const UpscalerRow* upscaler) {
     Geometry observed;
     if (geometry) *geometry = observed;
     if (!state.open) return;
@@ -184,6 +184,26 @@ void draw_panel(render_menu::State& state, const RuntimeInfo& rt, const Fonts& f
     ImGui::SameLine(278*s); text(fonts, Dimensions, failed ? "—" : known(rt.display_size));
     text(fonts, Secondary, failed || !rt.render_size || !*rt.render_size ? "Render size: unknown" : "Render resolution", c::secondary_text);
     ImGui::SameLine(278*s); text(fonts, Secondary, failed || !rt.display_size || !*rt.display_size ? "Display size: unknown" : "Display resolution", c::secondary_text);
+    if (upscaler) {
+        ImGui::Separator();
+        text(fonts, Label, "REMIX UPSCALER (LIVE)", c::secondary_text);
+        static const char* names[5] = {"Config", "Ultra Perf", "Perf", "Balanced", "Quality"};
+        ImGui::PushFont(fonts.items[Control]);
+        const float gap = 6*s, w = (ImGui::GetContentRegionAvail().x-4*gap)/5;
+        for (int i = 0; i < 5; ++i) {
+            if (i) ImGui::SameLine(0,gap);
+            const bool on = upscaler->selected == i;
+            ImGui::PushStyleColor(ImGuiCol_Button,on ? c::primary : c::field);
+            ImGui::PushStyleColor(ImGuiCol_Text,on ? c::on_primary : c::text);
+            ImGui::PushID(i);
+            if (ImGui::Button(names[i],ImVec2(w,40*s)) && upscaler->pick) upscaler->pick(i,upscaler->user);
+            ImGui::PopID();
+            observed.upscaler[i] = last_item();
+            ImGui::PopStyleColor(2);
+        }
+        ImGui::PopFont();
+        if (upscaler->status && *upscaler->status) text(fonts,Secondary,upscaler->status,c::secondary_text,true);
+    }
     ImGui::Separator();
     text(fonts, Label, "PRESET FOR NEXT LAUNCH", c::secondary_text);
     char saved[64];

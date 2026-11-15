@@ -15,6 +15,7 @@ struct RuntimeInfo {
 struct Rect { ImVec2 min{}, max{}; };
 struct Geometry {
     Rect panel, preset, save, discard;
+    Rect upscaler[5];  // only when an UpscalerRow is drawn
     float body_scroll_max = 0;
 };
 // One save attempt plus a fresh read of the file afterwards (see render_menu::complete_save).
@@ -24,6 +25,14 @@ struct SaveReport {
     render_settings::Mode next_launch;
 };
 using SavePreset = SaveReport (*)(render_settings::Mode, void*);
+// Optional live row (P1): five one-click buttons, upscaler::Mode order (Config, Ultra Performance, Performance,
+// Balanced, Quality). `pick` is called on the UI thread; the caller queues the runtime write and saves the choice.
+struct UpscalerRow {
+    int selected;          // upscaler::Mode as int
+    const char* status;    // one line under the buttons, may be empty
+    void (*pick)(int mode, void* user);
+    void* user;
+};
 
 // Caller owns one ImGui context/UI thread; font files are pinned preview assets.
 Fonts load_fonts(const std::filesystem::path& directory, float scale);
@@ -31,5 +40,6 @@ void apply_style(float scale);
 // Call before NewFrame so Escape sees the popup state before ImGui consumes the key.
 void key_event(render_menu::State& state, ImGuiKey key);
 void draw_panel(render_menu::State& state, const RuntimeInfo& runtime, const Fonts& fonts,
-                float scale, SavePreset save, void* user, Geometry* geometry = nullptr);
+                float scale, SavePreset save, void* user, Geometry* geometry = nullptr,
+                const UpscalerRow* upscaler = nullptr);
 } // namespace menu_preview

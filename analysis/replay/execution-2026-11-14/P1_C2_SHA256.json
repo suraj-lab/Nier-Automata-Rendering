@@ -1,0 +1,11 @@
+{
+  "analysis/checks/test_upscaler_modes.py": "c7a2b09b21184b717bb9795301eb384e06ab941389cdbb2215573c831a6c01e7",
+  "analysis/checks/test_upscaler_settings.py": "7753e2920262248fe2176d468f1de3a822de9a7ac27d54a5a1b2bdb640adfd8c",
+  "analysis/checks/test_upscaler_live.py": "5d137dd4026f4034d8d2426d5f4a20a5e4d023d6975ace7c4791db262114418c",
+  "analysis/checks/test_upscaler_menu.py": "f0e6186288dab896dfc624508bf3c6aa923fdae87233b4d52e778dcaeabc27ad",
+  "analysis/checks/test_upscaler_panel.py": "d16d1db76824575e4520f47bc94c1780f4681b0d3323a2f05081756339bd05cd",
+  "analysis/replay/capture_replay.cpp": "3898ad1c1f18c54529a5ab36bab5fa714ace7c4b487dc799209f11b61a054a90",
+  "analysis/checks/game_run_safety.py": "876113109dff305f96e0ee7591b394c00bc6c5310feba4a17f8cd83c4c4107fb",
+  "analysis/runtime/remix-1.6.1/rt/d3d9.dll": "81b7c6407361d376ed9274f9c52f6de2b09dfcee385cd2c3e651baca538b0321",
+  "analysis/runtime/remix-1.6.1/rt/d3d9_x64.dll": "c05c552e3f44597960891eff6c8482efcbde8573b15c2b900d3dc360e6cc1ad9"
+}

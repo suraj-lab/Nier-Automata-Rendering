@@ -4,6 +4,7 @@
 // bytes). This completes the offline capture: geometry + format + draw args + transforms.
 #include <d3d11.h>
 #include <atomic>
+#include <cstdlib>
 #include <mutex>
 #include <vector>
 #include "vtable_hook.h"
@@ -66,6 +67,33 @@ inline geometry_capture::Cache cache;  // guarded by mutex; holds buffer referen
 inline texture_capture::Cache texture_cache;  // guarded by mutex; same lifetime as `cache`
 inline std::vector<texture_capture::Texture> frame_textures;  // guarded by mutex; filled by end_frame()
 inline std::size_t max_texture_bytes = std::size_t(1024) << 20;  // mip-0 bytes per frame; later ones get id 0
+// R2a/R2b capture widening, read once per process. Defaults are today's behaviour: PS slots 0-15, a cube's face 0 only,
+// the full 1 MB budget. NIER_REMIX_LIVE_TEX_SLOTS=<16..32>, NIER_REMIX_LIVE_TEX_CUBE=1,
+// NIER_REMIX_LIVE_TEX_BUDGET=<bytes> (test switch: the gates need a cap smaller than one 1 MB frame).
+inline const wchar_t* env_switch(const wchar_t* name) {
+    const wchar_t* v = _wgetenv(name);
+    return v && *v ? v : nullptr;
+}
+inline UINT texture_slot_limit() {
+    static const UINT slots = [] {
+        const wchar_t* v = env_switch(L"NIER_REMIX_LIVE_TEX_SLOTS");
+        const unsigned long long want = v ? _wcstoui64(v, nullptr, 10) : 0;
+        return want < 16 ? UINT(16) : want > 32 ? UINT(32) : static_cast<UINT>(want);
+    }();
+    return slots;
+}
+inline bool texture_cube_faces() {
+    static const bool on = env_switch(L"NIER_REMIX_LIVE_TEX_CUBE") != nullptr;
+    return on;
+}
+inline std::size_t texture_budget() {
+    static const std::size_t bytes = [] {
+        const wchar_t* v = env_switch(L"NIER_REMIX_LIVE_TEX_BUDGET");
+        const unsigned long long want = v ? _wcstoui64(v, nullptr, 10) : 0;
+        return want ? static_cast<std::size_t>(want) : max_texture_bytes;
+    }();
+    return bytes;
+}
 inline std::size_t frame_bytes = 0;
 // The frame's light arrays (point t20, spot t22), as the first draw that binds t20 sees them: bytes plus the view, so
 // the laptop probe lights an F9 capture exactly like the live path does (light_convert.h). Guarded by mutex.
@@ -227,7 +255,8 @@ inline void record_draw(ID3D11DeviceContext* self, bool instanced, UINT index_co
     if (capture_state(device, self, r.geometry, r.vs_cbs, r.viewport, &cache, &r.ps_cbs, &r.vs_hash, &r.ps_hash,
                       &r.state)) {
         r.valid = true;
-        texture_capture::capture(device, self, texture_cache, r.ps_textures, max_texture_bytes);
+        texture_capture::capture(device, self, texture_cache, r.ps_textures, texture_budget(), texture_slot_limit(),
+                                 texture_cube_faces());
         if (!frame_lights[0].present) {
             read_light_array(device, self, 20, frame_lights[0]);
             if (frame_lights[0].present) read_light_array(device, self, 22, frame_lights[1]);

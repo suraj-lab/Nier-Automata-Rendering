@@ -1,0 +1,84 @@
+diff --git a/analysis/replay/pack_capture.py b/analysis/replay/pack_capture.py
+index f372639..8bdb03d 100644
+--- a/analysis/replay/pack_capture.py
++++ b/analysis/replay/pack_capture.py
+@@ -8,6 +8,7 @@ many draws) become ONE replay buffer, so the proxy sees the same buffer identity
+ bytes are packed into one blob, identical contents once.
+ """
+ import argparse
++import hashlib
+ import json
+ import os
+ import sys
+@@ -18,7 +19,7 @@ def win(path):
+     return 'Z:' + str(Path(path).resolve())
+ 
+ 
+-def pack(frame, out, name='scene', min_indices=0):
++def pack(frame, out, name='scene', min_indices=0, dedup_content=False):
+     frame, out = Path(frame).resolve(), Path(out)
+     out.mkdir(parents=True, exist_ok=True)
+     shaders = frame.parent / 'shaders'
+@@ -30,15 +31,30 @@ def pack(frame, out, name='scene', min_indices=0):
+         if info.get('present') and info.get('stride') and path.exists() and path.stat().st_size:
+             lines.append(f'lights {slot} {info["stride"]} {path.stat().st_size // info["stride"]} {win(path)}')
+     buffers, textures, blob, blob_at = {}, {}, bytearray(), {}
++    content = {}
+ 
+     def buffer_id(path):
+         st = path.stat()
+         key = (st.st_dev, st.st_ino)
++        if dedup_content:
++            data = path.read_bytes()
++            digest = (len(data), hashlib.sha256(data).digest())
++            matches = content.setdefault(digest, [])
++            for previous, buffer in matches:
++                if previous.read_bytes() == data:  # Resolve even a strong-digest collision by bytes.
++                    return buffer
++            key = (digest, len(matches))
++            matches.append((path, len(buffers)))
+         if key not in buffers:
+             buffers[key] = len(buffers)
+             lines.append(f'buffer {buffers[key]} {st.st_size} {win(path)}')
+         return buffers[key]
+ 
++    def require(path, expected=None):
++        size = path.stat().st_size
++        if not size or (expected is not None and size != expected):
++            raise ValueError(f'missing/truncated capture resource: {path} ({size}, expected {expected})')
++
+     def cb(path):
+         data = path.read_bytes()
+         if data not in blob_at:
+@@ -52,6 +68,22 @@ def pack(frame, out, name='scene', min_indices=0):
+         j = json.loads((d / 'capture.json').read_text())
+         if j['index_count'] < min_indices or not j.get('layout_found'):
+             continue
++        if dedup_content:
++            for vb in j['vertex_buffers']:
++                require(d / f'vb_{vb["slot"]}.bin', vb.get('bytes'))
++            if j['has_index']:
++                path = d / 'ib.bin'
++                index_size = {42: 4, 57: 2}.get(j['ib_format'])
++                if index_size is None:
++                    raise ValueError(f'unsupported capture index format: {j["ib_format"]}')
++                require(path)
++                if path.stat().st_size < j['ib_offset'] + (j['start_index'] + j['index_count']) * index_size:
++                    raise ValueError(f'truncated capture index buffer: {path}')
++            for key, prefix in [('vs_cbs', 'cb_'), ('ps_cbs', 'ps_cb_')]:
++                for cb_info in j[key]:
++                    require(d / f'{prefix}{cb_info["slot"]}.bin', cb_info.get('bytes'))
++            for t in j['ps_textures']:
++                require(frame / 'textures' / f'tex_{t["id"]}.dds')
+         for t in j['ps_textures']:
+             if t['id'] not in textures and (frame / 'textures' / f'tex_{t["id"]}.dds').exists():
+                 textures[t['id']] = True
+@@ -96,6 +128,7 @@ if __name__ == '__main__':
+     ap.add_argument('out')
+     ap.add_argument('--name', default='scene')
+     ap.add_argument('--min-indices', type=int, default=0)
++    ap.add_argument('--dedup-content', action='store_true', help='deduplicate copied buffers by SHA-256 and bytes; validate required resources')
+     a = ap.parse_args()
+-    print(json.dumps(pack(a.frame, a.out, a.name, a.min_indices)))
++    print(json.dumps(pack(a.frame, a.out, a.name, a.min_indices, a.dedup_content)))
+     sys.exit(0)

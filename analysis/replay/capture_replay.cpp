@@ -165,6 +165,7 @@ ID3D11ShaderResourceView* load_texture(const std::string& path) {
     desc.Format = static_cast<DXGI_FORMAT>(u32(128)); desc.SampleDesc.Count = 1;
     desc.Usage = D3D11_USAGE_IMMUTABLE; desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
     if (u32(132) != 3 || u32(140) != 1) return nullptr;  // 2D, one slice
+    if (u32(136) & 0x4) return nullptr;  // a cube: six faces, not a mip chain. Counted as missing, never bound as face 0.
     std::vector<D3D11_SUBRESOURCE_DATA> mips;
     std::size_t at = 148;
     for (unsigned m = 0; m < desc.MipLevels; ++m) {
@@ -492,14 +493,13 @@ int main(int argc, char** argv) {
                      group_ticks[4] * 1000000 / freq.QuadPart / frames);
     std::fprintf(out, "presented=%u\nframe_avg_us=%llu\nframe_worst_us=%llu\nwall_ms=%llu\n", presented, total_us / std::max(1u, frames), worst_us,
                  static_cast<unsigned long long>((now.QuadPart - start.QuadPart) * 1000 / freq.QuadPart));
+    // C2: return normally only when requested. A launcher timeout is not proof this process failed to exit:
+    // process-level monitoring found Wine services kept gamescope alive after the replayer disappeared.
+    const bool clean_exit = std::getenv("REPLAY_EXIT") && !std::strcmp(std::getenv("REPLAY_EXIT"), "clean");
+    if (clean_exit) std::fprintf(out, "clean-exit-requested\n");  // record before closing the stream
     std::fclose(out);
     std::fflush(nullptr);
-    // Not ExitProcess: with the real Remix runtime loaded, DLL detach waits on its worker threads forever (230 s seen).
-    // REPLAY_EXIT=clean exercises that path on purpose, so item S1 can measure it and take a stack while it hangs.
-    if (std::getenv("REPLAY_EXIT") && !std::strcmp(std::getenv("REPLAY_EXIT"), "clean")) {
-        std::fprintf(out, "clean-exit-requested\n");
-        return 0;   // falling off main() reports the exit code and lets the CRT run the DLL detaches
-    }
+    if (clean_exit) return 0;
     TerminateProcess(GetCurrentProcess(), 0);
     return 0;
 }

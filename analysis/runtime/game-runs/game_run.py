@@ -8,44 +8,43 @@ when the game ignores SIGTERM (seen three times on 2026-11-13), which then block
 Here the whole run is one process group that is always killed, the way replay/run_replay.py does it.
 
 Guarantees:
-  - the game's own save folder is hashed before and after; any change is reported and the verified backup is restored
-    (runtime/game-runs/save-backup-2026-11-13). The runs themselves use a COPY of the Proton prefix.
+  - copied save paths are validated before launch; real saves are snapshotted before and after.
+    A mismatch preserves both versions and fails the run; historical saves are NEVER restored automatically.
   - the game folder is never written by this script; the game writes its own logs and nothing else.
   - nothing survives the run: SIGTERM, then SIGKILL, to the group.
 """
 import argparse
-import hashlib
 import json
+import re
 import os
-import shutil
-import signal
 import subprocess
 import sys
 import time
+import uuid
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'checks'))
+from unattended_guard import authorize, report_run
+from game_run_safety import acquire_run_lock, cleanup, owned_pids, release_run_lock, safe_label, snapshot, validate_prefix, verify_save, prepare_private_prefix
 
 A = Path(__file__).resolve().parent.parent.parent     # analysis/  (game-runs -> runtime -> analysis)
 RUNS = A / 'runtime' / 'game-runs'
 GAME = Path('/mnt/second/SteamLibrary/steamapps/common/NieRAutomata')
 PREFIX = RUNS / 'prefix-2026-11-13'
-BACKUP = RUNS / 'save-backup-2026-11-13'
 SAVE = Path('/mnt/second/SteamLibrary/steamapps/compatdata/524220/pfx/drive_c/users/steamuser/'
             'Documents/My Games/NieR_Automata')
 PROTON = Path('/usr/share/steam/compatibilitytools.d/proton-cachyos-slr/proton')
-SAVE_FILES = ('SlotData_0.dat', 'GameData.dat', 'SystemData.dat', 'Graphic.ini')
+def safe_size(size):
+    parts = size.split('x') if isinstance(size, str) else []
+    if len(parts) != 2 or not all(p.isdigit() and int(p) > 0 for p in parts):
+        raise ValueError(f'bad display size: {size!r}')
+    return int(parts[0]), int(parts[1])
 
 
-def hashes():
-    return {name: hashlib.sha256((SAVE / name).read_bytes()).hexdigest()
-            for name in SAVE_FILES if (SAVE / name).exists()}
-
-
-def restore(why):
-    print(f'save guard: {why} — restoring the verified backup')
-    for name in SAVE_FILES:
-        if (BACKUP / name).exists():
-            shutil.copy2(BACKUP / name, SAVE / name)
-    print('save guard: now', json.dumps(hashes(), indent=1))
+def launch_command(size='1920x1080'):
+    width, height = safe_size(size)
+    return ['gamescope', '--backend', 'headless', '-W', str(width), '-H', str(height),
+            '-w', str(width), '-h', str(height), '--', str(PROTON), 'run', './NieRAutomata.exe']
 
 
 def main():
@@ -59,15 +58,48 @@ def main():
                     help='add a screenshot every N seconds over --shots-window (G5 motion runs)')
     ap.add_argument('--shots-window', default='60,120', help='start,end seconds for --shots-every')
     ap.add_argument('--limit', type=int, default=110)
+    ap.add_argument('--size', default='1920x1080', help='gamescope display/surface size, e.g. 3440x1440')
+    ap.add_argument('--isolated-prefix', action='store_true', help='copy the shared prefix template into this run directory')
     ap.add_argument('--live', action='store_true', help='NIER_REMIX=1 NIER_REMIX_LIVE=1 (Remix path on)')
+    ap.add_argument('--template', default=None,
+                    help='prefix template under game-runs/ (make_location_prefix.py); non-default needs --isolated-prefix')
     ap.add_argument('--env', action='append', default=[])
     a = ap.parse_args()
 
+    a.label = safe_label(a.label)
+    if a.template is not None and (not a.isolated_prefix or not re.fullmatch(r'prefix-[a-z0-9-]+', a.template)
+                                      or not (RUNS / a.template).is_dir()):
+        print(f'game_run: refused: template {a.template!r} must be a prefix-* folder in {RUNS} and needs --isolated-prefix',
+              file=sys.stderr)
+        return 2
+    authorize('desktop_live_run', a.label)   # no-op unless NIER_UNATTENDED=1
+    try:
+        lock = acquire_run_lock(Path(os.environ.get('NIER_RUN_LOCK', RUNS / 'run.lock')), a.label)
+    except RuntimeError as exc:
+        print(f'game_run: refused: {exc}', file=sys.stderr)
+        return 2
+    try:
+        return run_once(a)
+    finally:
+        release_run_lock(lock)
+
+
+def run_once(a):
+    protected = ('STEAM_COMPAT_', 'WINEPREFIX', 'NIER_RUN_', 'MESA_VK_DEVICE_SELECT')
+    for item in a.env:
+        key, separator, _ = item.partition('=')
+        if not separator or not key or key.startswith(protected):
+            ap.error('invalid or safety-critical --env override')
     run = RUNS / a.label
-    (run / 'shots').mkdir(parents=True, exist_ok=True)
-    env = {k: v for k, v in os.environ.items() if not k.startswith(('NIER_', 'REPLAY_', 'MOCK_', 'STEAM_COMPAT'))}
+    run.mkdir(parents=True, exist_ok=False)
+    token = uuid.uuid4().hex
+    template = PREFIX if a.template is None else RUNS / a.template   # default: exactly today's prefix
+    prefix = prepare_private_prefix(template, run / 'prefix', token) if a.isolated_prefix else PREFIX
+    validate_prefix(prefix, SAVE)
+    (run / 'shots').mkdir()
+    env = {k: v for k, v in os.environ.items() if k != 'WINEPREFIX' and not k.startswith(('NIER_', 'REPLAY_', 'MOCK_', 'STEAM_COMPAT'))}
     env.update(STEAM_COMPAT_CLIENT_INSTALL_PATH=str(Path.home() / '.local/share/Steam'),
-               STEAM_COMPAT_DATA_PATH=str(PREFIX), MESA_VK_DEVICE_SELECT='1002:73bf!',
+               STEAM_COMPAT_DATA_PATH=str(prefix.resolve()), MESA_VK_DEVICE_SELECT='1002:73bf!',
                WINEDLLOVERRIDES='d3d11=n,b', SteamAppId='524220', STEAMAPPID='524220', SteamGameId='524220',
                DXVK_LOG_LEVEL='info', DXVK_LOG_PATH=str(run))
     shots = a.shots
@@ -99,69 +131,65 @@ def main():
         # its implementation DLL is loaded by a bare LoadLibraryW, which fails outside the runtime folder.
         env['NIER_REMIX_RUNTIME'] = 'Z:/mnt/second/SteamLibrary/steamapps/common/PortalRTX/bin/.trex/d3d9.dll'
         env['NIER_REMIX_SCENE'] = 'Z:' + str((A / 'runtime' / 'remix-probe' / 'textured-scene' / 'scene.bin').resolve()).replace('/', '\\')
-    env['NIER_RUN_LABEL'] = a.label   # marker: gamescope detaches into its own session, so the run is found by env
+    env['NIER_RUN_TOKEN'] = token  # gamescope can detach; ownership survives in its exact environment marker.
+    env['NIER_RUN_LABEL'] = a.label
     for item in a.env:
         key, _, value = item.partition('=')
         env[key] = value
 
-    before = hashes()
-    cmd = ['gamescope', '--backend', 'headless', '-W', '1920', '-H', '1080', '-w', '1920', '-h', '1080', '--',
-           str(PROTON), 'run', './NieRAutomata.exe']
+    before = snapshot(SAVE, run / 'save-before')
+    cmd = launch_command(a.size)
     print('run:', ' '.join(cmd), f'(limit {a.limit}s)', flush=True)
-    def marked():
-        """Pids of this run's processes, found by the marker: gamescope calls setsid, so waiting on the child is useless."""
-        out = []
-        for entry in Path('/proc').iterdir():
-            if not entry.name.isdigit():
-                continue
-            try:
-                data = (entry / 'environ').read_bytes()
-            except OSError:
-                continue
-            if b'NIER_RUN_LABEL=' + a.label.encode() in data:
-                out.append(int(entry.name))
-        return out
-
     started = time.monotonic()
-    with open(run / 'host.log', 'wb') as host:
-        subprocess.Popen(cmd, cwd=GAME, env=env, stdout=host, stderr=subprocess.STDOUT, start_new_session=True)
-        def game_running():
-            for entry in Path('/proc').iterdir():
-                if not entry.name.isdigit():
-                    continue
-                try:
-                    cmdline = (entry / 'cmdline').read_bytes()
-                except OSError:
-                    continue
-                if b'NieRAutomata.exe' in cmdline and b'proton' not in cmdline:
-                    return True
-            return False
-
-        seen = False
-        while time.monotonic() - started < a.limit:
-            time.sleep(0.5)
-            if game_running():
-                seen = True                              # the game itself is up
-            elif seen and time.monotonic() - started > 20:  # ...and gone again: it exited by itself
-                break
-        code = 'exit' if time.monotonic() - started < a.limit else 'timeout'
-        for pid in marked():
-            if pid != os.getpid():
-                try:
-                    os.kill(pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
-    after = hashes()
-    summary = {'label': a.label, 'exit': code, 'seconds': round(time.monotonic() - started, 1), 'limit': a.limit,
-               'shots': sorted(p.name for p in (run / 'shots').glob('shot-*.raw')),
-               'menu_drive': a.menu_drive, 'live': a.live, 'extra_env': a.env,
-               'save_before': before, 'save_after': after, 'save_ok': before == after}
-    if before != after:
-        restore('the real save changed during the run')
-        summary['save_restored'] = True
-    (run / 'summary.json').write_text(json.dumps(summary, indent=2) + '\n')
-    print(json.dumps({k: v for k, v in summary.items() if k not in ('save_before', 'save_after')}, indent=1))
-    return 0
+    code, error, forced, errors = 'launch-failed', None, [], []
+    child = None
+    try:
+        with open(run / 'host.log', 'wb') as host:
+            child = subprocess.Popen(cmd, cwd=GAME, env=env, stdout=host, stderr=subprocess.STDOUT, start_new_session=True)
+            code, seen = 'timeout', False
+            while time.monotonic() - started < a.limit:
+                time.sleep(0.5)
+                running = False
+                for pid in owned_pids(token, prefix):
+                    try:
+                        cmdline = Path(f'/proc/{pid}/cmdline').read_bytes()
+                    except OSError:
+                        continue
+                    if b'NieRAutomata.exe' in cmdline and b'proton' not in cmdline:
+                        running = True
+                if running:
+                    seen = True
+                elif seen and time.monotonic() - started > 20:
+                    code = 'exit'
+                    break
+                elif child.poll() is not None and not owned_pids(token, prefix):
+                    code = 'exit' if seen else 'launch-failed'
+                    break
+    except (OSError, KeyboardInterrupt) as exc:
+        error = str(exc) or type(exc).__name__
+        code = 'launch-failed' if child is None else 'aborted'
+    finally:
+        try:
+            forced = cleanup(token, prefix)
+            if child is not None:
+                child.wait(timeout=5)
+        except Exception as exc:
+            errors.append(f'cleanup: {exc}')
+        after, save_ok = None, False
+        try:
+            after, save_ok = verify_save(SAVE, before, run / 'save-after')
+        except Exception as exc:
+            errors.append(f'save verification: {exc}')
+        summary = {'label': a.label, 'template': (a.template or PREFIX.name) if a.isolated_prefix else None, 'exit': code, 'error': error, 'errors': errors,
+                   'seconds': round(time.monotonic() - started, 1), 'limit': a.limit,
+                   'shots': sorted(p.name for p in (run / 'shots').glob('shot-*.raw')),
+                   'menu_drive': a.menu_drive, 'live': a.live, 'extra_env': a.env,
+                   'save_before': before, 'save_after': after, 'save_ok': save_ok,
+                   'forced_pids': forced, 'save_restored': False}
+        (run / 'summary.json').write_text(json.dumps(summary, indent=2) + '\n')
+        report_run(summary)
+        print(json.dumps({k: v for k, v in summary.items() if k not in ('save_before', 'save_after')}, indent=1))
+    return 0 if code == 'exit' and save_ok and not forced and not errors else 1
 
 
 if __name__ == '__main__':

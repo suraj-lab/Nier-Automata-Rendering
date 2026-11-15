@@ -34,6 +34,10 @@ def game_running():
 
 
 def main():
+    if '--install' in sys.argv:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from unattended_guard import authorize
+        authorize('dll_install', CANDIDATE)   # no-op unless NIER_UNATTENDED=1
     if not CANDIDATE.exists():
         sys.exit(f'candidate missing: {CANDIDATE}; build it first (build_menu_dll.py)')
     candidate_hash = sha256(CANDIDATE)

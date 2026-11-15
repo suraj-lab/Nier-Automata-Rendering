@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 #include "light_convert.h"
+#include "particle_blend.h"
 #include "visibility_trace.h"
 
 namespace texture_capture { struct Texture; }  // texture_capture.h; only owned here, so declared
@@ -24,8 +25,13 @@ struct Vertex {
 struct MaterialConstants {
     float albedo[3] = {-1.f, -1.f, -1.f};
     float metallic = -1.f, roughness = -1.f;
-    bool any() const { return albedo[0] >= 0.f || metallic >= 0.f || roughness >= 0.f; }
+    // W1.3 step 1b: t0's own factor (the sky layer's intensity) for a surface whose colour is its texture. albedoConstant
+    // replaces a texture instead of multiplying it, so the path writes a scaled copy and names that; the constant stays
+    // 1,1,1. 1 = no copy (today's texture).
+    float albedo_scale = 1.f;
+    bool any() const { return albedo[0] >= 0.f || metallic >= 0.f || roughness >= 0.f || albedo_scale != 1.f; }
     bool has_albedo() const { return albedo[0] >= 0.f; }
+    bool scales_albedo() const { return albedo_scale != 1.f; }
 };
 
 // Geometry the worker does not have yet (first sight, or a buffer it depends on was rewritten).
@@ -41,6 +47,10 @@ struct Upload {
     std::uint32_t roughness = 0;       // 0 = none; R = 1 - the mask's gloss channel
     bool skinned = false;
     bool blended = false;              // classic alpha blend (src alpha / inv src alpha): foliage, hair, grilles
+    bool particle = false;             // E1.6: submitted as a PARTICLE instance; the material needs useDrawCallAlphaState
+    bool water = false;                // W3: classified water (water_class.h): a translucent material, ANIMATED_WATER
+    bool hair = false;                 // W5: classified hair (hair_class.h): the material carries the anisotropy scalar
+
     bool sky = false;                  // background shell / sky dome: submitted with the SKY category, not as world
     int alpha_op = 7;                  // the pixel shader's alpha test as Remix AlphaTestType (7 = kAlways: none)
     std::uint8_t alpha_ref = 0;        // ... and its 8-bit reference (alpha_test.h)
@@ -60,6 +70,9 @@ struct Item {                          // one draw call this frame
     std::uint32_t texture = 0;
     bool blended = false;              // the game drew it with alpha blending (a cutout in Remix terms), never translucency: Remix has no per-draw blend
     bool sky = false;                  // the game's sky dome: instance gets REMIXAPI_INSTANCE_CATEGORY_BIT_SKY
+    bool particle = false;             // E1.6: effect quad submitted as REMIXAPI_INSTANCE_CATEGORY_BIT_PARTICLE with `blend`
+    bool water = false;                // W3: classified water: ANIMATED_WATER instead of the forced-cutout path
+    particle_blend::State blend;       // the game's own blend state for this draw, as D3D11 reports it
     unsigned first = 0, count = 1;     // range in Frame::transforms
     unsigned first_bone = 0, bone_count = 0;  // range in Frame::bones; 0 = not skinned
     std::uint64_t trace_source = 0;     // diagnostic draw key before skinned occurrence remapping
@@ -100,6 +113,7 @@ struct Frame {
     unsigned rebuilt_identical = 0;    // rewrites whose decoded content matched the mesh already uploaded
     unsigned small_viewport = 0;       // draws into a viewport < 25% of the frame max (diagnostic only)
     unsigned blended = 0;              // draws the game alpha-blended: submitted as cutout geometry
+    unsigned particles = 0;            // E1.6: effect draws handed to the runtime as PARTICLE instances with a blend state
     // Why the light arrays were or were not read this frame (bits): 1 t20 bound, 2 t20 view is a buffer, 4 t20 stride 48,
     // 8 t20 bytes read; 16 t22 bound, 32 t22 view is a buffer, 64 t22 stride 80, 128 t22 bytes read. 0 = no scene draw
     // had the point-light array bound. Logged as light_state= so a run can never report lights=0 without a reason.
